@@ -9,20 +9,18 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
-  Text,
-  Pressable,
   StyleSheet,
-  ScrollView,
   Platform,
   LayoutChangeEvent,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useToast } from '@/components/Toast';
 
 import { BillCard } from '@/features/simulator/components/BillCard';
 import { FloorPlan } from '@/features/simulator/components/FloorPlan';
 import { EditSheet } from '@/features/simulator/components/EditSheet';
+import { Sprite } from '@/features/simulator/components/Sprite';
 import { ApplianceDetailsSheet } from '@/features/simulator/components/ApplianceDetailsSheet';
 import { FurnitureDetailsSheet } from '@/features/simulator/components/FurnitureDetailsSheet';
 import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
@@ -62,7 +60,6 @@ const INITIAL_ROOMS: StoredRoom[] = [
 
 export default function SimulatorScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
   // ── Layout State (persisted) ───────────────────────────────────────────────
@@ -88,7 +85,7 @@ export default function SimulatorScreen() {
     return saved?.simulatedMinutes ?? 18 * 60 + 30;
   });
 
-  const [avatarVariant, setAvatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() => {
+  const [avatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() => {
     const saved = loadSimulationState();
     return saved?.avatarVariant === 'avatar_boy' || saved?.avatarVariant === 'boy'
       ? 'avatar_boy'
@@ -588,83 +585,57 @@ export default function SimulatorScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* Mobile Shell Container (~380px wide) */}
       <View style={styles.mobileShell}>
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: Math.max(insets.bottom, 16) + 72 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* ── Top Section: Estimated Bill Card & Round Buttons ───────────── */}
+        {/* Fixed Non-Scrolling Layout Container */}
+        <View style={styles.mainContainer}>
+          {/* ── Top Section: Compact Estimated Bill Card, Round Buttons & Edit/Done ── */}
           <BillCard
             monthlyBillRm={monthlyBillRm}
             usageBadge={usageBadge}
             simulatedTimeStr={simulatedTimeStr}
             simSpeed={simSpeed}
+            isEditMode={isEditMode}
+            onToggleEdit={() => {
+              setIsEditMode((prev) => !prev);
+              setSelectedItemId(null);
+              setSelectedPendingItem(null);
+            }}
             onCycleSpeed={handleCycleSpeed}
             onPressBillCard={() => setBillModalVisible(true)}
             onPressBell={() => router.push('/notifications')}
-            onPressCalendar={() => showToast(`Active: ${currentRoutine.name} (${currentRoutine.startTime}-${currentRoutine.endTime})`, 'info')}
+            onPressCalendar={() =>
+              showToast(
+                `Active: ${currentRoutine.name} (${currentRoutine.startTime}-${currentRoutine.endTime})`,
+                'info'
+              )
+            }
           />
 
-          {/* ── Avatar Variant Switcher & Status Bar ──────────────────────── */}
-          <View style={styles.statusBarRow}>
-            <Pressable
-              onPress={() =>
-                setAvatarVariant((v) =>
-                  v === 'avatar_girl' ? 'avatar_boy' : 'avatar_girl'
-                )
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Switch Resident Character"
-              style={styles.avatarTogglePill}
-            >
-              <Text style={styles.avatarToggleText}>
-                Resident: {avatarVariant === 'avatar_girl' ? 'Girl' : 'Boy'}
-              </Text>
-            </Pressable>
-
-            {/* Edit / Done Button at top-right of Floor Plan */}
-            <Pressable
-              style={styles.editButton}
-              onPress={() => {
-                setIsEditMode((prev) => !prev);
-                setSelectedItemId(null);
-                setSelectedPendingItem(null);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={isEditMode ? 'Done editing floor plan' : 'Edit floor plan'}
-            >
-              <Text style={styles.editButtonText}>
-                {isEditMode ? 'Done' : 'Edit'}
-              </Text>
-            </Pressable>
+          {/* ── Middle Section: Strictly FIXED Floor Plan Card (No Shrinking) ── */}
+          <View style={styles.floorPlanArea}>
+            <FloorPlan
+              rooms={rooms}
+              items={items}
+              avatarState={avatarState}
+              avatarVariant={avatarVariant}
+              activeApplianceIds={activeApplianceIds}
+              activeRoomLightIds={activeRoomLightIds}
+              isEditMode={isEditMode}
+              selectedItemId={selectedItemId}
+              dragGhost={dragGhost}
+              hoveredRoomId={hoveredRoomId}
+              onRoomPress={handleRoomPress}
+              onSelectItem={handleSelectItem}
+              onDeleteItem={handleDeleteItem}
+              onMoveItemEnd={handleMoveItemEnd}
+              floorPlanRef={floorPlanRef}
+              onLayout={onFloorLayout}
+            />
           </View>
+        </View>
 
-          {/* ── Middle Section: Floor Plan Card ────────────────────────────── */}
-          <FloorPlan
-            rooms={rooms}
-            items={items}
-            avatarState={avatarState}
-            avatarVariant={avatarVariant}
-            activeApplianceIds={activeApplianceIds}
-            activeRoomLightIds={activeRoomLightIds}
-            isEditMode={isEditMode}
-            selectedItemId={selectedItemId}
-            dragGhost={dragGhost}
-            hoveredRoomId={hoveredRoomId}
-            onRoomPress={handleRoomPress}
-            onSelectItem={handleSelectItem}
-            onDeleteItem={handleDeleteItem}
-            onMoveItemEnd={handleMoveItemEnd}
-            floorPlanRef={floorPlanRef}
-            onLayout={onFloorLayout}
-          />
-        </ScrollView>
-
-        {/* ── Edit Mode Bottom Sheet ───────────────────────────────────────── */}
+        {/* ── Edit Mode Tray (Absolute Overlay covering bottom of Floor Plan) ── */}
         {isEditMode && (
-          <View style={styles.editSheetDock}>
+          <View style={styles.editTrayOverlay}>
             <EditSheet
               visible={isEditMode}
               onItemPointerDown={handleItemPointerDown}
@@ -674,6 +645,22 @@ export default function SimulatorScreen() {
               }}
               selectedPendingKey={selectedPendingItem?.key}
             />
+          </View>
+        )}
+
+        {/* ── Drag Ghost following pointer across the screen ─────────────── */}
+        {dragGhost && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.dragGhostRoot,
+              {
+                left: dragGhost.x - 26,
+                top: dragGhost.y - 26,
+              },
+            ]}
+          >
+            <Sprite type={dragGhost.item.key} size={52} />
           </View>
         )}
 
@@ -739,49 +726,29 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
-  scrollContent: {
+  mainContainer: {
+    flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
   },
-  statusBarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    marginTop: 2,
+  floorPlanArea: {
+    width: '100%',
+    marginTop: 4,
   },
-  avatarTogglePill: {
-    backgroundColor: '#FAF7F2',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-  },
-  avatarToggleText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 12,
-    color: '#566549',
-  },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minHeight: 44,
-    minWidth: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-  },
-  editButtonText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 16,
-    color: '#3D5236', // Deep sage green from screenshot
-  },
-  editSheetDock: {
+  editTrayOverlay: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 90,
+    bottom: 0,
+    zIndex: 40,
+  },
+  dragGhostRoot: {
+    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+    width: 52,
+    height: 52,
+    opacity: 0.88,
+    zIndex: 9999,
   },
 });

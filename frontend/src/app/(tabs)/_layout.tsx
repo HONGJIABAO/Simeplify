@@ -94,6 +94,7 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     alignItems: 'center',
+    zIndex: 50,
   },
   barContainer: {
     flexDirection: 'row',

@@ -4,7 +4,6 @@ import { Hand } from 'lucide-react-native';
 import { Room } from './Room';
 import { PlacedItem } from './PlacedItem';
 import { Avatar } from './Avatar';
-import { Sprite } from './Sprite';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
 import { AvatarSimulationState } from '../logic/SimulationEngine';
 import { SpriteItemDef } from '../logic/spriteMap';
@@ -81,7 +80,7 @@ export function FloorPlan({
         ref={floorPlanRef as any}
         collapsable={false}
         onLayout={handleLayout}
-        style={[styles.floorCanvas, { width: '100%', height: 330 }]}
+        style={styles.floorCanvas}
       >
         {/* Hallway background fill */}
         <View style={[styles.hallwayBg, { width: w, height: h }]} />
@@ -140,7 +139,7 @@ export function FloorPlan({
           facingLeft={avatarState.facingLeft}
           isWalking={avatarState.isWalking}
           isSleeping={avatarState.isSleeping}
-          size={46}
+          size={44}
         />
 
         {/* Empty State Pill at bottom */}
@@ -154,22 +153,6 @@ export function FloorPlan({
             </Text>
           </View>
         )}
-
-        {/* Drag Ghost following pointer */}
-        {dragGhost && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.dragGhost,
-              {
-                left: dragGhost.x - 26,
-                top: dragGhost.y - 26,
-              },
-            ]}
-          >
-            <Sprite type={dragGhost.item.key} size={52} />
-          </View>
-        )}
       </View>
     </View>
   );
@@ -177,9 +160,12 @@ export function FloorPlan({
 
 const styles = StyleSheet.create({
   cardContainer: {
+    width: '100%',
+    height: 375, // strictly fixed height matching screenshot
+    flexShrink: 0, // MUST NOT SHRINK when edit mode is toggled
     backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    padding: 12,
+    borderRadius: 28,
+    padding: 10,
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -187,9 +173,10 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: '#EFEAE2',
-    marginBottom: 12,
   },
   floorCanvas: {
+    flex: 1,
+    width: '100%',
     position: 'relative',
     borderWidth: 3,
     borderColor: '#80624E',

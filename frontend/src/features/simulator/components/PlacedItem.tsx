@@ -144,22 +144,24 @@ export function PlacedItem({
             <View style={[styles.handleDot, styles.dotTR]} />
             <View style={[styles.handleDot, styles.dotBL]} />
             <View style={[styles.handleDot, styles.dotBR]} />
-
-            {/* Quick delete button */}
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                onDelete(item.id);
-              }}
-              style={styles.deleteBadge}
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${item.name}`}
-            >
-              <X size={12} color="#FFFFFF" strokeWidth={2.5} />
-            </Pressable>
           </>
         )}
       </Pressable>
+
+      {/* Quick delete button (sibling to Pressable to avoid nested button error) */}
+      {isSelected && isEditMode && (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onDelete(item.id);
+          }}
+          style={styles.deleteBadge}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${item.name}`}
+        >
+          <X size={12} color="#FFFFFF" strokeWidth={2.5} />
+        </Pressable>
+      )}
     </Animated.View>
   );
 }

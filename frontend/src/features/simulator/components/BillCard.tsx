@@ -8,7 +8,9 @@ interface BillCardProps {
   usageBadge: 'Low Usage' | 'Normal Usage' | 'High Usage';
   simulatedTimeStr: string;
   simSpeed: SimSpeed;
+  isEditMode?: boolean;
   onCycleSpeed: () => void;
+  onToggleEdit?: () => void;
   onPressBillCard?: () => void;
   onPressBell?: () => void;
   onPressCalendar?: () => void;
@@ -19,7 +21,9 @@ export function BillCard({
   usageBadge,
   simulatedTimeStr,
   simSpeed,
+  isEditMode = false,
   onCycleSpeed,
+  onToggleEdit,
   onPressBillCard,
   onPressBell,
   onPressCalendar,
@@ -32,7 +36,7 @@ export function BillCard({
 
   return (
     <View style={styles.topContainer}>
-      {/* ── Left: Estimated Bill Card ────────────────────────────────────── */}
+      {/* ── Left: Compact Estimated Bill Card (p-4, 28px Lora RM 0) ─────── */}
       <Pressable
         style={styles.billCard}
         onPress={onPressBillCard}
@@ -42,7 +46,7 @@ export function BillCard({
         {/* Header row with badge */}
         <View style={styles.cardHeaderRow}>
           <View style={styles.titleRow}>
-            <Gauge size={14} color="#78716C" strokeWidth={1.5} />
+            <Gauge size={13} color="#78716C" strokeWidth={1.5} />
             <Text style={styles.cardTitle}>ESTIMATED BILL</Text>
           </View>
           <View style={[styles.badgeContainer, { backgroundColor: badgeColors.bg }]}>
@@ -52,7 +56,7 @@ export function BillCard({
           </View>
         </View>
 
-        {/* Hero Number */}
+        {/* Hero Number (exact 28px Lora font) */}
         <View style={styles.heroRow}>
           <Text style={styles.heroAmount}>RM {monthlyBillRm}</Text>
           <Text style={styles.heroUnit}> / mo</Text>
@@ -63,12 +67,12 @@ export function BillCard({
 
         {/* Simulated Time */}
         <View style={styles.timeRow}>
-          <Clock size={13} color="#78716C" strokeWidth={1.5} />
+          <Clock size={12} color="#78716C" strokeWidth={1.5} />
           <Text style={styles.timeText}>Today • {simulatedTimeStr}</Text>
         </View>
       </Pressable>
 
-      {/* ── Right: Button Stack ────────────────────────────────────────── */}
+      {/* ── Right: Button Stack + Edit/Done Button ──────────────────────── */}
       <View style={styles.buttonStack}>
         {/* Bell Button */}
         <Pressable
@@ -77,7 +81,7 @@ export function BillCard({
           accessibilityRole="button"
           accessibilityLabel="Notifications"
         >
-          <Bell size={20} color="#292524" strokeWidth={1.5} />
+          <Bell size={18} color="#292524" strokeWidth={1.5} />
           <View style={styles.bellDot} />
         </Pressable>
 
@@ -88,7 +92,7 @@ export function BillCard({
           accessibilityRole="button"
           accessibilityLabel="View Routine Schedule"
         >
-          <CalendarCheck size={20} color="#292524" strokeWidth={1.5} />
+          <CalendarCheck size={18} color="#292524" strokeWidth={1.5} />
         </Pressable>
 
         {/* Fast-forward Button */}
@@ -98,11 +102,25 @@ export function BillCard({
           accessibilityRole="button"
           accessibilityLabel={`Simulation speed ${simSpeed}x. Tap to cycle speed.`}
         >
-          <FastForward size={18} color="#FFFFFF" strokeWidth={1.5} />
+          <FastForward size={17} color="#FFFFFF" strokeWidth={1.5} />
           <View style={styles.speedBadge}>
             <Text style={styles.speedBadgeText}>{simSpeed}x</Text>
           </View>
         </Pressable>
+
+        {/* Edit / Done Button matching screenshot position */}
+        {onToggleEdit && (
+          <Pressable
+            style={styles.editButton}
+            onPress={onToggleEdit}
+            accessibilityRole="button"
+            accessibilityLabel={isEditMode ? 'Done editing floor plan' : 'Edit floor plan'}
+          >
+            <Text style={styles.editButtonText}>
+              {isEditMode ? 'Done' : 'Edit'}
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -111,21 +129,19 @@ export function BillCard({
 const styles = StyleSheet.create({
   topContainer: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
     gap: 12,
     marginBottom: 8,
   },
   billCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
+    borderRadius: 22,
+    padding: 14, // p-4 compact padding
     shadowColor: '#5C4033',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 3,
     borderWidth: 1,
     borderColor: '#F0ECE4',
@@ -134,87 +150,87 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   cardTitle: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11,
+    fontSize: 10.5,
     letterSpacing: 0.8,
     color: '#78716C',
   },
   badgeContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 2,
     borderRadius: 9999,
   },
   badgeText: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11,
+    fontSize: 10.5,
   },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 10,
+    marginBottom: 5,
   },
   heroAmount: {
     fontFamily: 'Lora_700Bold',
-    fontSize: 32,
+    fontSize: 28, // strictly 28px Lora font
     color: '#1C1917',
     letterSpacing: -0.5,
   },
   heroUnit: {
     fontFamily: 'SourceSans3_400Regular',
-    fontSize: 15,
+    fontSize: 14,
     color: '#78716C',
-    marginLeft: 2,
+    marginLeft: 3,
   },
   divider: {
     height: 1,
     backgroundColor: '#F3EFE9',
-    marginBottom: 8,
+    marginBottom: 5,
   },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   timeText: {
     fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12.5,
+    fontSize: 11.5,
     color: '#57534E',
   },
   buttonStack: {
-    justifyContent: 'space-between',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
   },
   roundButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#5C4033',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
     borderWidth: 1,
     borderColor: '#F0ECE4',
     position: 'relative',
   },
   bellDot: {
     position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    top: 9,
+    right: 10,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#C87D55',
   },
   fastForwardButton: {
@@ -226,13 +242,26 @@ const styles = StyleSheet.create({
     bottom: -2,
     right: -2,
     backgroundColor: '#566549',
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    borderRadius: 5,
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
   },
   speedBadgeText: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 8.5,
+    fontSize: 8,
     color: '#FFFFFF',
+  },
+  editButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minHeight: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  editButtonText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 15,
+    color: '#3D5236',
   },
 });
