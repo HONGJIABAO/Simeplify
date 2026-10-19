@@ -5,16 +5,30 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 
 const SCREENS = [
-  { id: 'S1', title: 'Login', route: '/(auth)/login', status: 'coming soon' },
+  { id: 'S1', title: 'Login', route: '/(auth)/login', status: 'Ready' },
   { id: 'S2', title: 'Sign Up', route: '/(auth)/sign-up', status: 'coming soon' },
   { id: 'S3.1', title: 'Onboarding: Schedule', route: '/(onboarding)/schedule', status: 'coming soon' },
   { id: 'S3.2', title: 'Onboarding: Layout', route: '/(onboarding)/layout', status: 'coming soon' },
   { id: 'S3.3', title: 'Onboarding: Appliances', route: '/(onboarding)/appliances', status: 'coming soon' },
   { id: 'S4', title: 'Simulator', route: '/(tabs)/simulator', status: 'Tab placeholder' },
-  { id: 'S5', title: 'Bin', route: '/(tabs)/bin', status: 'Tab placeholder' },
+  { id: 'S5.1', title: 'Bin: Home', route: '/(tabs)/bin', status: 'Ready' },
+  { id: 'S5.2a', title: 'Bin: Camera Scanner (Ready)', route: '/bin/scanner', status: 'Ready' },
+  { id: 'S5.2b', title: 'Bin: Camera (Permission Denied)', route: '/bin/scanner?state=permission-denied', status: 'Ready' },
+  { id: 'S5.2c', title: 'Bin: Camera (Scanning Spinner)', route: '/bin/scanner?state=scanning', status: 'Ready' },
+  { id: 'S5.2d', title: 'Bin: Gallery Upload', route: '/bin/upload', status: 'Ready' },
+  { id: 'S5.3a', title: 'Bin: Result - Paper (+10 pts)', route: '/bin/result?binType=paper', status: 'Ready' },
+  { id: 'S5.3b', title: 'Bin: Result - Plastic (+10 pts)', route: '/bin/result?binType=plastic', status: 'Ready' },
+  { id: 'S5.3c', title: 'Bin: Result - Glass & Metal (+10 pts)', route: '/bin/result?binType=glass_metal', status: 'Ready' },
+  { id: 'S5.3d', title: 'Bin: Result - General Waste (0 pts)', route: '/bin/result?binType=general', status: 'Ready' },
+  { id: 'S5.3e', title: 'Bin: Result - Daily Limit Reached', route: '/bin/result?binType=paper&state=daily-limit', status: 'Ready' },
+  { id: 'S5.3f', title: 'Bin: Result - Low Confidence', route: '/bin/result?state=low-confidence', status: 'Ready' },
+  { id: 'S5.3g', title: 'Bin: Result - AI Error', route: '/bin/result?state=error', status: 'Ready' },
+  { id: 'S5.3h', title: 'Bin: Result - Loading Spinner', route: '/bin/result?state=loading', status: 'Ready' },
   { id: 'S6', title: 'Community', route: '/(tabs)/community', status: 'Tab placeholder' },
   { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Tab placeholder' },
-  { id: 'S8', title: 'Profile', route: '/(tabs)/profile', status: 'Tab placeholder' },
+  { id: 'S8', title: 'Profile: Home', route: '/(tabs)/profile', status: 'Ready' },
+  { id: 'S8a', title: 'Profile: Resident Sheet (At home)', route: '/(tabs)/profile?sheet=at-home', status: 'Ready' },
+  { id: 'S8b', title: 'Profile: Resident Sheet (Out)', route: '/(tabs)/profile?sheet=out', status: 'Ready' },
   { id: 'S9', title: 'Notifications', route: '/notifications', status: 'Placeholder' },
 ];
 
