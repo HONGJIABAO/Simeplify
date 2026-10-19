@@ -36,7 +36,7 @@ export function NewLetterHome({ onOpenLetter }: NewLetterHomeProps) {
         </View>
 
         {/* Title */}
-        <Text style={styles.decisionTitle}>This month's vote</Text>
+        <Text style={styles.decisionTitle}>This month&apos;s vote</Text>
 
         {/* Open Letter Primary Button */}
         <Pressable
@@ -55,7 +55,7 @@ export function NewLetterHome({ onOpenLetter }: NewLetterHomeProps) {
         {/* Description */}
         <Text style={styles.decisionDescription}>
           Your household letter has arrived in the mailbox outside. Open your ballot
-          to vote on this month's community eco-reward.
+          to vote on this month&apos;s community eco-reward.
         </Text>
 
         {/* Divider */}

@@ -68,7 +68,7 @@ export function LivingLeafHome({
         {/* Heading & Subtitle */}
         <Text style={styles.leafTitle}>Living Leaf is Thriving</Text>
         <Text style={styles.leafSubtitle}>
-          Complete 1 more green action today to unlock tomorrow's Lush state &
+          Complete 1 more green action today to unlock tomorrow&apos;s Lush state &
           community perks.
         </Text>
 
