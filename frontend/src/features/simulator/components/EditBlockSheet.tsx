@@ -26,10 +26,13 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
 import { Stepper } from '@/components/Stepper';
-import { RoutineBlock } from '../logic/myDayLogic';
-import { MOCK_APPLIANCES } from '@/lib/mockData';
+import { Input } from '@/components/Input';
+import { Sprite } from './Sprite';
+import { RoutineBlock, validateBlock } from '../logic/myDayLogic';
+import { MOCK_APPLIANCES, MOCK_ROOMS, Appliance, Room } from '@/lib/mockData';
 
 interface EditBlockSheetProps {
+  rooms?: Room[]; appliances?: Appliance[]; existingBlocks?: RoutineBlock[];
   visible: boolean;
   onClose: () => void;
   block: RoutineBlock | null;
@@ -37,32 +40,26 @@ interface EditBlockSheetProps {
   onRemoveBlock: (id: string) => void;
 }
 
-const ROOM_OPTIONS = [
-  { id: 'living', label: 'Living room' },
-  { id: 'kitchen', label: 'Kitchen' },
-  { id: 'bedroom', label: 'Bedroom 1' },
-  { id: 'bedroom2', label: 'Bedroom 2' },
-  { id: 'bathroom', label: 'Bathroom' },
-];
-
 function EditBlockForm({
   block,
+  rooms = MOCK_ROOMS, appliances = MOCK_APPLIANCES, existingBlocks = [],
   onUpdateBlock,
   onRemoveBlock,
   onClose,
 }: {
+  rooms?: Room[]; appliances?: Appliance[]; existingBlocks?: RoutineBlock[];
   block: RoutineBlock;
   onUpdateBlock: (updated: RoutineBlock) => void;
   onRemoveBlock: (id: string) => void;
   onClose: () => void;
 }) {
-  const [startTime] = useState(block.startTime);
-  const [endTime] = useState(block.endTime);
+  const [startTime, setStartTime] = useState(block.startTime);
+  const [endTime, setEndTime] = useState(block.endTime);
   const [selectedRoom, setSelectedRoom] = useState(block.roomId);
   const [minutesPerShower, setMinutesPerShower] = useState(block.minutesPerShower ?? 10);
   const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>(() => {
     const map: Record<string, boolean> = {};
-    for (const a of MOCK_APPLIANCES) {
+    for (const a of appliances) {
       map[a.id] = block.applianceIds.includes(a.id);
     }
     return map;
@@ -72,14 +69,16 @@ function EditBlockForm({
     setApplianceSwitches((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const validation = validateBlock({ ...block, startTime, endTime }, existingBlocks, block.id);
   const handleApply = () => {
+    if (!validation.isValid) return;
     onUpdateBlock({
       ...block,
       startTime,
       endTime,
       roomId: selectedRoom,
       minutesPerShower: block.iconType === 'shower' ? minutesPerShower : undefined,
-      applianceIds: Object.keys(applianceSwitches).filter((id) => applianceSwitches[id]),
+      applianceIds: appliances.filter(a => a.roomId === selectedRoom && applianceSwitches[a.id]).map(a => a.id),
     });
     onClose();
   };
@@ -103,19 +102,20 @@ function EditBlockForm({
         <View style={styles.timeCardsRow}>
           <View style={styles.timeCard}>
             <Text style={styles.timeCardLabel}>STARTS</Text>
-            <Text style={styles.timeCardVal}>{startTime}</Text>
+            <Input accessibilityLabel="Start time HH:MM" value={startTime} onChangeText={setStartTime} placeholder="HH:MM" maxLength={5} />
           </View>
           <View style={styles.timeCard}>
             <Text style={styles.timeCardLabel}>ENDS</Text>
-            <Text style={styles.timeCardVal}>{endTime}</Text>
+            <Input accessibilityLabel="End time HH:MM" value={endTime} onChangeText={setEndTime} placeholder="HH:MM" maxLength={5} />
           </View>
         </View>
 
+        {!validation.isValid && <Text accessibilityRole="alert" style={{ color: '#a8442f' }}>{validation.timeError || validation.overlapError}</Text>}
         {/* Where? Room grid */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Where?</Text>
           <View style={styles.roomGrid}>
-            {ROOM_OPTIONS.map((rm) => {
+            {rooms.map((r, i) => ({ id: r.id, label: r.name || `Room ${i + 1}` })).map((rm) => {
               const isSelected = selectedRoom === rm.id;
               return (
                 <Pressable
@@ -150,9 +150,9 @@ function EditBlockForm({
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Room appliances in use</Text>
           <View style={styles.applianceCardList}>
-            {MOCK_APPLIANCES.map((app) => (
+            {appliances.filter(a => a.roomId === selectedRoom).map((app) => (
               <View key={app.id} style={styles.applianceSwitchRow}>
-                <View style={styles.applianceInfo}>
+                <Sprite type={app.spriteKey ?? app.type} size={36} /><View style={styles.applianceInfo}>
                   <Text style={styles.applianceName}>{app.name}</Text>
                   <Text style={styles.applianceWatts}>
                     {app.wattage} W • {app.roomId}
@@ -210,6 +210,7 @@ export function EditBlockSheet({
   visible,
   onClose,
   block,
+  rooms = MOCK_ROOMS, appliances = MOCK_APPLIANCES, existingBlocks = [],
   onUpdateBlock,
   onRemoveBlock,
 }: EditBlockSheetProps) {
@@ -222,7 +223,8 @@ export function EditBlockSheet({
     >
       {block ? (
         <EditBlockForm
-          key={block.id}
+          key={`${block.id}-${visible}`}
+          rooms={rooms} appliances={appliances} existingBlocks={existingBlocks}
           block={block}
           onUpdateBlock={onUpdateBlock}
           onRemoveBlock={onRemoveBlock}

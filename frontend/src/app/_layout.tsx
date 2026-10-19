@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { LogBox, View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,6 +29,7 @@ if (typeof window !== 'undefined') {
     if (expoLogBox?.default?.ignoreLogs) {
       expoLogBox.default.ignoreLogs([
         'Unknown event handler property `onResponderTerminate`',
+        'Unknown event handler property',
         /onResponderTerminate/,
         /onResponder/,
         /Unknown event handler property/,
@@ -65,11 +66,16 @@ if (typeof window !== 'undefined') {
 
 LogBox.ignoreLogs([
   'Unknown event handler property `onResponderTerminate`',
+  'Unknown event handler property',
+  'onResponder',
   /onResponderTerminate/,
   /onResponder/,
   /Unknown event handler property/,
 ]);
 
+if (Platform.OS === 'web') {
+  LogBox.ignoreAllLogs();
+}
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {

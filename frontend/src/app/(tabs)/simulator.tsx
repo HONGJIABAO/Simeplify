@@ -1,717 +1,787 @@
 /**
- * SIM-01, SIM-02, SIM-03, SIM-04, SIM-05, SIM-06, SIM-07
- * Simulator tab — Stage 8: My day, resident avatar, home looks.
- * Source: docs/page_refined.md S4.1 to S4.6, docs/design.md Unit 12.
- *
- * Rules:
- * - Presence wins over My day; before any My day answer, bill is max bill.
- * - Avatar walks to room of active block, poses match activity (lie, cook, shower, sit, stand).
- * - Away time: avatar walks to door, home shows energy saving overlay, "Energy saving" pill.
- * - Backdrop shifts according to time of day.
- * - My Day full-height bottom sheets: Quick setup, Timeline, Add block, Edit block.
+ * Simulator tab — Simeplify
+ * Mobile-first energy simulator with interactive 4-room floor plan,
+ * custom room naming, drag-and-drop appliances & furniture,
+ * living avatar simulation with daily routine, on/off appliance glows,
+ * and live TNB tariff bill calculation.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
+  ScrollView,
+  Platform,
   LayoutChangeEvent,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  Bell,
-  CalendarCheck,
-  Gauge,
-  Clock,
-  FastForward,
-  Play,
-  Square,
-} from 'lucide-react-native';
+import { useToast } from '@/components/Toast';
+
+import { BillCard } from '@/features/simulator/components/BillCard';
+import { FloorPlan } from '@/features/simulator/components/FloorPlan';
+import { EditSheet } from '@/features/simulator/components/EditSheet';
+import { ApplianceDetailsSheet } from '@/features/simulator/components/ApplianceDetailsSheet';
+import { FurnitureDetailsSheet } from '@/features/simulator/components/FurnitureDetailsSheet';
+import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
+import { BillModal } from '@/features/simulator/components/BillModal';
 
 import {
-  MOCK_APPLIANCES,
-  MOCK_ROOMS,
-  MOCK_MONTHLY_KWH,
-  Appliance,
-  ApplianceType,
-  Room,
-} from '@/lib/mockData';
+  StoredRoom,
+  StoredPlacedItem,
+  loadLayoutState,
+  saveLayoutState,
+  loadSimulationState,
+  saveSimulationState,
+} from '@/features/simulator/logic/storage';
 import {
-  HIGH_USAGE_THRESHOLD_RM,
-} from '@/lib/flags';
-import { calcBillFromKwh } from '@/features/simulator/logic/billCalc';
-import { useBillAnimation } from '@/features/simulator/hooks/useBillAnimation';
-import { FloorPlanCanvas } from '@/features/simulator/components/FloorPlanCanvas';
-import { BillModal } from '@/features/simulator/components/BillModal';
-import { FastForwardPanel } from '@/features/simulator/components/FastForwardPanel';
-import { FastForwardPeriod } from '@/features/simulator/logic/fastForward';
-import { EditTray } from '@/features/simulator/components/EditTray';
-import { ApplianceDetailsSheet } from '@/features/simulator/components/ApplianceDetailsSheet';
-import { SuggestionArea, SuggestionMode } from '@/features/simulator/components/SuggestionArea';
-import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
+  DEFAULT_ROUTINE,
+  SimSpeed,
+  SIM_SPEED_MULTIPLIERS,
+} from '@/features/simulator/logic/routineConfig';
 import {
-  RoutineBlock,
-  DEFAULT_ROUTINE_BLOCKS,
-  getActiveBlockAtTime,
-  calcMonthlyKwhFromRoutine,
-} from '@/features/simulator/logic/myDayLogic';
-import {
-  getAvatarState,
-  getBackdropColorForTime,
-} from '@/features/simulator/logic/avatarPlace';
-import { QuickSetupSheet } from '@/features/simulator/components/QuickSetupSheet';
-import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
-import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
-import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
-import { useToast } from '@/components/Toast';
-import { colors, shadows } from '@/lib/theme';
+  AvatarSimulationState,
+  getCurrentRoutine,
+  getRoomCenter,
+  buildWaypoints,
+  computeSimulationBill,
+  formatTimeMinutes,
+  Point,
+} from '@/features/simulator/logic/SimulationEngine';
+import { SpriteItemDef } from '@/features/simulator/logic/spriteMap';
+import { Appliance } from '@/lib/mockData';
+
+const INITIAL_ROOMS: StoredRoom[] = [
+  { id: 'living', name: '', type: 'living', gridCol: 0, gridRow: 0, gridColSpan: 2, gridRowSpan: 2 },
+  { id: 'kitchen', name: '', type: 'kitchen', gridCol: 2, gridRow: 0, gridColSpan: 2, gridRowSpan: 2 },
+  { id: 'bedroom', name: '', type: 'bedroom', gridCol: 0, gridRow: 2, gridColSpan: 2, gridRowSpan: 2 },
+  { id: 'bathroom', name: '', type: 'bathroom', gridCol: 2, gridRow: 2, gridColSpan: 2, gridRowSpan: 2 },
+];
 
 export default function SimulatorScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
-  // ── 1. Base Appliances & Routine State ────────────────────────────────────
-  const [baseAppliances, setBaseAppliances] = useState<Appliance[]>(MOCK_APPLIANCES);
-  const [baseKwh, setBaseKwh] = useState(MOCK_MONTHLY_KWH);
-  const [myDayAnswered, setMyDayAnswered] = useState(false);
-  const [routineBlocks, setRoutineBlocks] = useState<RoutineBlock[]>(DEFAULT_ROUTINE_BLOCKS);
+  // ── Layout State (persisted) ───────────────────────────────────────────────
+  const [rooms, setRooms] = useState<StoredRoom[]>(() => {
+    const saved = loadLayoutState();
+    return saved?.rooms && saved.rooms.length > 0 ? saved.rooms : INITIAL_ROOMS;
+  });
 
-  // In-memory swap replacements: map of applianceId -> SwapSuggestion
-  const [activeSwaps, setActiveSwaps] = useState<Map<string, SwapSuggestion>>(new Map());
+  const [items, setItems] = useState<StoredPlacedItem[]>(() => {
+    const saved = loadLayoutState();
+    return saved?.items ?? [];
+  });
 
-  // Appliances with active in-memory swaps applied
-  const currentAppliances = useMemo(() => {
-    return baseAppliances.map((app) => {
-      const activeSwap = activeSwaps.get(app.id);
-      if (activeSwap) {
-        return {
-          ...app,
-          wattage: activeSwap.newWattage,
-          stars: activeSwap.suggestedStars,
-        };
-      }
-      return app;
-    });
-  }, [baseAppliances, activeSwaps]);
+  // ── Simulation State (persisted separately) ───────────────────────────────
+  const [simSpeed, setSimSpeed] = useState<SimSpeed>(() => {
+    const saved = loadSimulationState();
+    return saved?.simSpeed ?? 1;
+  });
 
-  // Total kWh after routine optimization and in-memory swaps
-  const totalKwh = useMemo(() => {
-    // If My day answered, optimize person-dependent usage
-    const effectiveBase = myDayAnswered
-      ? calcMonthlyKwhFromRoutine(routineBlocks, baseKwh)
-      : baseKwh;
+  const [simulatedMinutes, setSimulatedMinutes] = useState<number>(() => {
+    const saved = loadSimulationState();
+    // Default 18:30 (1110 minutes) matching screenshot
+    return saved?.simulatedMinutes ?? 18 * 60 + 30;
+  });
 
-    let kwh = effectiveBase;
-    activeSwaps.forEach((swap) => {
-      const diff = baseKwh - swap.newMonthlyKwh;
-      kwh -= Math.max(0, diff);
-    });
-    return Math.max(0, Math.round(kwh));
-  }, [baseKwh, myDayAnswered, routineBlocks, activeSwaps]);
+  const [avatarVariant, setAvatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() => {
+    const saved = loadSimulationState();
+    return saved?.avatarVariant === 'avatar_boy' || saved?.avatarVariant === 'boy'
+      ? 'avatar_boy'
+      : 'avatar_girl';
+  });
 
-  const totalBillRm = useMemo(() => calcBillFromKwh(totalKwh), [totalKwh]);
-  const animatedBillText = useBillAnimation(Math.round(totalBillRm));
+  // Save layout state on changes
+  useEffect(() => {
+    saveLayoutState({ rooms, items });
+  }, [rooms, items]);
 
-  // Base bill (before swaps) to compute monthly savings
-  const baseBillRm = useMemo(() => calcBillFromKwh(baseKwh), [baseKwh]);
-  const monthlySavingRm = useMemo(
-    () => Math.max(0, Math.round(baseBillRm - totalBillRm)),
-    [baseBillRm, totalBillRm]
-  );
+  // Save simulation state on changes
+  useEffect(() => {
+    saveSimulationState({ simSpeed, simulatedMinutes, avatarVariant });
+  }, [simSpeed, simulatedMinutes, avatarVariant]);
 
-  // ── 2. Clock & Avatar / Home Look State (SIM-06) ─────────────────────────
-  const now = new Date();
-  const currentTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}`;
-  const timeLabel = `Today • ${currentTimeStr}`;
-
-  const activeBlock = useMemo(
-    () => getActiveBlockAtTime(currentTimeStr, routineBlocks),
-    [currentTimeStr, routineBlocks]
-  );
-
-  const avatarState = useMemo(
-    () => getAvatarState(activeBlock),
-    [activeBlock]
-  );
-
-  const backdropColor = useMemo(
-    () => getBackdropColorForTime(currentTimeStr),
-    [currentTimeStr]
-  );
-
-  // ── 3. Floor Plan Sizing ─────────────────────────────────────────────────
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const onFloorPlanLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    if (width > 0 && height > 0) {
-      setCanvasSize({ width, height });
-    }
-  }, []);
-
-  // ── 4. Fast-forward State (SIM-04) ───────────────────────────────────────
-  const [fastForwardState, setFastForwardState] = useState<'closed' | 'open' | 'playing'>('closed');
-  const [fastForwardPeriod, setFastForwardPeriod] = useState<FastForwardPeriod>('1M');
-  const [simulatedDate, setSimulatedDate] = useState<string | null>(null);
-
-  const handleFastForwardPress = useCallback(() => {
-    if (fastForwardState === 'closed') {
-      setFastForwardState('open');
-    } else if (fastForwardState === 'open') {
-      setFastForwardState('playing');
-    } else {
-      setFastForwardState('open');
-      setSimulatedDate(null);
-    }
-  }, [fastForwardState]);
-
-  // ── 5. Edit Mode State (SIM-05) ──────────────────────────────────────────
+  // ── Edit Mode & UI State ───────────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
-  const [selectedApplianceId, setSelectedApplianceId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedPendingItem, setSelectedPendingItem] = useState<SpriteItemDef | null>(null);
 
-  // Appliance details sheet state
-  const [detailsSheetVisible, setDetailsSheetVisible] = useState(false);
-  const [sheetApplianceType, setSheetApplianceType] = useState<ApplianceType>('air_conditioner');
-  const [sheetDefaultWattage, setSheetDefaultWattage] = useState(1200);
-  const [editingAppliance, setEditingAppliance] = useState<Appliance | null>(null);
+  // Modals & Sheets
+  const [applianceSheetVisible, setApplianceSheetVisible] = useState(false);
+  const [editingAppliance, setEditingAppliance] = useState<StoredPlacedItem | null>(null);
 
-  const handleSelectApplianceType = useCallback((type: ApplianceType, defaultWattage: number) => {
-    setSheetApplianceType(type);
-    setSheetDefaultWattage(defaultWattage);
-    setEditingAppliance(null);
-    setDetailsSheetVisible(true);
-  }, []);
+  const [furnitureSheetVisible, setFurnitureSheetVisible] = useState(false);
+  const [editingFurniture, setEditingFurniture] = useState<StoredPlacedItem | null>(null);
 
-  const handleSaveAppliance = useCallback(
-    (newAppData: Omit<Appliance, 'id'>) => {
-      if (editingAppliance) {
-        setBaseAppliances((prev) =>
-          prev.map((a) => (a.id === editingAppliance.id ? { ...newAppData, id: a.id } : a))
-        );
-      } else {
-        const newApp: Appliance = {
-          ...newAppData,
-          id: `app-${Date.now()}`,
-        };
-        setBaseAppliances((prev) => [...prev, newApp]);
-        setBaseKwh((prev) => prev + Math.round(newAppData.wattage * 0.15));
-      }
-      setSelectedApplianceId(null);
-    },
-    [editingAppliance]
-  );
+  const [namingModalVisible, setNamingModalVisible] = useState(false);
+  const [namingRoom, setNamingRoom] = useState<StoredRoom | null>(null);
 
-  const handleSelectApplianceOnPlan = useCallback(
-    (appliance: Appliance) => {
-      setSelectedApplianceId((prev) => (prev === appliance.id ? null : appliance.id));
-    },
-    []
-  );
-
-  const handleRoomPress = useCallback(
-    (room: Room) => {
-      handleSelectApplianceType('air_conditioner', 1200);
-    },
-    [handleSelectApplianceType]
-  );
-
-  // ── 6. Suggestion Area State (SIM-02, SIM-03) ────────────────────────────
-  const [firstTimeDismissed, setFirstTimeDismissed] = useState(false);
-  const [solarDismissed, setSolarDismissed] = useState(false);
-
-  const swapSuggestions = useMemo(() => {
-    return getSwapSuggestions(currentAppliances, totalKwh, totalBillRm);
-  }, [currentAppliances, totalKwh, totalBillRm]);
-
-  const suggestionMode: SuggestionMode = useMemo(() => {
-    if (totalBillRm >= 500 && !solarDismissed) {
-      return 'solar';
-    }
-    if (!firstTimeDismissed && !myDayAnswered && currentAppliances.length > 0) {
-      return 'first-time';
-    }
-    if (swapSuggestions.length > 0) {
-      return 'swap';
-    }
-    return 'idle';
-  }, [totalBillRm, solarDismissed, firstTimeDismissed, myDayAnswered, currentAppliances.length, swapSuggestions.length]);
-
-  const handleToggleSwap = useCallback((suggestion: SwapSuggestion) => {
-    setActiveSwaps((prev) => {
-      const next = new Map(prev);
-      if (next.has(suggestion.applianceId)) {
-        next.delete(suggestion.applianceId);
-      } else {
-        next.set(suggestion.applianceId, suggestion);
-      }
-      return next;
-    });
-  }, []);
-
-  // ── 7. My Day Sheets State (SIM-07) ──────────────────────────────────────
-  const [quickSetupVisible, setQuickSetupVisible] = useState(false);
-  const [timelineVisible, setTimelineVisible] = useState(false);
-  const [addBlockVisible, setAddBlockVisible] = useState(false);
-  const [editBlockVisible, setEditBlockVisible] = useState(false);
-  const [editingBlock, setEditingBlock] = useState<RoutineBlock | null>(null);
-
-  const handleOpenMyDay = useCallback(() => {
-    if (!myDayAnswered) {
-      setQuickSetupVisible(true);
-    } else {
-      setTimelineVisible(true);
-    }
-  }, [myDayAnswered]);
-
-  const handleAddBlock = useCallback((newBlock: Omit<RoutineBlock, 'id'>) => {
-    setRoutineBlocks((prev) => [
-      ...prev,
-      { ...newBlock, id: `block-${Date.now()}` },
-    ]);
-    setMyDayAnswered(true);
-    showToast('Time block added to schedule', 'success');
-  }, [showToast]);
-
-  const handleUpdateBlock = useCallback((updated: RoutineBlock) => {
-    setRoutineBlocks((prev) =>
-      prev.map((b) => (b.id === updated.id ? updated : b))
-    );
-    showToast('Block updated', 'success');
-  }, [showToast]);
-
-  const handleRemoveBlock = useCallback((id: string) => {
-    setRoutineBlocks((prev) => prev.filter((b) => b.id !== id));
-    showToast('Block removed', 'info');
-  }, [showToast]);
-
-  // ── 8. Bill Modal Visibility ─────────────────────────────────────────────
   const [billModalVisible, setBillModalVisible] = useState(false);
 
-  return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      {/* ── Top area ─────────────────────────────────────────────────── */}
-      <View style={styles.topArea}>
-        {/* Bill card (left, ~58% width) */}
-        <Pressable
-          style={styles.billCard}
-          onPress={() => setBillModalVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Estimated bill. Tap to see details."
-        >
-          {/* Label row */}
-          <View style={styles.billLabelRow}>
-            <Gauge size={14} color={colors['tan-400']} strokeWidth={1.5} />
-            <Text style={styles.billLabel}>Estimated bill</Text>
-            {HIGH_USAGE_THRESHOLD_RM !== null &&
-              totalBillRm >= HIGH_USAGE_THRESHOLD_RM && (
-                <View style={styles.highUsageBadge}>
-                  <Text style={styles.highUsageBadgeText}>High usage</Text>
-                </View>
-              )}
-          </View>
+  // Drag and Drop State
+  const floorPlanRef = useRef<View>(null);
+  const floorRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [dragGhost, setDragGhost] = useState<{ item: SpriteItemDef; x: number; y: number } | null>(null);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
 
-          {/* Hero number + /mo */}
-          <View style={styles.billHeroRow}>
-            <Text style={styles.billHero}>{animatedBillText}</Text>
-            <Text style={styles.billPerMo}>/ mo</Text>
-          </View>
+  // Measure floor plan canvas for drop detection
+  const measureFloorPlan = useCallback(() => {
+    (floorPlanRef.current as any)?.measureInWindow((x: number, y: number, width: number, height: number) => {
+      if (width > 0 && height > 0) {
+        floorRectRef.current = { left: x, top: y, width, height };
+      }
+    });
+  }, []);
 
-          {/* Max-bill note before My day answer */}
-          {!myDayAnswered && totalKwh > 0 && (
-            <Text style={styles.maxBillNote}>
-              Max estimate before My day
-            </Text>
-          )}
+  const onFloorLayout = useCallback((e: LayoutChangeEvent) => {
+    measureFloorPlan();
+  }, [measureFloorPlan]);
 
-          {/* Active in-memory swap saving indicator */}
-          {monthlySavingRm > 0 && (
-            <Text style={styles.swapSavingNote}>
-              Active swap: saves RM {monthlySavingRm}/mo
-            </Text>
-          )}
+  // ── Avatar Simulation & Waypoint Engine ────────────────────────────────────
+  const [avatarState, setAvatarState] = useState<AvatarSimulationState>({
+    currentX: 0.25,
+    currentY: 0.25,
+    facingLeft: false,
+    isWalking: false,
+    isSleeping: false,
+    currentRoomId: 'living',
+    targetRoomId: 'living',
+    currentActivity: 'Standing in living room',
+  });
 
-          {/* Divider */}
-          <View style={styles.billDivider} />
+  const waypointQueue = useRef<Point[]>([]);
+  const currentTargetPos = useRef<Point>({ x: 0.25, y: 0.25 });
 
-          {/* Scene time */}
-          <View style={styles.billTimeRow}>
-            <Clock size={13} color={colors['stone-400']} strokeWidth={1.5} />
-            <Text style={styles.billTimeText}>{timeLabel}</Text>
-          </View>
-        </Pressable>
+  // Main simulation tick timer (60fps animation / interval)
+  useEffect(() => {
+    let lastTime = Date.now();
 
-        {/* Button stack (right) */}
-        <View style={styles.buttonStack}>
-          {/* Bell pill */}
-          <Pressable
-            style={styles.bellPill}
-            onPress={() => router.push('/notifications')}
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-          >
-            <Bell size={20} color={colors['stone-800']} strokeWidth={1.5} />
-            <View style={styles.bellUnreadDot} />
-          </Pressable>
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const deltaSec = (now - lastTime) / 1000;
+      lastTime = now;
 
-          {/* My day button */}
-          <Pressable
-            style={styles.roundButton}
-            onPress={handleOpenMyDay}
-            accessibilityRole="button"
-            accessibilityLabel="My day schedule"
-          >
-            <CalendarCheck size={20} color={colors['stone-800']} strokeWidth={1.5} />
-          </Pressable>
+      // Advance simulated clock
+      const realSecPerHour = SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour;
+      const simMinutesDelta = (deltaSec / realSecPerHour) * 60;
 
-          {/* Fast-forward button */}
-          <Pressable
-            style={[styles.roundButton, styles.fastForwardButton]}
-            onPress={handleFastForwardPress}
-            accessibilityRole="button"
-            accessibilityLabel={
-              fastForwardState === 'closed'
-                ? 'Fast-forward. Opens the time selector.'
-                : fastForwardState === 'open'
-                ? `Play fast-forward for ${fastForwardPeriod}`
-                : 'Stop fast-forward'
+      setSimulatedMinutes((prev) => {
+        const nextMin = (prev + simMinutesDelta) % 1440;
+        return nextMin;
+      });
+
+      // Advance avatar movement along waypoints if any
+      if (waypointQueue.current.length > 0) {
+        const nextTarget = waypointQueue.current[0];
+        setAvatarState((prev) => {
+          const dx = nextTarget.x - prev.currentX;
+          const dy = nextTarget.y - prev.currentY;
+          const distance = Math.hypot(dx, dy);
+
+          const step = 0.28 * deltaSec; // Walking speed
+
+          if (distance <= step) {
+            // Reached this waypoint
+            waypointQueue.current.shift();
+            const reachedFinal = waypointQueue.current.length === 0;
+
+            return {
+              ...prev,
+              currentX: nextTarget.x,
+              currentY: nextTarget.y,
+              isWalking: !reachedFinal,
+              facingLeft: dx < 0 ? true : dx > 0 ? false : prev.facingLeft,
+            };
+          } else {
+            // Move toward waypoint
+            const moveRatio = step / distance;
+            return {
+              ...prev,
+              currentX: prev.currentX + dx * moveRatio,
+              currentY: prev.currentY + dy * moveRatio,
+              isWalking: true,
+              facingLeft: dx < 0 ? true : dx > 0 ? false : prev.facingLeft,
+            };
+          }
+        });
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [simSpeed]);
+
+  // Update routine activities and waypoints when routine changes
+  const currentRoutine = useMemo(() => {
+    return getCurrentRoutine(simulatedMinutes, DEFAULT_ROUTINE);
+  }, [simulatedMinutes]);
+
+  useEffect(() => {
+    // Check if target room exists in user's rooms
+    const targetRoom =
+      rooms.find((r) => r.type === currentRoutine.targetRoomType) || rooms[0];
+
+    // Find destination inside target room
+    let destPoint: Point;
+    let isSleeping = false;
+
+    if (currentRoutine.isSleeping && targetRoom.type === 'bedroom') {
+      // Look for a placed bed
+      const bedItem = items.find(
+        (i) => i.category === 'Furniture' && (i.type === 'bed' || i.spriteKey === 'bed')
+      );
+      if (bedItem) {
+        destPoint = { x: bedItem.posX, y: bedItem.posY };
+      } else {
+        destPoint = getRoomCenter(targetRoom);
+      }
+      isSleeping = true;
+    } else {
+      destPoint = getRoomCenter(targetRoom);
+      isSleeping = false;
+    }
+
+    // If destination differs significantly, generate new waypoints
+    if (
+      Math.hypot(destPoint.x - currentTargetPos.current.x, destPoint.y - currentTargetPos.current.y) >
+      0.05
+    ) {
+      currentTargetPos.current = destPoint;
+      const waypoints = buildWaypoints(
+        { x: avatarState.currentX, y: avatarState.currentY },
+        avatarState.currentRoomId,
+        destPoint,
+        targetRoom.id
+      );
+      waypointQueue.current = waypoints;
+
+      setAvatarState((prev) => ({
+        ...prev,
+        targetRoomId: targetRoom.id,
+        currentActivity: currentRoutine.name,
+        isSleeping,
+      }));
+    } else {
+      setAvatarState((prev) => ({
+        ...prev,
+        currentRoomId: targetRoom.id,
+        isSleeping,
+      }));
+    }
+  }, [
+    currentRoutine,
+    rooms,
+    items,
+    avatarState.currentX,
+    avatarState.currentY,
+    avatarState.currentRoomId,
+  ]);
+
+  // ── Determine which appliances and lights are ON ───────────────────────────
+  const { activeApplianceIds, activeRoomLightIds } = useMemo(() => {
+    const activeAppIds: string[] = [];
+    const activeLightRoomIds: string[] = [];
+
+    const currentRoom = rooms.find((r) => r.id === avatarState.targetRoomId) || rooms[0];
+
+    for (const item of items) {
+      if (item.category !== 'Appliances') continue;
+
+      let isOn = false;
+
+      if (item.alwaysOn || item.isOn) {
+        isOn = true;
+      } else if (item.roomId === currentRoom.id) {
+        // If avatar is in this room and current routine uses this appliance type
+        if (
+          currentRoutine.activeApplianceTypes &&
+          currentRoutine.activeApplianceTypes.includes(item.type)
+        ) {
+          isOn = true;
+        }
+      }
+
+      if (isOn) {
+        activeAppIds.push(item.id);
+        if (item.type === 'lights' || item.type === 'light_bulb') {
+          if (!activeLightRoomIds.includes(item.roomId)) {
+            activeLightRoomIds.push(item.roomId);
+          }
+        }
+      }
+    }
+
+    return { activeApplianceIds: activeAppIds, activeRoomLightIds: activeLightRoomIds };
+  }, [items, rooms, avatarState.targetRoomId, currentRoutine]);
+
+  // ── Calculate Live Bill & Usage Badge ─────────────────────────────────────
+  const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => {
+    return computeSimulationBill(items);
+  }, [items]);
+
+  const simulatedTimeStr = useMemo(() => {
+    return formatTimeMinutes(simulatedMinutes);
+  }, [simulatedMinutes]);
+
+  // ── Speed Cycling (1x -> 2x -> 4x -> 1x) ──────────────────────────────────
+  const handleCycleSpeed = () => {
+    const nextSpeed: SimSpeed = simSpeed === 1 ? 2 : simSpeed === 2 ? 4 : 1;
+    setSimSpeed(nextSpeed);
+    showToast(`Simulation speed: ${nextSpeed}x`, 'info');
+  };
+
+  // ── Room Naming Interactions ───────────────────────────────────────────────
+  const handleRoomPress = (room: StoredRoom) => {
+    if (selectedPendingItem) {
+      // Tap-to-place fallback
+      handleDropItemAtRoom(selectedPendingItem, room, 0.5, 0.5);
+      setSelectedPendingItem(null);
+      return;
+    }
+
+    setNamingRoom(room);
+    setNamingModalVisible(true);
+  };
+
+  const handleSaveRoomName = (roomId: string, name: string, type: StoredRoom['type']) => {
+    setRooms((prev) =>
+      prev.map((r) => (r.id === roomId ? { ...r, name, type } : r))
+    );
+    showToast(`Saved room "${name}"`, 'success');
+  };
+
+  // ── Drag & Drop Logic ─────────────────────────────────────────────────────
+  const getRoomAtNormalizedPos = (rx: number, ry: number): { room: StoredRoom; localX: number; localY: number } | null => {
+    if (rx < 0 || rx > 1 || ry < 0 || ry > 1) return null;
+
+    let targetType: StoredRoom['type'] | null = null;
+    let localX = 0.5;
+    let localY = 0.5;
+
+    if (rx <= 0.49 && ry <= 0.49) {
+      targetType = 'living';
+      localX = rx / 0.49;
+      localY = ry / 0.49;
+    } else if (rx >= 0.51 && ry <= 0.49) {
+      targetType = 'kitchen';
+      localX = (rx - 0.51) / 0.49;
+      localY = ry / 0.49;
+    } else if (rx <= 0.49 && ry >= 0.51) {
+      targetType = 'bedroom';
+      localX = rx / 0.49;
+      localY = (ry - 0.51) / 0.49;
+    } else if (rx >= 0.51 && ry >= 0.51) {
+      targetType = 'bathroom';
+      localX = (rx - 0.51) / 0.49;
+      localY = (ry - 0.51) / 0.49;
+    }
+
+    if (!targetType) return null;
+
+    const matchedRoom = rooms.find((r) => r.type === targetType);
+    if (!matchedRoom) return null;
+
+    return {
+      room: matchedRoom,
+      localX: Math.max(0.15, Math.min(0.85, localX)),
+      localY: Math.max(0.18, Math.min(0.82, localY)),
+    };
+  };
+
+  const handleDropItemAtRoom = (
+    itemDef: SpriteItemDef,
+    targetRoom: StoredRoom,
+    normX: number,
+    normY: number
+  ) => {
+    // Calculate global position on floor plan
+    const halfW = 0.48;
+    const halfH = 0.48;
+    let globalX = 0.25;
+    let globalY = 0.25;
+
+    if (targetRoom.type === 'living') {
+      globalX = normX * halfW;
+      globalY = normY * halfH;
+    } else if (targetRoom.type === 'kitchen') {
+      globalX = 0.52 + normX * halfW;
+      globalY = normY * halfH;
+    } else if (targetRoom.type === 'bedroom') {
+      globalX = normX * halfW;
+      globalY = 0.52 + normY * halfH;
+    } else if (targetRoom.type === 'bathroom') {
+      globalX = 0.52 + normX * halfW;
+      globalY = 0.52 + normY * halfH;
+    }
+
+    if (itemDef.category === 'Furniture') {
+      // Place furniture immediately
+      const newFurniture: StoredPlacedItem = {
+        id: `furn_${Date.now()}`,
+        category: 'Furniture',
+        type: itemDef.key,
+        spriteKey: itemDef.key,
+        name: itemDef.label,
+        roomId: targetRoom.id,
+        posX: globalX,
+        posY: globalY,
+      };
+      setItems((prev) => [...prev, newFurniture]);
+      showToast(`Placed ${itemDef.label}`, 'success');
+    } else {
+      // Create pending appliance and open details sheet
+      const pendingApp: StoredPlacedItem = {
+        id: `pending_${Date.now()}`,
+        category: 'Appliances',
+        type: itemDef.key,
+        spriteKey: itemDef.key,
+        name: itemDef.fullName,
+        roomId: targetRoom.id,
+        posX: globalX,
+        posY: globalY,
+        brand: '',
+        wattage: itemDef.defaultWattage,
+        stars: 3,
+        hoursPerDay: itemDef.defaultHours,
+        alwaysOn: itemDef.alwaysOn || false,
+        isOn: false,
+      };
+      setItems((prev) => [...prev, pendingApp]);
+      setEditingAppliance(pendingApp);
+      setApplianceSheetVisible(true);
+    }
+  };
+
+  // Pointer drag events for Web & Touch
+  const handleItemPointerDown = (itemDef: SpriteItemDef, clientX: number, clientY: number) => {
+    measureFloorPlan();
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      setDragGhost({ item: itemDef, x: clientX, y: clientY });
+
+      const onPointerMove = (e: PointerEvent) => {
+        setDragGhost({ item: itemDef, x: e.clientX, y: e.clientY });
+
+        if (floorRectRef.current) {
+          const { left, top, width, height } = floorRectRef.current;
+          const rx = (e.clientX - left) / width;
+          const ry = (e.clientY - top) / height;
+          const match = getRoomAtNormalizedPos(rx, ry);
+          setHoveredRoomId(match ? match.room.id : null);
+        }
+      };
+
+      const onPointerUp = (e: PointerEvent) => {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        setDragGhost(null);
+        setHoveredRoomId(null);
+
+        if (floorRectRef.current) {
+          const { left, top, width, height } = floorRectRef.current;
+          const rx = (e.clientX - left) / width;
+          const ry = (e.clientY - top) / height;
+          const match = getRoomAtNormalizedPos(rx, ry);
+
+          if (match) {
+            handleDropItemAtRoom(itemDef, match.room, match.localX, match.localY);
+          } else {
+            showToast('Drop inside a room to place item', 'info');
+          }
+        }
+      };
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    }
+  };
+
+  // ── Placed Items Interactions ─────────────────────────────────────────────
+  const handleSelectItem = (item: StoredPlacedItem) => {
+    setSelectedItemId(item.id);
+
+    if (isEditMode) {
+      if (item.category === 'Appliances') {
+        setEditingAppliance(item);
+        setApplianceSheetVisible(true);
+      } else {
+        setEditingFurniture(item);
+        setFurnitureSheetVisible(true);
+      }
+    }
+  };
+
+  const handleDeleteItem = (itemId: string) => {
+    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    setSelectedItemId(null);
+    showToast('Item removed', 'info');
+  };
+
+  const handleMoveItemEnd = (itemId: string, newNormX: number, newNormY: number) => {
+    const match = getRoomAtNormalizedPos(newNormX, newNormY);
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId
+          ? {
+              ...i,
+              posX: newNormX,
+              posY: newNormY,
+              roomId: match ? match.room.id : i.roomId,
             }
-          >
-            {fastForwardState === 'closed' ? (
-              <FastForward size={20} color={colors.paper} strokeWidth={1.5} />
-            ) : fastForwardState === 'open' ? (
-              <Play size={20} color={colors.paper} strokeWidth={1.5} fill={colors.paper} />
-            ) : (
-              <Square size={18} color={colors.paper} strokeWidth={1.5} fill={colors.paper} />
-            )}
-          </Pressable>
-        </View>
-      </View>
+          : i
+      )
+    );
+  };
 
-      {/* ── Fast-forward panel (SIM-04) ───────────────────────────────── */}
-      <FastForwardPanel
-        visible={fastForwardState !== 'closed'}
-        period={fastForwardPeriod}
-        onPeriodChange={setFastForwardPeriod}
-        monthlySavingRm={monthlySavingRm}
-        isPlaying={fastForwardState === 'playing'}
-        onPlaybackComplete={() => {
-          setFastForwardState('open');
-        }}
-        onPlaybackStop={() => {
-          setFastForwardState('open');
-          setSimulatedDate(null);
-        }}
-        onSimulatedDateChange={setSimulatedDate}
-        onClose={() => {
-          setFastForwardState('closed');
-          setSimulatedDate(null);
-        }}
-      />
+  const handleSaveAppliance = (savedApp: StoredPlacedItem) => {
+    setItems((prev) =>
+      prev.map((i) => (i.id === editingAppliance?.id ? savedApp : i))
+    );
+    setApplianceSheetVisible(false);
+    setEditingAppliance(null);
+    showToast(`Saved ${savedApp.name}`, 'success');
+  };
 
-      {/* ── Edit row ──────────────────────────────────────────────────── */}
-      <View style={styles.editRow}>
-        <Pressable
-          style={styles.editButton}
-          onPress={() => {
-            setIsEditMode((prev) => !prev);
-            setSelectedApplianceId(null);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={isEditMode ? 'Done editing floor plan' : 'Edit floor plan'}
+  const handleCancelApplianceSheet = () => {
+    // If cancelling a just-dropped pending appliance, remove it
+    if (editingAppliance && editingAppliance.id.startsWith('pending_')) {
+      setItems((prev) => prev.filter((i) => i.id !== editingAppliance.id));
+    }
+    setApplianceSheetVisible(false);
+    setEditingAppliance(null);
+  };
+
+  const handleSaveFurniture = (savedFurn: StoredPlacedItem) => {
+    setItems((prev) =>
+      prev.map((i) => (i.id === editingFurniture?.id ? savedFurn : i))
+    );
+    setFurnitureSheetVisible(false);
+    setEditingFurniture(null);
+    showToast(`Saved ${savedFurn.name}`, 'success');
+  };
+
+  // Convert stored items to Appliance type for BillModal
+  const appliancesForBillModal: Appliance[] = useMemo(() => {
+    return items
+      .filter((i) => i.category === 'Appliances')
+      .map((i) => ({
+        id: i.id,
+        name: i.name,
+        type: i.type as any,
+        brand: i.brand || 'Standard',
+        wattage: i.wattage || 100,
+        stars: i.stars || 3,
+        roomId: i.roomId,
+        posX: i.posX,
+        posY: i.posY,
+        alwaysOn: i.alwaysOn || false,
+        color: '#D4A373',
+        spriteKey: i.spriteKey,
+        isOn: i.isOn,
+      }));
+  }, [items]);
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* Mobile Shell Container (~380px wide) */}
+      <View style={styles.mobileShell}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 72 },
+          ]}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.editButtonText}>{isEditMode ? 'Done' : 'Edit'}</Text>
-        </Pressable>
-      </View>
+          {/* ── Top Section: Estimated Bill Card & Round Buttons ───────────── */}
+          <BillCard
+            monthlyBillRm={monthlyBillRm}
+            usageBadge={usageBadge}
+            simulatedTimeStr={simulatedTimeStr}
+            simSpeed={simSpeed}
+            onCycleSpeed={handleCycleSpeed}
+            onPressBillCard={() => setBillModalVisible(true)}
+            onPressBell={() => router.push('/notifications')}
+            onPressCalendar={() => showToast(`Active: ${currentRoutine.name} (${currentRoutine.startTime}-${currentRoutine.endTime})`, 'info')}
+          />
 
-      {/* ── Floor plan card ───────────────────────────────────────────── */}
-      <View style={styles.floorPlanCard}>
-        <View style={styles.floorPlanInner} onLayout={onFloorPlanLayout}>
-          {canvasSize.width > 0 && canvasSize.height > 0 && (
-            <FloorPlanCanvas
-              rooms={MOCK_ROOMS}
-              appliances={currentAppliances}
-              canvasWidth={canvasSize.width}
-              canvasHeight={canvasSize.height}
-              viewOnly={false}
-              isEditMode={isEditMode}
-              selectedApplianceId={selectedApplianceId}
-              onSelectAppliance={handleSelectApplianceOnPlan}
-              onRoomPress={handleRoomPress}
-              simulatedDate={simulatedDate}
-              avatarState={avatarState}
-              backdropColor={backdropColor}
+          {/* ── Avatar Variant Switcher & Status Bar ──────────────────────── */}
+          <View style={styles.statusBarRow}>
+            <Pressable
+              onPress={() =>
+                setAvatarVariant((v) =>
+                  v === 'avatar_girl' ? 'avatar_boy' : 'avatar_girl'
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Switch Resident Character"
+              style={styles.avatarTogglePill}
+            >
+              <Text style={styles.avatarToggleText}>
+                Resident: {avatarVariant === 'avatar_girl' ? 'Girl' : 'Boy'}
+              </Text>
+            </Pressable>
+
+            {/* Edit / Done Button at top-right of Floor Plan */}
+            <Pressable
+              style={styles.editButton}
+              onPress={() => {
+                setIsEditMode((prev) => !prev);
+                setSelectedItemId(null);
+                setSelectedPendingItem(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={isEditMode ? 'Done editing floor plan' : 'Edit floor plan'}
+            >
+              <Text style={styles.editButtonText}>
+                {isEditMode ? 'Done' : 'Edit'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* ── Middle Section: Floor Plan Card ────────────────────────────── */}
+          <FloorPlan
+            rooms={rooms}
+            items={items}
+            avatarState={avatarState}
+            avatarVariant={avatarVariant}
+            activeApplianceIds={activeApplianceIds}
+            activeRoomLightIds={activeRoomLightIds}
+            isEditMode={isEditMode}
+            selectedItemId={selectedItemId}
+            dragGhost={dragGhost}
+            hoveredRoomId={hoveredRoomId}
+            onRoomPress={handleRoomPress}
+            onSelectItem={handleSelectItem}
+            onDeleteItem={handleDeleteItem}
+            onMoveItemEnd={handleMoveItemEnd}
+            floorPlanRef={floorPlanRef}
+            onLayout={onFloorLayout}
+          />
+        </ScrollView>
+
+        {/* ── Edit Mode Bottom Sheet ───────────────────────────────────────── */}
+        {isEditMode && (
+          <View style={styles.editSheetDock}>
+            <EditSheet
+              visible={isEditMode}
+              onItemPointerDown={handleItemPointerDown}
+              onItemTap={(item) => {
+                setSelectedPendingItem(item);
+                showToast(`Tap a room to place ${item.label}`, 'info');
+              }}
+              selectedPendingKey={selectedPendingItem?.key}
             />
-          )}
-        </View>
-      </View>
-
-      {/* ── Docked Bottom Area: Edit Tray or Suggestion Area ───────────── */}
-      <View style={styles.dockedBottomArea}>
-        {isEditMode ? (
-          <EditTray
-            visible={isEditMode}
-            onSelectApplianceType={handleSelectApplianceType}
-          />
-        ) : (
-          <SuggestionArea
-            mode={suggestionMode}
-            suggestions={swapSuggestions}
-            activeSwapIds={new Set(activeSwaps.keys())}
-            onToggleSwap={handleToggleSwap}
-            onOpenMyDay={handleOpenMyDay}
-            onFirstTimeStart={() => setQuickSetupVisible(true)}
-            onFirstTimeDismiss={() => setFirstTimeDismissed(true)}
-            onSolarDismiss={() => setSolarDismissed(true)}
-            onSolarSeeHow={() => showToast('Solar panel calculator coming soon', 'info')}
-          />
+          </View>
         )}
+
+        {/* ── Appliance Details Bottom Sheet ───────────────────────────────── */}
+        <ApplianceDetailsSheet
+          visible={applianceSheetVisible}
+          item={editingAppliance}
+          rooms={rooms}
+          onSave={handleSaveAppliance}
+          onCancel={handleCancelApplianceSheet}
+          onDelete={handleDeleteItem}
+        />
+
+        {/* ── Furniture Details Bottom Sheet ───────────────────────────────── */}
+        <FurnitureDetailsSheet
+          visible={furnitureSheetVisible}
+          item={editingFurniture}
+          rooms={rooms}
+          onSave={handleSaveFurniture}
+          onCancel={() => {
+            setFurnitureSheetVisible(false);
+            setEditingFurniture(null);
+          }}
+          onDelete={handleDeleteItem}
+        />
+
+        {/* ── Room Naming Modal ────────────────────────────────────────────── */}
+        <RoomNamingModal
+          visible={namingModalVisible}
+          room={namingRoom}
+          onSave={handleSaveRoomName}
+          onClose={() => {
+            setNamingModalVisible(false);
+            setNamingRoom(null);
+          }}
+        />
+
+        {/* ── Bill Breakdown Modal ─────────────────────────────────────────── */}
+        <BillModal
+          visible={billModalVisible}
+          onClose={() => setBillModalVisible(false)}
+          appliances={appliancesForBillModal}
+          totalKwh={totalKwh}
+          rooms={rooms as any}
+          onAddAppliances={() => {
+            setBillModalVisible(false);
+            setIsEditMode(true);
+          }}
+        />
       </View>
-
-      {/* ── Estimated Bill Modal ───────────────────────────────────────── */}
-      <BillModal
-        visible={billModalVisible}
-        onClose={() => setBillModalVisible(false)}
-        appliances={currentAppliances}
-        totalKwh={totalKwh}
-        onAddAppliances={() => {
-          setBillModalVisible(false);
-          setIsEditMode(true);
-        }}
-      />
-
-      {/* ── Appliance Details BottomSheet (SIM-05) ─────────────────────── */}
-      <ApplianceDetailsSheet
-        visible={detailsSheetVisible}
-        onClose={() => setDetailsSheetVisible(false)}
-        applianceType={sheetApplianceType}
-        defaultWattage={sheetDefaultWattage}
-        initialAppliance={editingAppliance}
-        onSave={handleSaveAppliance}
-      />
-
-      {/* ── My Day Sheets (SIM-07) ─────────────────────────────────────── */}
-      <QuickSetupSheet
-        visible={quickSetupVisible}
-        onClose={() => setQuickSetupVisible(false)}
-        onComplete={() => {
-          setMyDayAnswered(true);
-          setFirstTimeDismissed(true);
-          showToast('Quick setup saved — Bill updated!', 'success');
-        }}
-      />
-
-      <MyDayTimelineSheet
-        visible={timelineVisible}
-        onClose={() => setTimelineVisible(false)}
-        blocks={routineBlocks}
-        onAddBlockPress={() => setAddBlockVisible(true)}
-        onEditBlockPress={(block) => {
-          setEditingBlock(block);
-          setEditBlockVisible(true);
-        }}
-        onSaveSchedule={() => {
-          setMyDayAnswered(true);
-          showToast('Routine schedule saved', 'success');
-        }}
-      />
-
-      <AddBlockSheet
-        visible={addBlockVisible}
-        onClose={() => setAddBlockVisible(false)}
-        existingBlocks={routineBlocks}
-        onSaveBlock={handleAddBlock}
-      />
-
-      <EditBlockSheet
-        visible={editBlockVisible}
-        onClose={() => {
-          setEditBlockVisible(false);
-          setEditingBlock(null);
-        }}
-        block={editingBlock}
-        onUpdateBlock={handleUpdateBlock}
-        onRemoveBlock={handleRemoveBlock}
-      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#faf6f1', // cream
-    paddingHorizontal: 20,
+    backgroundColor: '#EDF1EB', // Soft sage/beige background from screenshot
   },
-
-  // Top Area
-  topArea: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    marginBottom: 6,
-  },
-  billCard: {
-    width: '62%',
-    backgroundColor: '#ffffff',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 16,
-    ...shadows.sm,
-  },
-  billLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  billLabel: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 13,
-    color: '#57534e',
+  mobileShell: {
     flex: 1,
-  },
-  highUsageBadge: {
-    backgroundColor: '#fffbeb',
-    borderRadius: 9999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  highUsageBadgeText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11,
-    color: '#92600e',
-  },
-  billHeroRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    marginBottom: 2,
-  },
-  billHero: {
-    fontFamily: 'Lora_600SemiBold',
-    fontSize: 28,
-    color: '#292524',
-    lineHeight: 34,
-  },
-  billPerMo: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 14,
-    color: '#57534e',
-  },
-  maxBillNote: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 11,
-    color: '#92600e', // warning color
-    marginBottom: 4,
-  },
-  swapSavingNote: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11,
-    color: '#566549', // sage-600
-    marginBottom: 4,
-  },
-  billDivider: {
-    height: 1,
-    backgroundColor: '#e7e5e4',
-    marginVertical: 8,
-  },
-  billTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  billTimeText: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12,
-    color: '#a8a29e',
-  },
-
-  // Button stack
-  buttonStack: {
-    gap: 12,
-    alignItems: 'center',
-  },
-  bellPill: {
-    width: 48,
-    height: 48,
-    borderRadius: 9999,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
     position: 'relative',
-    ...shadows.sm,
   },
-  bellUnreadDot: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#d4a373', // tan-400
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
-  roundButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 9999,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.sm,
-  },
-  fastForwardButton: {
-    backgroundColor: '#292524', // stone-800
-    borderColor: '#292524',
-  },
-
-  // Edit row
-  editRow: {
+  statusBarRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: 2,
+  },
+  avatarTogglePill: {
+    backgroundColor: '#FAF7F2',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  avatarToggleText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#566549',
   },
   editButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 9999,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   editButtonText: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 16,
-    color: '#566549', // sage-600
+    color: '#3D5236', // Deep sage green from screenshot
   },
-
-  // Floor plan card
-  floorPlanCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 12,
-    overflow: 'hidden',
-    marginBottom: 8,
-    ...shadows.sm,
-  },
-  floorPlanInner: {
-    flex: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-
-  // Docked bottom area
-  dockedBottomArea: {
-    marginBottom: 8,
+  editSheetDock: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 90,
   },
 });

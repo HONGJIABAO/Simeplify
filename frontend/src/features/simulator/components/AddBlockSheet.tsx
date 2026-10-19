@@ -35,10 +35,12 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
+import { Sprite } from './Sprite';
 import { RoutineBlock, validateBlock } from '../logic/myDayLogic';
-import { MOCK_APPLIANCES } from '@/lib/mockData';
+import { MOCK_APPLIANCES, MOCK_ROOMS, Appliance, Room } from '@/lib/mockData';
 
 interface AddBlockSheetProps {
+  rooms?: Room[]; appliances?: Appliance[];
   visible: boolean;
   onClose: () => void;
   existingBlocks: RoutineBlock[];
@@ -48,22 +50,17 @@ interface AddBlockSheetProps {
 }
 
 const QUICK_ROUTINES = [
+  { name: 'Sleep', icon: <BookOpen size={16} color="#57534e" />, roomId: 'bedroom' },
+  { name: 'Away', icon: <Briefcase size={16} color="#57534e" />, roomId: 'living' },
   { name: 'Watching TV', icon: <Tv size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'living' },
   { name: 'Working', icon: <Briefcase size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'living' },
   { name: 'Studying', icon: <BookOpen size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'bedroom' },
   { name: 'Cooking', icon: <Utensils size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'kitchen' },
 ];
 
-const ROOM_OPTIONS = [
-  { id: 'living', label: 'Living room' },
-  { id: 'kitchen', label: 'Kitchen' },
-  { id: 'bedroom', label: 'Bedroom 1' },
-  { id: 'bedroom2', label: 'Bedroom 2' },
-  { id: 'bathroom', label: 'Bathroom' },
-];
-
 export function AddBlockSheet({
   visible,
+  rooms = MOCK_ROOMS, appliances = MOCK_APPLIANCES,
   onClose,
   existingBlocks,
   onSaveBlock,
@@ -75,9 +72,7 @@ export function AddBlockSheet({
   const [startTime, setStartTime] = useState(initialSimulateError ? '19:15' : '20:00');
   const [endTime, setEndTime] = useState(initialSimulateError ? '20:30' : '23:00');
   const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({
-    ac1: false,
-    fan1: false,
-    lights1: true,
+
   });
 
   const validation = validateBlock(
@@ -86,8 +81,9 @@ export function AddBlockSheet({
       startTime,
       endTime,
       roomId: selectedRoom,
-      applianceIds: Object.keys(applianceSwitches).filter((id) => applianceSwitches[id]),
-      iconType: 'custom',
+      applianceIds: appliances.filter(a => a.roomId === selectedRoom && applianceSwitches[a.id]).map(a => a.id),
+      iconType: name.toLowerCase().includes('sleep') ? 'sleep' : name.toLowerCase() === 'away' ? 'away' : 'custom',
+      isAway: name.toLowerCase() === 'away',
     },
     existingBlocks
   );
@@ -104,8 +100,9 @@ export function AddBlockSheet({
       startTime,
       endTime,
       roomId: selectedRoom,
-      applianceIds: Object.keys(applianceSwitches).filter((id) => applianceSwitches[id]),
-      iconType: 'custom',
+      applianceIds: appliances.filter(a => a.roomId === selectedRoom && applianceSwitches[a.id]).map(a => a.id),
+      iconType: name.toLowerCase().includes('sleep') ? 'sleep' : name.toLowerCase() === 'away' ? 'away' : 'custom',
+      isAway: name.toLowerCase() === 'away',
       description: `${selectedRoom} routine`,
     });
     onClose();
@@ -123,30 +120,6 @@ export function AddBlockSheet({
       height="88%"
     >
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Error simulation toggle for testing */}
-        <View style={styles.errorToggleRow}>
-          <Text style={styles.demoLabel}>Demo mode:</Text>
-          <Pressable
-            style={[styles.demoTogglePill, simulateError && styles.demoTogglePillActive]}
-            onPress={() => {
-              setSimulateError((v) => !v);
-              if (!simulateError) {
-                setName('');
-                setStartTime('19:15');
-                setEndTime('20:30');
-              } else {
-                setName('Watching TV');
-                setStartTime('20:00');
-                setEndTime('23:00');
-              }
-            }}
-          >
-            <Text style={styles.demoToggleText}>
-              {simulateError ? 'Showing Error State' : 'Showing Valid State'}
-            </Text>
-          </Pressable>
-        </View>
-
         {/* Top Error Summary Banner (simulator_add_routine_error.png) */}
         {isFormInvalid && (
           <View style={styles.errorSummaryBanner}>
@@ -208,7 +181,7 @@ export function AddBlockSheet({
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Where?</Text>
           <View style={styles.roomGrid}>
-            {ROOM_OPTIONS.map((rm) => {
+            {rooms.map((r, i) => ({ id: r.id, label: r.name || `Room ${i + 1}` })).map((rm) => {
               const isSelected = selectedRoom === rm.id;
               return (
                 <Pressable
@@ -235,11 +208,11 @@ export function AddBlockSheet({
           <View style={styles.timeCardsRow}>
             <View style={[styles.timeCard, hasTimeError && styles.timeCardError]}>
               <Text style={styles.timeCardLabel}>STARTS</Text>
-              <Text style={styles.timeCardVal}>{startTime}</Text>
+              <Input accessibilityLabel="Start time HH:MM" value={startTime} onChangeText={setStartTime} placeholder="HH:MM" maxLength={5} />
             </View>
             <View style={[styles.timeCard, hasTimeError && styles.timeCardError]}>
               <Text style={styles.timeCardLabel}>ENDS</Text>
-              <Text style={styles.timeCardVal}>{endTime}</Text>
+              <Input accessibilityLabel="End time HH:MM" value={endTime} onChangeText={setEndTime} placeholder="HH:MM" maxLength={5} />
             </View>
           </View>
 
@@ -248,7 +221,7 @@ export function AddBlockSheet({
             <View style={styles.overlapBanner}>
               <AlertTriangle size={16} color="#92600e" strokeWidth={1.5} />
               <Text style={styles.overlapBannerText}>
-                Schedule Overlap — This overlaps with Dinner (19:00 – 19:30).
+                {validation.timeError || validation.overlapError}
               </Text>
             </View>
           )}
@@ -268,9 +241,9 @@ export function AddBlockSheet({
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Appliances on during this</Text>
           <View style={styles.applianceCardList}>
-            {MOCK_APPLIANCES.map((app) => (
+            {appliances.filter(a => a.roomId === selectedRoom).map((app) => (
               <View key={app.id} style={styles.applianceSwitchRow}>
-                <View style={styles.applianceInfo}>
+                <Sprite type={app.spriteKey ?? app.type} size={36} /><View style={styles.applianceInfo}>
                   <Text style={styles.applianceName}>{app.name}</Text>
                   <Text style={styles.applianceWatts}>
                     {app.wattage} W • {app.roomId}
