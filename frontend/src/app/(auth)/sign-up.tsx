@@ -248,7 +248,7 @@ export default function SignUpScreen() {
               >
                 <View style={styles.genderImageContainer}>
                   <Image
-                    source={require('../../../assets/sprites/avatar_boy_face.png')}
+                    source={require('../../../assets/sprites/avatar/avatar_boy_face.png')}
                     style={styles.genderThumbnail}
                     resizeMode="cover"
                   />
@@ -280,7 +280,7 @@ export default function SignUpScreen() {
               >
                 <View style={styles.genderImageContainer}>
                   <Image
-                    source={require('../../../assets/sprites/avatar_girl_face.png')}
+                    source={require('../../../assets/sprites/avatar/avatar_girl_face.png')}
                     style={styles.genderThumbnail}
                     resizeMode="cover"
                   />

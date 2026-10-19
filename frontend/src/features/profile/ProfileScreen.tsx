@@ -24,8 +24,8 @@ import { MapPin, LogOut } from 'lucide-react-native';
 import { Header } from '@/components/Header';
 import { useAuthSession, UserGender } from '@/lib/authSession';
 
-const BOY_AVATAR = require('../../../assets/sprites/avatar_boy.png');
-const GIRL_AVATAR = require('../../../assets/sprites/avatar_girl.png');
+const BOY_AVATAR = require('../../../assets/sprites/avatar/avatar_boy.png');
+const GIRL_AVATAR = require('../../../assets/sprites/avatar/avatar_girl.png');
 
 export interface ProfileScreenProps {
   /** Optional gender override for Dev Gallery previews */
