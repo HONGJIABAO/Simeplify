@@ -1,14 +1,10 @@
 import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import ProfileScreen from '@/features/profile/ProfileScreen';
+import { UserGender } from '@/lib/authSession';
 
 export default function ProfileTab() {
-  const { sheet } = useLocalSearchParams<{ sheet?: string }>();
+  const { gender } = useLocalSearchParams<{ gender?: UserGender }>();
 
-  return (
-    <ProfileScreen
-      initialSheetStatus={sheet === 'out' ? 'out' : 'at-home'}
-      autoOpenSheet={sheet === 'at-home' || sheet === 'out'}
-    />
-  );
+  return <ProfileScreen initialGender={gender} />;
 }

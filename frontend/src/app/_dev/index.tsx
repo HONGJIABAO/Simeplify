@@ -5,8 +5,12 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 
 const SCREENS = [
-  { id: 'S1', title: 'Login', route: '/(auth)/login', status: 'Ready' },
-  { id: 'S2', title: 'Sign Up', route: '/(auth)/sign-up', status: 'coming soon' },
+  { id: 'S1', title: 'Login: Default', route: '/(auth)/login', status: 'Ready' },
+  { id: 'S1a', title: 'Login: Wrong Password Error', route: '/(auth)/login?state=error', status: 'Ready' },
+  { id: 'S1b', title: 'Login: Loading Spinner', route: '/(auth)/login?state=loading', status: 'Ready' },
+  { id: 'S2', title: 'Sign Up: Empty (Disabled)', route: '/(auth)/sign-up', status: 'Ready' },
+  { id: 'S2a', title: 'Sign Up: Filled State', route: '/(auth)/sign-up?state=filled', status: 'Ready' },
+  { id: 'S2b', title: 'Sign Up: Field Errors', route: '/(auth)/sign-up?state=error', status: 'Ready' },
   { id: 'S3.1', title: 'Onboarding: Schedule', route: '/(onboarding)/schedule', status: 'coming soon' },
   { id: 'S3.2', title: 'Onboarding: Layout', route: '/(onboarding)/layout', status: 'coming soon' },
   { id: 'S3.3', title: 'Onboarding: Appliances', route: '/(onboarding)/appliances', status: 'coming soon' },
@@ -27,9 +31,9 @@ const SCREENS = [
   { id: 'S5.3h', title: 'Bin: Result - Loading Spinner', route: '/bin/result?state=loading', status: 'Ready' },
   { id: 'S6', title: 'Community', route: '/(tabs)/community', status: 'Tab placeholder' },
   { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Tab placeholder' },
-  { id: 'S8', title: 'Profile: Home', route: '/(tabs)/profile', status: 'Ready' },
-  { id: 'S8a', title: 'Profile: Resident Sheet (At home)', route: '/(tabs)/profile?sheet=at-home', status: 'Ready' },
-  { id: 'S8b', title: 'Profile: Resident Sheet (Out)', route: '/(tabs)/profile?sheet=out', status: 'Ready' },
+  { id: 'S8', title: 'Profile: Current Session', route: '/(tabs)/profile', status: 'Ready' },
+  { id: 'S8a', title: 'Profile: Boy Avatar Preview', route: '/(tabs)/profile?gender=boy', status: 'Ready' },
+  { id: 'S8b', title: 'Profile: Girl Avatar Preview', route: '/(tabs)/profile?gender=girl', status: 'Ready' },
   { id: 'S9', title: 'Notifications', route: '/notifications', status: 'Placeholder' },
 ];
 
