@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, LogBox } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -19,6 +19,14 @@ import {
 } from '@expo-google-fonts/source-sans-3';
 import { ToastProvider } from '@/components/Toast';
 import '../global.css';
+
+LogBox.ignoreLogs([
+  'Unknown event handler property',
+  'onResponder',
+]);
+if (Platform.OS === 'web') {
+  LogBox.ignoreAllLogs();
+}
 
 SplashScreen.preventAutoHideAsync();
 

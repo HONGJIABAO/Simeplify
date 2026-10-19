@@ -13,7 +13,7 @@ const SCREENS = [
   { id: 'S4', title: 'Simulator', route: '/(tabs)/simulator', status: 'Stage 8 ✓' },
   { id: 'S4 Gallery', title: 'Simulator: All States', route: '/_dev/simulator', status: 'Stages 6, 7 & 8 ✓' },
   { id: 'S5', title: 'Bin', route: '/(tabs)/bin', status: 'Tab placeholder' },
-  { id: 'S6', title: 'Community', route: '/(tabs)/community', status: 'Tab placeholder' },
+  { id: 'S6', title: 'Community', route: '/(tabs)/community', status: '100% Interactive ✓' },
   { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Tab placeholder' },
   { id: 'S8', title: 'Profile', route: '/(tabs)/profile', status: 'Tab placeholder' },
   { id: 'S9', title: 'Notifications', route: '/notifications', status: 'Placeholder' },
