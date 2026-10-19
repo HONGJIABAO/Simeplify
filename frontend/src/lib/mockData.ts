@@ -56,6 +56,8 @@ export type ApplianceType =
   | 'lights';
 
 export type Appliance = {
+  spriteKey?: string;
+  isOn?: boolean;
   id: string;
   name: string;
   type: ApplianceType;

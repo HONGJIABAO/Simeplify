@@ -32,9 +32,12 @@ import {
 } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
+import { Room } from '@/lib/mockData';
 import { RoutineBlock } from '../logic/myDayLogic';
 
 interface MyDayTimelineSheetProps {
+  rooms?: Room[];
+  onPreviewBlock?: (block: RoutineBlock) => void;
   visible: boolean;
   onClose: () => void;
   blocks: RoutineBlock[];
@@ -58,6 +61,7 @@ function getBlockIcon(iconType: RoutineBlock['iconType']) {
 
 export function MyDayTimelineSheet({
   visible,
+  rooms = [], onPreviewBlock,
   onClose,
   blocks,
   onAddBlockPress,
@@ -95,6 +99,7 @@ export function MyDayTimelineSheet({
           })}
         </View>
 
+        {onPreviewBlock && <View style={{ gap: 8 }}><Text style={{ color: '#57534e' }}>Preview your routine at home</Text><ScrollView horizontal contentContainerStyle={{ gap: 8 }}>{blocks.map(b => <Pressable key={b.id} accessibilityRole="button" onPress={() => onPreviewBlock(b)} style={{ padding: 12, borderRadius: 16, backgroundColor: '#e0e6d9' }}><Text>{b.startTime} · {b.name}</Text></Pressable>)}</ScrollView></View>}
         {/* 24-Hour Timeline Bar */}
         <View style={styles.timelineContainer}>
           <View style={styles.timelineBar}>
@@ -144,7 +149,7 @@ export function MyDayTimelineSheet({
                     )}
                     <View style={styles.roomTagRow}>
                       <View style={styles.roomTag}>
-                        <Text style={styles.roomTagText}>{block.roomId}</Text>
+                        <Text style={styles.roomTagText}>{rooms.find(r => r.id === block.roomId)?.name || 'Unnamed room'}</Text>
                       </View>
                       {!isAway && (
                         <Text style={styles.activeAppCount}>

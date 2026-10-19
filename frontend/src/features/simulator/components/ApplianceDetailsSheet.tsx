@@ -25,10 +25,16 @@ import { Star } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { Stepper } from '@/components/Stepper';
-import { Appliance, ApplianceType, MOCK_ROOMS } from '@/lib/mockData';
+import { Sprite } from './Sprite';
+import { Switch } from '@/components/Switch';
+import { Placement } from '../logic/scene';
+import { Appliance, ApplianceType, MOCK_ROOMS, Room } from '@/lib/mockData';
 
 interface ApplianceDetailsSheetProps {
+  rooms?: Room[];
+  placement?: Placement | null;
+  spriteKey?: string;
+  onDelete?: () => void;
   visible: boolean;
   onClose: () => void;
   applianceType: ApplianceType;
@@ -50,9 +56,11 @@ function ApplianceDetailsForm({
   applianceType,
   defaultWattage,
   initialAppliance,
+  rooms = MOCK_ROOMS, placement, spriteKey, onDelete,
   onSave,
   onClose,
 }: {
+  rooms?: Room[]; placement?: Placement | null; spriteKey?: string; onDelete?: () => void;
   applianceType: ApplianceType;
   defaultWattage: number;
   initialAppliance?: Appliance | null;
@@ -64,13 +72,16 @@ function ApplianceDetailsForm({
     initialAppliance ? String(initialAppliance.wattage) : String(defaultWattage)
   );
   const [stars, setStars] = useState(initialAppliance?.stars ?? 3);
-  const [quantity, setQuantity] = useState(1);
+  const [alwaysOn, setAlwaysOn] = useState(initialAppliance?.alwaysOn ?? applianceType === 'refrigerator');
+  const [isOn, setIsOn] = useState(initialAppliance?.isOn ?? false);
+  const [error, setError] = useState('');
   const [roomId, setRoomId] = useState(
-    initialAppliance?.roomId ?? MOCK_ROOMS[0]?.id ?? 'living'
+    initialAppliance?.roomId ?? placement?.roomId ?? rooms[0]?.id ?? 'living'
   );
 
   const handleSave = () => {
-    const numWattage = Number(wattage) || defaultWattage;
+    const numWattage = Number(wattage);
+    if (!Number.isFinite(numWattage) || numWattage <= 0 || numWattage > 100000) { setError('Enter a wattage greater than 0 and at most 100,000 W.'); return; }
     const typeName = TYPE_NAMES[applianceType];
     const name = brand ? `${brand} ${typeName}` : typeName;
 
@@ -81,9 +92,9 @@ function ApplianceDetailsForm({
       wattage: numWattage,
       stars,
       roomId,
-      posX: 0.5,
-      posY: 0.5,
-      alwaysOn: applianceType === 'refrigerator',
+      posX: roomId === (initialAppliance?.roomId ?? placement?.roomId) ? (initialAppliance?.posX ?? placement?.posX ?? .5) : .5,
+      posY: roomId === (initialAppliance?.roomId ?? placement?.roomId) ? (initialAppliance?.posY ?? placement?.posY ?? .5) : .5,
+      alwaysOn, isOn, spriteKey: initialAppliance?.spriteKey ?? spriteKey,
       color: '#d4a373', // tan-400
     });
     onClose();
@@ -94,6 +105,8 @@ function ApplianceDetailsForm({
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
+      <View style={{ alignItems: 'center' }}><Sprite type={initialAppliance?.spriteKey ?? spriteKey ?? applianceType} size={72} /></View>
+      {!!error && <Text accessibilityRole="alert" style={{ color: '#a8442f' }}>{error}</Text>}
       {/* Brand input */}
       <View style={styles.section}>
         <Text style={styles.label}>Brand</Text>
@@ -152,23 +165,14 @@ function ApplianceDetailsForm({
         </View>
       </View>
 
-      {/* Quantity Stepper */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Quantity</Text>
-        <Stepper
-          value={quantity}
-          min={1}
-          max={10}
-          step={1}
-          onChange={setQuantity}
-        />
-      </View>
+      <View style={styles.starsHeader}><Text style={styles.label}>Always on (including when away)</Text><Switch value={alwaysOn} onValueChange={setAlwaysOn} /></View>
+      <View style={styles.starsHeader}><Text style={styles.label}>Keep switched on</Text><Switch value={isOn} onValueChange={setIsOn} /></View>
 
       {/* Room selection */}
       <View style={styles.section}>
         <Text style={styles.label}>Room location</Text>
         <View style={styles.roomsRow}>
-          {MOCK_ROOMS.map((room) => {
+          {rooms.map((room) => {
             const isSelected = room.id === roomId;
             return (
               <Pressable
@@ -179,7 +183,7 @@ function ApplianceDetailsForm({
                   isSelected && styles.roomPillSelected,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Select ${room.name}`}
+                accessibilityLabel={`Select ${room.name || 'Unnamed room'}`}
               >
                 <Text
                   style={[
@@ -187,7 +191,7 @@ function ApplianceDetailsForm({
                     isSelected && styles.roomPillTextSelected,
                   ]}
                 >
-                  {room.name}
+                  {room.name || 'Unnamed room'}
                 </Text>
               </Pressable>
             );
@@ -200,6 +204,7 @@ function ApplianceDetailsForm({
         <Button variant="primary" onPress={handleSave} style={styles.saveBtn}>
           Save appliance
         </Button>
+        {onDelete && <Button variant="secondary" onPress={onDelete}>Remove appliance</Button>}
         <Button variant="secondary" onPress={onClose} style={styles.cancelBtn}>
           Cancel
         </Button>
@@ -214,6 +219,7 @@ export function ApplianceDetailsSheet({
   applianceType,
   defaultWattage = 100,
   initialAppliance,
+  rooms = MOCK_ROOMS, placement, spriteKey, onDelete,
   onSave,
 }: ApplianceDetailsSheetProps) {
   const formKey = initialAppliance
@@ -228,7 +234,8 @@ export function ApplianceDetailsSheet({
       height="88%"
     >
       <ApplianceDetailsForm
-        key={formKey}
+        key={`${formKey}-${visible}-${placement?.roomId}-${placement?.posX}-${placement?.posY}`}
+        rooms={rooms} placement={placement} spriteKey={spriteKey} onDelete={onDelete}
         applianceType={applianceType}
         defaultWattage={defaultWattage}
         initialAppliance={initialAppliance}
