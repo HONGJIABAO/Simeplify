@@ -45,7 +45,7 @@ export function FloorPlan({
   floorPlanRef,
   onLayout,
 }: FloorPlanProps) {
-  const [containerSize, setContainerSize] = useState({ width: 330, height: 320 });
+  const [containerSize, setContainerSize] = useState({ width: 330, height: 248 });
 
   const handleLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -139,7 +139,7 @@ export function FloorPlan({
           facingLeft={avatarState.facingLeft}
           isWalking={avatarState.isWalking}
           isSleeping={avatarState.isSleeping}
-          size={44}
+          size={40}
         />
 
         {/* Empty State Pill at bottom */}
@@ -161,11 +161,12 @@ export function FloorPlan({
 const styles = StyleSheet.create({
   cardContainer: {
     width: '100%',
-    height: 375, // strictly fixed height matching screenshot
+    aspectRatio: 4 / 3,
+    maxHeight: 280,
     flexShrink: 0, // MUST NOT SHRINK when edit mode is toggled
     backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 10,
+    borderRadius: 24,
+    padding: 8,
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -192,17 +193,17 @@ const styles = StyleSheet.create({
   },
   emptyPill: {
     position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
+    bottom: 8,
+    left: 10,
+    right: 10,
     backgroundColor: '#FFFFFF',
     borderRadius: 9999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
@@ -212,7 +213,7 @@ const styles = StyleSheet.create({
   },
   emptyPillText: {
     fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12.5,
+    fontSize: 11.5,
     color: '#57534E',
   },
   dragGhost: {

@@ -28,7 +28,7 @@ export function PlacedItem({
   onMoveEnd,
 }: PlacedItemProps) {
   const isFurniture = item.category === 'Furniture';
-  const size = isFurniture ? 56 : 46;
+  const size = isFurniture ? 50 : 42;
 
   // Pixel coordinates on floor plan
   const posX = item.posX * canvasWidth;

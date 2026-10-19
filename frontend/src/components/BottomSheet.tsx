@@ -172,42 +172,44 @@ export function BottomSheet({
           </Animated.View>
         ) : null}
 
-        <GestureDetector gesture={panGesture}>
-          <Animated.View
-            style={[
-              styles.sheet,
-              sheetHeightValue ? { height: sheetHeightValue } : null,
-              height === 'full' ? styles.sheetFull : null,
-              animatedSheetStyle,
-            ]}
-          >
-            {/* Drag Handle */}
-            <View style={styles.handleContainer}>
-              <View style={styles.handle} />
-            </View>
-
-            {/* Header if title exists */}
-            {title ? (
-              <View style={styles.header}>
-                <Text style={styles.titleText}>{title}</Text>
-                <Pressable
-                  onPress={onClose}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                  style={({ pressed }) => [
-                    styles.closeButton,
-                    pressed && styles.closeButtonPressed,
-                  ]}
-                >
-                  <X size={20} color="#292524" strokeWidth={1.5} />
-                </Pressable>
+        <View style={styles.sheetWrapper}>
+          <GestureDetector gesture={panGesture}>
+            <Animated.View
+              style={[
+                styles.sheet,
+                sheetHeightValue ? { height: sheetHeightValue } : null,
+                height === 'full' ? styles.sheetFull : null,
+                animatedSheetStyle,
+              ]}
+            >
+              {/* Drag Handle */}
+              <View style={styles.handleContainer}>
+                <View style={styles.handle} />
               </View>
-            ) : null}
 
-            {/* Content */}
-            <View style={[styles.content, contentStyle]}>{children}</View>
-          </Animated.View>
-        </GestureDetector>
+              {/* Header if title exists */}
+              {title ? (
+                <View style={styles.header}>
+                  <Text style={styles.titleText}>{title}</Text>
+                  <Pressable
+                    onPress={onClose}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    style={({ pressed }) => [
+                      styles.closeButton,
+                      pressed && styles.closeButtonPressed,
+                    ]}
+                  >
+                    <X size={20} color="#292524" strokeWidth={1.5} />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {/* Content */}
+              <View style={[styles.content, contentStyle]}>{children}</View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
       </View>
     </Modal>
   );
@@ -217,6 +219,8 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    width: '100%',
   },
   scrim: {
     position: 'absolute',
@@ -226,8 +230,15 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(41, 37, 36, 0.4)', // stone-800 at 40%
   },
+  sheetWrapper: {
+    width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
+  },
   sheet: {
     width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
     backgroundColor: '#faf6f1', // cream
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
