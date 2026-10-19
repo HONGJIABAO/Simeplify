@@ -115,42 +115,22 @@ export function validateBlock(
   overlapsWith?: RoutineBlock;
   isInsideAway?: boolean;
 } {
-  const start = timeToMinutes(block.startTime);
-  const end = timeToMinutes(block.endTime);
-
-  // End must be after start (unless overnight sleep)
-  if (start >= end && block.iconType !== 'sleep') {
-    return {
-      isValid: false,
-      timeError: 'End time must be later than start time.',
-    };
+  if (![block.startTime, block.endTime].every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t))) {
+    return { isValid: false, timeError: 'Use a valid time in HH:MM format (00:00–23:59).' };
   }
-
-  // Check overlap with away range (note, not a fatal blocking error)
-  const awayStart = timeToMinutes(AWAY_RANGE_WEEKDAY.start);
-  const awayEnd = timeToMinutes(AWAY_RANGE_WEEKDAY.end);
-  const isInsideAway = !block.isAway && start < awayEnd && end > awayStart;
-
-  // Check overlap with other blocks
-  for (const b of existingBlocks) {
-    if (editingBlockId && b.id === editingBlockId) continue;
-    if (b.isAway) continue; // Away blocks are handled via note
-
-    const bStart = timeToMinutes(b.startTime);
-    const bEnd = timeToMinutes(b.endTime);
-
-    const overlaps = Math.max(start, bStart) < Math.min(end, bEnd);
-    if (overlaps) {
-      return {
-        isValid: false,
-        overlapError: `Schedule overlap. This overlaps with ${b.name} (${b.startTime} – ${b.endTime}).`,
-        overlapsWith: b,
-        isInsideAway,
-      };
-    }
+  const start = timeToMinutes(block.startTime), end = timeToMinutes(block.endTime);
+  if (start === end || (start > end && block.iconType !== 'sleep')) {
+    return { isValid: false, timeError: 'End must be after start. Only Sleep can continue overnight.' };
   }
+  const spans = (a: number, b: number): number[][] => a < b ? [[a, b]] : [[a, 1440], [0, b]];
+  const own = spans(start, end);
+  for (const other of existingBlocks) {
+    if (other.id === editingBlockId) continue;
+    const overlaps = own.some(([a, b]) => spans(timeToMinutes(other.startTime), timeToMinutes(other.endTime)).some(([c, d]) => Math.max(a, c) < Math.min(b, d)));
+    if (overlaps) return { isValid: false, overlapError: `This overlaps with ${other.name} (${other.startTime} – ${other.endTime}).`, overlapsWith: other };
+  }
+  return { isValid: true };
 
-  return { isValid: true, isInsideAway };
 }
 
 /**
@@ -162,7 +142,7 @@ export function getActiveBlockAtTime(
 ): RoutineBlock | null {
   const current = timeToMinutes(timeStr);
 
-  for (const b of blocks) {
+  for (const b of [...blocks].sort((a, b) => Number(Boolean(b.isAway)) - Number(Boolean(a.isAway)))) {
     const start = timeToMinutes(b.startTime);
     const end = timeToMinutes(b.endTime);
 

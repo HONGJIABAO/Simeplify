@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+function load(relative) {
+  const filename = path.join(__dirname, '..', 'src', 'features', 'simulator', 'logic', relative + '.ts');
+  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const result = { exports: {} };
+  new Function('module', 'exports', 'require', code)(result, result.exports, require);
+  return result.exports;
+}
+const { placementAt, isApplianceOn, monthlyUsage } = load('scene');
+const { validateBlock, getActiveBlockAtTime } = load('myDayLogic');
+const rooms = [{ id: 'one', gridCol: 0, gridRow: 0, gridColSpan: 2, gridRowSpan: 2 }, { id: 'two', gridCol: 2, gridRow: 0, gridColSpan: 2, gridRowSpan: 2 }];
+assert.equal(placementAt(rooms, -1, 40, 400, 400), null);
+assert.deepEqual(placementAt(rooms, 300, 100, 400, 400), { roomId: 'two', posX: .5, posY: .5 });
+assert.equal(placementAt(rooms, 399, 199, 400, 400).posX, .87);
+const app = { id: 'new-fridge', wattage: 100, alwaysOn: true };
+assert.equal(isApplianceOn(app, [], true), true);
+assert.equal(isApplianceOn({ ...app, alwaysOn: false, isOn: true }, [], true), true);
+assert.equal(isApplianceOn({ ...app, alwaysOn: false }, [app.id], true), false);
+assert.equal(isApplianceOn({ ...app, alwaysOn: false }, [app.id], false), true);
+const sleep = { id: 'sleep', name: 'Sleep', startTime: '23:00', endTime: '07:00', roomId: 'one', applianceIds: ['ac'], iconType: 'sleep' };
+assert.equal(getActiveBlockAtTime('00:30', [sleep]).id, 'sleep');
+assert.equal(getActiveBlockAtTime('07:00', [sleep]), null);
+assert.equal(validateBlock(sleep, []).isValid, true);
+assert.equal(validateBlock({ ...sleep, startTime: '25:00' }, []).isValid, false);
+assert.equal(validateBlock({ ...sleep, startTime: '23:00', endTime: '23:00' }, []).isValid, false);
+assert.equal(validateBlock({ ...sleep, id: 'other', startTime: '06:00', endTime: '08:00' }, [sleep]).isValid, false);
+assert.equal(validateBlock({ ...sleep, startTime: '07:00', endTime: '08:00' }, [sleep]).isValid, true);
+const ac = { id: 'ac', wattage: 1000, alwaysOn: false };
+assert.deepEqual(monthlyUsage([app, ac], [sleep], true), { 'new-fridge': 72, ac: 240 });
+assert.equal(monthlyUsage([ac], [sleep, { ...sleep }], true).ac, 240);
+assert.equal(monthlyUsage([ac], [], true).ac, 0);
+assert.equal(monthlyUsage([], [], false)['ac'], undefined);
+console.log('Simulator checks passed: placement, power states, overnight routines, validation and energy totals.');

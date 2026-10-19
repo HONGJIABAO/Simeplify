@@ -19,15 +19,10 @@ import {
   StyleSheet,
 } from 'react-native';
 import {
-  AirVent,
-  Refrigerator,
-  Lightbulb,
-  ShowerHead,
-  Fan,
   Sun,
   CalendarCheck,
-  Zap,
 } from 'lucide-react-native';
+import { Sprite } from './Sprite';
 import { Button } from '@/components/Button';
 import { SwapSuggestion } from '../logic/swapLogic';
 
@@ -46,22 +41,8 @@ interface SuggestionAreaProps {
 }
 
 function getApplianceIcon(label: string) {
-  if (label.includes('AC') || label.includes('Air')) {
-    return <AirVent size={24} color="#292524" strokeWidth={1.5} />;
-  }
-  if (label.includes('Fridge')) {
-    return <Refrigerator size={24} color="#292524" strokeWidth={1.5} />;
-  }
-  if (label.includes('LED') || label.includes('Lights')) {
-    return <Lightbulb size={24} color="#292524" strokeWidth={1.5} />;
-  }
-  if (label.includes('Heater')) {
-    return <ShowerHead size={24} color="#292524" strokeWidth={1.5} />;
-  }
-  if (label.includes('Fan')) {
-    return <Fan size={24} color="#292524" strokeWidth={1.5} />;
-  }
-  return <Zap size={24} color="#292524" strokeWidth={1.5} />;
+  const type = /AC|Air/i.test(label) ? 'air_conditioner' : /Fridge/i.test(label) ? 'refrigerator' : /LED|Light/i.test(label) ? 'lights' : /Heater/i.test(label) ? 'water_heater' : 'tv';
+  return <Sprite type={type} size={40} />;
 }
 
 export function SuggestionArea({

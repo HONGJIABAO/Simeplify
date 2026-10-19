@@ -27,17 +27,11 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
-  AirVent,
-  ShowerHead,
-  Refrigerator,
-  Fan,
-  Lightbulb,
-  Tv,
-  Plug,
   X,
 } from 'lucide-react-native';
-import { Appliance, MOCK_APPLIANCE_KWH } from '@/lib/mockData';
+import { Appliance, MOCK_APPLIANCE_KWH, Room } from '@/lib/mockData';
 import { calcBillFromKwh, applianceShare, formatRM } from '@/features/simulator/logic/billCalc';
+import { Sprite } from './Sprite';
 import { Button } from '@/components/Button';
 import { colors, shadows } from '@/lib/theme';
 
@@ -46,29 +40,20 @@ import { colors, shadows } from '@/lib/theme';
 // ---------------------------------------------------------------------------
 function ApplianceIcon({
   type,
-  color,
   size = 20,
 }: {
   type: Appliance['type'];
   color: string;
   size?: number;
 }) {
-  const props = { size, color, strokeWidth: 1.5 };
-  switch (type) {
-    case 'air_conditioner': return <AirVent {...props} />;
-    case 'water_heater':    return <ShowerHead {...props} />;
-    case 'refrigerator':    return <Refrigerator {...props} />;
-    case 'fan':             return <Fan {...props} />;
-    case 'lights':          return <Lightbulb {...props} />;
-    case 'tv':              return <Tv {...props} />;
-    default:                return <Plug {...props} />;
-  }
+  return <Sprite type={type} size={size + 12} />;
 }
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 interface BillModalProps {
+  rooms?: Room[]; usage?: Record<string, number>;
   visible: boolean;
   onClose: () => void;
   appliances: Appliance[];
@@ -83,6 +68,7 @@ interface BillModalProps {
 // ---------------------------------------------------------------------------
 export function BillModal({
   visible,
+  rooms, usage,
   onClose,
   appliances,
   totalKwh,
@@ -97,12 +83,12 @@ export function BillModal({
   // Per-appliance computed shares
   const applianceData = useMemo(() => {
     return appliances.map((app) => {
-      const kWh = MOCK_APPLIANCE_KWH[app.id] ?? 0;
-      const room = app.roomId;
+      const kWh = usage?.[app.id] ?? MOCK_APPLIANCE_KWH[app.id] ?? 0;
+      const room = rooms?.find(r => r.id === app.roomId)?.name || 'Unnamed room';
       const { rm, pct } = applianceShare(kWh, totalKwh, totalBillRm);
       return { app, kWh, rm, pct, room };
     });
-  }, [appliances, totalKwh, totalBillRm]);
+  }, [appliances, totalKwh, totalBillRm, usage, rooms]);
 
   return (
     <Modal

@@ -11,15 +11,16 @@
  * - My Day full-height bottom sheets: Quick setup, Timeline, Add block, Edit block.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   LayoutChangeEvent,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   Bell,
@@ -32,9 +33,7 @@ import {
 } from 'lucide-react-native';
 
 import {
-  MOCK_APPLIANCES,
   MOCK_ROOMS,
-  MOCK_MONTHLY_KWH,
   Appliance,
   ApplianceType,
   Room,
@@ -54,30 +53,43 @@ import { SuggestionArea, SuggestionMode } from '@/features/simulator/components/
 import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
 import {
   RoutineBlock,
-  DEFAULT_ROUTINE_BLOCKS,
   getActiveBlockAtTime,
-  calcMonthlyKwhFromRoutine,
 } from '@/features/simulator/logic/myDayLogic';
 import {
   getAvatarState,
   getBackdropColorForTime,
 } from '@/features/simulator/logic/avatarPlace';
-import { QuickSetupSheet } from '@/features/simulator/components/QuickSetupSheet';
 import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { useToast } from '@/components/Toast';
+import { CatalogItem, Furniture, FurnitureType, Placement, placementAt, monthlyUsage } from '@/features/simulator/logic/scene';
+import { Sprite } from '@/features/simulator/components/Sprite';
+import { RoomForm, FurnitureForm } from '@/features/simulator/components/SceneDetails';
 import { colors, shadows } from '@/lib/theme';
 
 export default function SimulatorScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
   // ── 1. Base Appliances & Routine State ────────────────────────────────────
-  const [baseAppliances, setBaseAppliances] = useState<Appliance[]>(MOCK_APPLIANCES);
-  const [baseKwh, setBaseKwh] = useState(MOCK_MONTHLY_KWH);
+  const [baseAppliances, setBaseAppliances] = useState<Appliance[]>([]);
+  const [rooms, setRooms] = useState<Room[]>(() => MOCK_ROOMS.map(r => ({ ...r, name: '' })));
+  const [furniture, setFurniture] = useState<Furniture[]>([]);
+  const [roomForm, setRoomForm] = useState<Room | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [furnitureForm, setFurnitureForm] = useState<Furniture | null>(null);
+  const [pendingItem, setPendingItem] = useState<CatalogItem | null>(null);
+  const [placement, setPlacement] = useState<Placement | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ key: string; x: number; y: number } | null>(null);
+  const dragActive = useRef(false);
+  const [spriteKey, setSpriteKey] = useState<string>();
+  const [avatarVariant, setAvatarVariant] = useState<'boy' | 'girl'>('girl');
+  const floorRef = useRef<React.ElementRef<typeof View>>(null);
+  const baseKwh = useMemo(() => baseAppliances.reduce((sum, a) => sum + a.wattage / 1000 * (a.alwaysOn || a.isOn ? 24 : 5) * 30, 0), [baseAppliances]);
   const [myDayAnswered, setMyDayAnswered] = useState(false);
-  const [routineBlocks, setRoutineBlocks] = useState<RoutineBlock[]>(DEFAULT_ROUTINE_BLOCKS);
+  const [routineBlocks, setRoutineBlocks] = useState<RoutineBlock[]>([]);
 
   // In-memory swap replacements: map of applianceId -> SwapSuggestion
   const [activeSwaps, setActiveSwaps] = useState<Map<string, SwapSuggestion>>(new Map());
@@ -97,20 +109,8 @@ export default function SimulatorScreen() {
     });
   }, [baseAppliances, activeSwaps]);
 
-  // Total kWh after routine optimization and in-memory swaps
-  const totalKwh = useMemo(() => {
-    // If My day answered, optimize person-dependent usage
-    const effectiveBase = myDayAnswered
-      ? calcMonthlyKwhFromRoutine(routineBlocks, baseKwh)
-      : baseKwh;
-
-    let kwh = effectiveBase;
-    activeSwaps.forEach((swap) => {
-      const diff = baseKwh - swap.newMonthlyKwh;
-      kwh -= Math.max(0, diff);
-    });
-    return Math.max(0, Math.round(kwh));
-  }, [baseKwh, myDayAnswered, routineBlocks, activeSwaps]);
+  const applianceUsage = useMemo(() => monthlyUsage(currentAppliances, routineBlocks, myDayAnswered), [currentAppliances, routineBlocks, myDayAnswered]);
+  const totalKwh = useMemo(() => Math.round(Object.values(applianceUsage).reduce((sum, kwh) => sum + kwh, 0)), [applianceUsage]);
 
   const totalBillRm = useMemo(() => calcBillFromKwh(totalKwh), [totalKwh]);
   const animatedBillText = useBillAnimation(Math.round(totalBillRm));
@@ -123,12 +123,14 @@ export default function SimulatorScreen() {
   );
 
   // ── 2. Clock & Avatar / Home Look State (SIM-06) ─────────────────────────
-  const now = new Date();
-  const currentTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now
+  const [now, setNow] = useState(() => new Date());
+  const [previewTime, setPreviewTime] = useState<string | null>(null);
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(timer); }, []);
+  const currentTimeStr = previewTime ?? `${now.getHours().toString().padStart(2, '0')}:${now
     .getMinutes()
     .toString()
     .padStart(2, '0')}`;
-  const timeLabel = `Today • ${currentTimeStr}`;
+  const timeLabel = `${previewTime ? 'Preview' : 'Today'} • ${currentTimeStr}`;
 
   const activeBlock = useMemo(
     () => getActiveBlockAtTime(currentTimeStr, routineBlocks),
@@ -136,8 +138,8 @@ export default function SimulatorScreen() {
   );
 
   const avatarState = useMemo(
-    () => getAvatarState(activeBlock),
-    [activeBlock]
+    () => routineBlocks.length ? getAvatarState(activeBlock) : null,
+    [activeBlock, routineBlocks.length]
   );
 
   const backdropColor = useMemo(
@@ -199,26 +201,44 @@ export default function SimulatorScreen() {
           id: `app-${Date.now()}`,
         };
         setBaseAppliances((prev) => [...prev, newApp]);
-        setBaseKwh((prev) => prev + Math.round(newAppData.wattage * 0.15));
+
       }
       setSelectedApplianceId(null);
+      setPlacement(null);
+      setActiveSwaps(new Map());
     },
     [editingAppliance]
   );
 
-  const handleSelectApplianceOnPlan = useCallback(
-    (appliance: Appliance) => {
-      setSelectedApplianceId((prev) => (prev === appliance.id ? null : appliance.id));
-    },
-    []
-  );
-
-  const handleRoomPress = useCallback(
-    (room: Room) => {
-      handleSelectApplianceType('air_conditioner', 1200);
-    },
-    [handleSelectApplianceType]
-  );
+  const handleSelectApplianceOnPlan = (appliance: Appliance) => {
+    setSelectedApplianceId(appliance.id);
+    setEditingAppliance(appliance);
+    setSheetApplianceType(appliance.type);
+    setSheetDefaultWattage(appliance.wattage);
+    setSpriteKey(appliance.spriteKey);
+    setDetailsSheetVisible(true);
+  };
+  const placeItem = (item: CatalogItem, pos: Placement) => {
+    setPendingItem(null);
+    setPlacement(pos);
+    if (item.category === 'Furniture') {
+      setFurnitureForm({ ...pos, id: `furniture-${Date.now()}`, type: item.type as FurnitureType, name: item.label });
+    } else {
+      setSpriteKey(item.key);
+      handleSelectApplianceType(item.type as ApplianceType, item.wattage);
+    }
+  };
+  const withDropPosition = (x: number, y: number, action: (pos: Placement) => void) => {
+    floorRef.current?.measureInWindow((left, top, width, height) => {
+      const pos = placementAt(rooms, x - left, y - top, width, height);
+      if (pos) action(pos); else showToast('Drop inside a room to place the item', 'info');
+    });
+  };
+  const handleRoomPress = (room: Room, pos?: Placement) => {
+    setSelectedRoomId(previous => previous === room.id ? null : room.id);
+    if (pendingItem && pos) { placeItem(pendingItem, pos); return; }
+    if (!room.name || isEditMode) setRoomForm(room);
+  };
 
   // ── 6. Suggestion Area State (SIM-02, SIM-03) ────────────────────────────
   const [firstTimeDismissed, setFirstTimeDismissed] = useState(false);
@@ -254,19 +274,12 @@ export default function SimulatorScreen() {
   }, []);
 
   // ── 7. My Day Sheets State (SIM-07) ──────────────────────────────────────
-  const [quickSetupVisible, setQuickSetupVisible] = useState(false);
   const [timelineVisible, setTimelineVisible] = useState(false);
   const [addBlockVisible, setAddBlockVisible] = useState(false);
   const [editBlockVisible, setEditBlockVisible] = useState(false);
   const [editingBlock, setEditingBlock] = useState<RoutineBlock | null>(null);
 
-  const handleOpenMyDay = useCallback(() => {
-    if (!myDayAnswered) {
-      setQuickSetupVisible(true);
-    } else {
-      setTimelineVisible(true);
-    }
-  }, [myDayAnswered]);
+  const handleOpenMyDay = useCallback(() => setTimelineVisible(true), []);
 
   const handleAddBlock = useCallback((newBlock: Omit<RoutineBlock, 'id'>) => {
     setRoutineBlocks((prev) => [
@@ -294,6 +307,7 @@ export default function SimulatorScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, paddingBottom: 84 + Math.max(insets.bottom, 16) }}>
       {/* ── Top area ─────────────────────────────────────────────────── */}
       <View style={styles.topArea}>
         {/* Bill card (left, ~58% width) */}
@@ -413,6 +427,11 @@ export default function SimulatorScreen() {
         }}
       />
 
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Switch resident avatar" onPress={() => setAvatarVariant(v => v === 'girl' ? 'boy' : 'girl')} style={{ padding: 8 }}><Text style={{ color: '#566549', fontSize: 12 }}>Resident: {avatarVariant === 'girl' ? 'Girl' : 'Boy'}</Text></Pressable>
+        {previewTime && <Pressable accessibilityRole="button" onPress={() => setPreviewTime(null)} style={{ padding: 8 }}><Text style={{ color: '#566549', fontSize: 12 }}>Return to live time</Text></Pressable>}
+      </View>
+      {pendingItem && <Text style={{ color: '#566549', padding: 6 }}>Tap a spot for {pendingItem.label}</Text>}
       {/* ── Edit row ──────────────────────────────────────────────────── */}
       <View style={styles.editRow}>
         <Pressable
@@ -420,6 +439,7 @@ export default function SimulatorScreen() {
           onPress={() => {
             setIsEditMode((prev) => !prev);
             setSelectedApplianceId(null);
+            setPendingItem(null);
           }}
           accessibilityRole="button"
           accessibilityLabel={isEditMode ? 'Done editing floor plan' : 'Edit floor plan'}
@@ -430,10 +450,10 @@ export default function SimulatorScreen() {
 
       {/* ── Floor plan card ───────────────────────────────────────────── */}
       <View style={styles.floorPlanCard}>
-        <View style={styles.floorPlanInner} onLayout={onFloorPlanLayout}>
+        <View ref={floorRef} collapsable={false} style={styles.floorPlanInner} onLayout={onFloorPlanLayout}>
           {canvasSize.width > 0 && canvasSize.height > 0 && (
             <FloorPlanCanvas
-              rooms={MOCK_ROOMS}
+              rooms={rooms}
               appliances={currentAppliances}
               canvasWidth={canvasSize.width}
               canvasHeight={canvasSize.height}
@@ -442,11 +462,21 @@ export default function SimulatorScreen() {
               selectedApplianceId={selectedApplianceId}
               onSelectAppliance={handleSelectApplianceOnPlan}
               onRoomPress={handleRoomPress}
+              onSpotPress={handleRoomPress}
+              furniture={furniture}
+              selectedRoomId={selectedRoomId}
+              avatarVariant={avatarVariant}
+              onSelectFurniture={setFurnitureForm}
+              onMoveItem={(id, isFurniture, x, y) => withDropPosition(x, y, pos => {
+                if (isFurniture) setFurniture(items => items.map(item => item.id === id ? { ...item, ...pos } : item));
+                else setBaseAppliances(items => items.map(item => item.id === id ? { ...item, ...pos } : item));
+              })}
               simulatedDate={simulatedDate}
               avatarState={avatarState}
               backdropColor={backdropColor}
             />
           )}
+          {dragPreview && <View pointerEvents="none" style={{ position: 'absolute', left: dragPreview.x - 28, top: dragPreview.y - 28, zIndex: 100, opacity: .8 }}><Sprite type={dragPreview.key} size={56} /></View>}
         </View>
       </View>
 
@@ -455,7 +485,15 @@ export default function SimulatorScreen() {
         {isEditMode ? (
           <EditTray
             visible={isEditMode}
-            onSelectApplianceType={handleSelectApplianceType}
+            onDrag={(item, point) => {
+              dragActive.current = !!point;
+              if (!point) { setDragPreview(null); return; }
+              floorRef.current?.measureInWindow((left, top) => {
+                if (dragActive.current) setDragPreview({ key: item.key, x: point.x - left, y: point.y - top });
+              });
+            }}
+            onPick={setPendingItem}
+            onDrop={(item, x, y) => withDropPosition(x, y, pos => placeItem(item, pos))}
           />
         ) : (
           <SuggestionArea
@@ -464,7 +502,7 @@ export default function SimulatorScreen() {
             activeSwapIds={new Set(activeSwaps.keys())}
             onToggleSwap={handleToggleSwap}
             onOpenMyDay={handleOpenMyDay}
-            onFirstTimeStart={() => setQuickSetupVisible(true)}
+            onFirstTimeStart={handleOpenMyDay}
             onFirstTimeDismiss={() => setFirstTimeDismissed(true)}
             onSolarDismiss={() => setSolarDismissed(true)}
             onSolarSeeHow={() => showToast('Solar panel calculator coming soon', 'info')}
@@ -473,10 +511,12 @@ export default function SimulatorScreen() {
       </View>
 
       {/* ── Estimated Bill Modal ───────────────────────────────────────── */}
+      </ScrollView>
       <BillModal
         visible={billModalVisible}
         onClose={() => setBillModalVisible(false)}
         appliances={currentAppliances}
+        usage={applianceUsage} rooms={rooms}
         totalKwh={totalKwh}
         onAddAppliances={() => {
           setBillModalVisible(false);
@@ -486,6 +526,15 @@ export default function SimulatorScreen() {
 
       {/* ── Appliance Details BottomSheet (SIM-05) ─────────────────────── */}
       <ApplianceDetailsSheet
+        rooms={rooms}
+        placement={placement}
+        spriteKey={spriteKey}
+        onDelete={editingAppliance ? () => {
+          const id = editingAppliance.id;
+          setBaseAppliances(items => items.filter(a => a.id !== id));
+          setRoutineBlocks(blocks => blocks.map(b => ({ ...b, applianceIds: b.applianceIds.filter(a => a !== id) })));
+          setActiveSwaps(new Map()); setDetailsSheetVisible(false);
+        } : undefined}
         visible={detailsSheetVisible}
         onClose={() => setDetailsSheetVisible(false)}
         applianceType={sheetApplianceType}
@@ -494,21 +543,15 @@ export default function SimulatorScreen() {
         onSave={handleSaveAppliance}
       />
 
+      {roomForm && <RoomForm key={roomForm.id} room={roomForm} onClose={() => setRoomForm(null)} onSave={updated => setRooms(items => items.map(r => r.id === updated.id ? updated : r))} />}
+      {furnitureForm && <FurnitureForm key={furnitureForm.id} item={furnitureForm} rooms={rooms} onClose={() => setFurnitureForm(null)} onSave={updated => setFurniture(items => items.some(f => f.id === updated.id) ? items.map(f => f.id === updated.id ? updated : f) : [...items, updated])} onDelete={furniture.some(f => f.id === furnitureForm.id) ? () => { setFurniture(items => items.filter(f => f.id !== furnitureForm.id)); setFurnitureForm(null); } : undefined} />}
       {/* ── My Day Sheets (SIM-07) ─────────────────────────────────────── */}
-      <QuickSetupSheet
-        visible={quickSetupVisible}
-        onClose={() => setQuickSetupVisible(false)}
-        onComplete={() => {
-          setMyDayAnswered(true);
-          setFirstTimeDismissed(true);
-          showToast('Quick setup saved — Bill updated!', 'success');
-        }}
-      />
-
       <MyDayTimelineSheet
         visible={timelineVisible}
         onClose={() => setTimelineVisible(false)}
         blocks={routineBlocks}
+        rooms={rooms}
+        onPreviewBlock={block => { setPreviewTime(block.startTime); setTimelineVisible(false); }}
         onAddBlockPress={() => setAddBlockVisible(true)}
         onEditBlockPress={(block) => {
           setEditingBlock(block);
@@ -521,6 +564,8 @@ export default function SimulatorScreen() {
       />
 
       <AddBlockSheet
+        key={`add-${addBlockVisible}`}
+        rooms={rooms} appliances={currentAppliances}
         visible={addBlockVisible}
         onClose={() => setAddBlockVisible(false)}
         existingBlocks={routineBlocks}
@@ -528,6 +573,7 @@ export default function SimulatorScreen() {
       />
 
       <EditBlockSheet
+        rooms={rooms} appliances={currentAppliances} existingBlocks={routineBlocks}
         visible={editBlockVisible}
         onClose={() => {
           setEditBlockVisible(false);
@@ -544,7 +590,7 @@ export default function SimulatorScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf6f1', // cream
+    backgroundColor: '#eef3e9', // soft sage backdrop
     paddingHorizontal: 20,
   },
 
@@ -635,12 +681,12 @@ const styles = StyleSheet.create({
 
   // Button stack
   buttonStack: {
-    gap: 12,
+    gap: 8,
     alignItems: 'center',
   },
   bellPill: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: 9999,
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -660,8 +706,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#d4a373', // tan-400
   },
   roundButton: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: 9999,
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -694,9 +740,10 @@ const styles = StyleSheet.create({
 
   // Floor plan card
   floorPlanCard: {
-    flex: 1,
+    aspectRatio: 1,
+    width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 32,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: '#e7e5e4',
     padding: 12,
@@ -713,5 +760,6 @@ const styles = StyleSheet.create({
   // Docked bottom area
   dockedBottomArea: {
     marginBottom: 8,
+    flexShrink: 0,
   },
 });
