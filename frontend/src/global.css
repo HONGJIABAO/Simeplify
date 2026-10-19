@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-heading: 'Lora_600SemiBold', serif;
+  --font-body: 'SourceSans3_400Regular', sans-serif;
+}

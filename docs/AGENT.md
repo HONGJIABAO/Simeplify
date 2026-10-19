@@ -158,3 +158,8 @@ These have clear rules in the docs, so test them before the UI:
 - If a rule is unclear or an Open Item blocks you, stop and ask. Do not fill the gap with a guess.
 - Do not add libraries, fonts, or colors that are not in `design.md` without asking.
 - Every loading, empty, and error state uses the patterns in `design.md` (skeleton, empty state, toast).
+
+## 10. Work in stages
+- Do only the stage I name in my message. Do not start the next stage.
+- After each stage, run tsc, lint, and tests, report, and stop.
+- Every stage ends with something I can open and check
