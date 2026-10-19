@@ -31,7 +31,7 @@ Order for a new user:
 3. See the room in the Simulator and try swaps (SIM-01 to SIM-04).
 4. Scan waste with AI (BIN-01, BIN-02).
 5. Scan a bill (SCN-01 to SCN-03).
-6. Join the Community: points and voting (COM-01, COM-02).
+6. Join the Community: vote, do daily green deeds, grow the Living Leaf (COM-01 to COM-03).
 
 ---
 
@@ -59,8 +59,11 @@ Rules:
 |---|---|---|
 | Recycling (Bin) | +10 per recyclable item | After the user taps "I threw it". General waste gives 0. |
 | Energy saving (Scanner) | +50 | When a real electricity bill is lower than the Simulator estimate for the same month. Once per billing month. |
+| Energy-saving action (Simulator) | Not decided | Which action counts and how many points are not decided yet. |
 
-Voting in Community does not use points.
+- Each completed task is one **green deed**. A household's first **3 deeds per day** give points (day = Malaysia time). Later deeds that day give 0 points. The Bin still shows the right bin.
+- Deeds and points belong to the household. The neighbourhood total is the sum of its households.
+- Voting in Community does not use points.
 
 ---
 
@@ -98,7 +101,7 @@ sequenceDiagram
     else No session
         App-->>User: Show Login / Sign Up
         alt New user
-            User->>App: Enter email and password (min 8 characters)
+            User->>App: Enter email, password (min 8 characters), and home address
             App->>Auth: signUp
             Auth-->>App: Session
             App->>DB: Create profile and household
@@ -223,8 +226,12 @@ sequenceDiagram
     participant User
     participant App
 
-    User->>App: Drag the slider and let go on 1M, 6M, or 1Y
-    App->>App: Months = 1, 6, or 12. Total savings = monthly saving × months
+    User->>App: Tap the round fast-forward button (1st tap)
+    App-->>User: Open the time selector (1M, 6M, 1Y, default 1M)
+    User->>App: Drag or tap to choose 1M, 6M, or 1Y (nothing plays)
+    App->>App: Months = 1, 6, or 12. Total savings = monthly saving x months
+    App-->>User: Show the total savings for the chosen period
+    User->>App: Tap the button again (2nd tap)
     App->>App: Start the animation (4 s, 6 s, or 8 s)
     loop Until the calendar reaches the end date
         App-->>User: Move the date label forward
@@ -233,16 +240,19 @@ sequenceDiagram
         App-->>User: Count the savings number up with the calendar
     end
     App-->>User: Show the total savings
-    opt User drags the slider again
-        App->>App: Stop and start a new animation
+    opt User taps the button or drags the slider during playback
+        App->>App: Stop the animation (no new one starts)
     end
+    App-->>User: Close the selector after a tap outside, or 10 s after the end
 ```
 
 Rules:
 
+- Button states: closed (fast-forward icon), open (play icon), playing (stop icon).
+- Letting go of the slider does not start the animation. Only the second tap does.
 - The monthly saving is calculated with presence and My day (3a). The animation only shows the number. It never changes it.
 - The avatar loop is one typical weekday: leaves, home turns energy-saving, comes back, lights on, goes to bed.
-- If "reduce motion" is on, skip the animation. Show the final date and savings.
+- If "reduce motion" is on, the second tap skips the animation and shows the final date and savings.
 - No data is read or written during the animation.
 
 **3d. Avatar follows the schedule (SIM-06)**
@@ -407,10 +417,12 @@ sequenceDiagram
     App->>DB: Save bills row and file path
     App->>DB: Read last month bill and Simulator estimate
     DB-->>App: Data
-    App->>App: Compare (for example water up 200 percent)
-    alt Unusual usage
-        App->>DB: Save alert (a database trigger creates a notification)
-        App-->>User: Show warning (possible water leak)
+    App->>App: Water bill: find the level (MoM and volume, see Feature_Requirements Appendix B)
+    alt Level is Leak detected or Major pipe burst
+        App->>DB: Save alert with level (a database trigger creates a notification)
+        App-->>User: Show warning banner (amber for Leak, terracotta for Major)
+    else Level is Minor drip
+        App-->>User: Show a water-saving tip line (no banner, no notification)
     else Normal
         App-->>User: Show "Normal"
     end
@@ -435,9 +447,11 @@ Rules:
 
 - The user always checks and can correct the numbers before saving.
 - Saved bills show in the archive list, newest first.
-- The first bill has no last month to compare. Compare only with the Simulator estimate.
+- The first bill has no last month. For electricity, compare only with the Simulator estimate. For water, use only the volume limits.
 - Energy points (+50) are given once per billing month, even if the user uploads the same month again.
-- The warning is decided by the app's rules (for example water up 200%). The AI only explains it.
+- The warning level is decided by the app's rules (water: the higher of the MoM level and the volume level, Appendix B). The AI only explains it. The demo case is 18 m³ and +48%: Leak detected.
+- The bill amount (RM) is shown but does not decide the level.
+- The +50 energy points count as one green deed (COM-03). The Edge Function applies the daily limit of 3 deeds.
 - The Edge Function sends the AI only the numbers it needs. The AI must not make up RM amounts or percents. Every number in the text comes from the data sent.
 - **History comparison:** The Edge Function calculates the history numbers from the saved bills (change vs last month, difference vs the 3-month average, difference vs the same month last year, rank in the last 6 months, and the up or down streak). The AI only explains them.
 - Only bills of earlier months than the new bill are used. Numbers that need more history are left out.
@@ -446,9 +460,11 @@ Rules:
 - The result screen shows the status and warning first. The analysis loads after, so the user never waits for it.
 - If the AI fails, the card shows "Try again". The bill is already saved.
 
-### W6. Community (COM-01, COM-02)
+### W6. Community (COM-01, COM-02, COM-03)
 
-**6a. View points and vote (COM-01)**
+Households are grouped into a neighbourhood (sector) from the registered address. How sectors are defined is not decided yet.
+
+**6a. View the Community and vote (COM-01)**
 
 ```mermaid
 sequenceDiagram
@@ -457,22 +473,49 @@ sequenceDiagram
     participant DB
 
     User->>App: Open Community
-    App->>DB: Read household points, this month rewards, household vote
+    App->>DB: Read household points, deeds today, neighbourhood total, this month rewards, household vote
     DB-->>App: Data
-    App-->>User: Show points progress and reward cards
+    App-->>User: Show Living Leaf, monthly progress, daily tasks, and reward cards
     alt Household has not voted
         User->>App: Tap a reward and vote
         App->>DB: Insert vote (one per household per month)
         DB-->>App: OK
-        App-->>User: Show vote saved
+        App-->>User: Show vote saved and the turnout
     else Already voted
-        App-->>User: Show current vote
+        App-->>User: Show current vote and the turnout
     end
 ```
 
 Voting does not use points. Each household has one vote per month.
 
-**6b. Month-end settlement (COM-02)**
+**6b. Daily green deeds and Living Leaf (COM-03)**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App
+    participant EF
+    participant DB
+
+    User->>App: Complete a task (Bin item, lower electricity bill, or Simulator action)
+    App->>EF: The Edge Function for that task (classify, award_energy_points, or deed)
+    EF->>DB: Count today's deeds for the household
+    alt Fewer than 3 deeds today
+        EF->>DB: Save the deed and add points
+    else 3 deeds already
+        EF->>DB: Save the deed with 0 points
+    end
+    EF-->>App: Deeds today and new points total
+    App-->>User: Update the leaf: Dry (0), Healthy (1), Lush (2 to 3)
+```
+
+Rules:
+
+- A day runs from midnight to midnight, Malaysia time. The leaf goes back to Dry at midnight.
+- The app only shows the numbers. Deeds and points are written by the Edge Function or the database.
+- "Recommended for you" lists the tasks. Each one has a button that opens the right screen (Bin, Scanner, Simulator).
+
+**6c. Month-end settlement (COM-02)**
 
 ```mermaid
 sequenceDiagram
@@ -481,9 +524,9 @@ sequenceDiagram
     participant App
     participant User
 
-    Job->>DB: At month end, add up household points
+    Job->>DB: At month end, add up household points and the neighbourhood total
     Job->>DB: Count votes and pick the winning reward
-    Job->>DB: Check points target
+    Job->>DB: Check the neighbourhood points target
     alt Target reached
         Job->>DB: Mark reward unlocked
     else Target not reached
@@ -491,7 +534,7 @@ sequenceDiagram
     end
     User->>App: Open Community
     App->>DB: Read result
-    App-->>User: Show reward result and start a new month
+    App-->>User: Show reward result and start a new month (points back to 0)
 ```
 
 ### W7. Notifications (NOT-01)
@@ -503,7 +546,7 @@ sequenceDiagram
     participant DB
     participant Job as Scheduled job
 
-    Note over DB: Bill alert: a trigger adds a notification when an alert is saved
+    Note over DB: Bill alert (Leak or Major only): a trigger adds a notification when an alert is saved
     Job->>DB: Start of month: add "Voting open" notification
     Job->>DB: End of month: add "Month result" notification
     User->>App: Open the app or tap the bell
@@ -526,9 +569,9 @@ Version 1 is an in-app list only. There are no phone push messages.
 | Login / Sign Up | profile | profile, household | Auth |
 | Onboarding | schedules, rooms, appliances | schedules, households, rooms, appliances, profile.onboarding_done | |
 | Simulator | schedules, rooms, appliances, day_blocks, tariff_rates | appliances (position, edits), day_blocks, showers per person | Bill, avatar, and animation run in the app |
-| Bin | household points | waste_scans, points | Storage (photo), Edge Function, Gemini |
-| Scanner | bills (with analysis), appliances, day_blocks | bills (with analysis), alerts, points (energy) | Storage (file), Edge Function, Gemini |
-| Community | points, rewards, votes | votes | Scheduled job for month end |
+| Bin | household points | waste_scans, points and deeds | Storage (photo), Edge Function, Gemini |
+| Scanner | bills (with analysis), appliances, day_blocks | bills (with analysis), alerts (with level), points and deeds (energy) | Storage (file), Edge Function, Gemini |
+| Community | points, deeds (today), rewards, votes, neighbourhood totals | votes | Deeds and points written by Edge Functions. Scheduled job for month end. |
 | Notifications | notifications | notifications (read flag) | Database trigger, scheduled job |
 
 Detailed tables and columns go in `Database_Schema.md`.
@@ -537,19 +580,24 @@ Detailed tables and columns go in `Database_Schema.md`.
 
 ## 5. Open Items
 
-Decided: star rating in ONB-03, points values (+10 recycling, +50 energy saving), voting does not use points, Gemini for AI, 2.5D floor plan, TNB tariff (see `Feature_Requirements.md`, Appendix A).
+Decided: star rating in ONB-03, points values (+10 recycling, +50 energy saving), voting does not use points, one vote per household per month, up to 3 green deeds per day with Living Leaf stages, Gemini for AI, 2.5D floor plan, TNB tariff (see `Feature_Requirements.md`, Appendix A), water anomaly levels (Appendix B), two-tap fast-forward button, nested mini cards allowed (see `design.md`), no summary numbers row on Profile.
 
 Not decided yet:
 
-1. **Monthly points target:** How many points unlock the monthly reward?
-2. **AFA value:** It changes every month. Someone must update `tariff_rates` each month.
-3. **Generation charge above 1,500 kWh:** Sources disagree if the higher rate applies to all kWh or only to the kWh above 1,500. Version 1 uses only the kWh above 1,500.
-4. **Gemini model name:** `gemini-2.5-flash` was shut down on 16 October 2026 and returns a 404 error. Use a current Flash model (Google lists `gemini-3.5-flash` as the replacement). Keep the model name in one config value, because Google retires models often.
-5. **Solar "See how":** Where does the button go?
-6. **Push notifications:** Not in version 1.
-7. **One account per household:** Several members sharing one household are not covered.
-8. **My day defaults:** Sleep 23:00 – 07:00 with air conditioner and fan on, meals at 07:00 / 12:00 / 19:00 for 30 minutes, evening 20:00 – 23:00 with everything on, 2 showers of 10 minutes per person. Please confirm.
-   Also confirm: sleep uses the first bedroom, showers at 07:15 and 20:30 (avatar only), and work or study blocks need a room picked by the user.
-9. **One avatar for the household:** Several people with different routines are not shown.
-10. **Avatar uses the phone clock:** The user can only see other times of day through the fast-forward animation.
-11. **Limit on "Analyze again":** Each run calls Gemini. Should there be a daily limit per user?
+1. **Monthly points targets:** How many points unlock the monthly reward for the neighbourhood? Is there also a household milestone, and how many points?
+2. **Simulator deed:** Which Simulator action counts as a green deed, how it is checked, and how many points it gives.
+3. **Neighbourhood sectors:** How a sector is made from the address, the minimum size, and what happens to a household with no sector.
+4. **Daily limit vs recycling:** Version 1 counts only the first 3 deeds of the day for points. Someone who sorts 10 items in a day gets points for 3. Please confirm.
+5. **Reward unlock rule:** `Feature_Requirements.md` unlocks on the monthly target only. `screen_spec.md` (6.6) also mentions the Lush state. Please confirm.
+6. **Water limits:** Confirm that the volume limits scale with household size (value × residents ÷ 3), and check the Air Selangor tariff before launch.
+7. **AFA value:** It changes every month. Someone must update `tariff_rates` each month.
+8. **Generation charge above 1,500 kWh:** Sources disagree if the higher rate applies to all kWh or only to the kWh above 1,500. Version 1 uses only the kWh above 1,500.
+9. **Gemini model name:** `gemini-2.5-flash` was shut down on 16 October 2026 and returns a 404 error. Use a current Flash model (Google lists `gemini-3.5-flash` as the replacement). Keep the model name in one config value, because Google retires models often.
+10. **Solar "See how":** Where does the button go?
+11. **Push notifications:** Not in version 1.
+12. **One account per household:** Several members sharing one household are not covered.
+13. **My day defaults:** Sleep 23:00 – 07:00 with air conditioner and fan on, meals at 07:00 / 12:00 / 19:00 for 30 minutes, evening 20:00 – 23:00 with everything on, 2 showers of 10 minutes per person. Please confirm.
+    Also confirm: sleep uses the first bedroom, showers at 07:15 and 20:30 (avatar only), and work or study blocks need a room picked by the user.
+14. **One avatar for the household:** Several people with different routines are not shown.
+15. **Avatar uses the phone clock:** The user can only see other times of day through the fast-forward animation.
+16. **Limit on "Analyze again":** Each run calls Gemini. Should there be a daily limit per user?

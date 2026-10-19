@@ -125,7 +125,7 @@ Load with `@expo-google-fonts/lora` and `@expo-google-fonts/source-sans-3`.
 - Allowed shapes: rounded, soft, slightly irregular (blob).
 - Not allowed: sharp corners, `rounded-none`, `rounded-sm`, `shadow-lg`, `shadow-xl`, `shadow-2xl`.
 - Blob shapes: use for decorative background shapes, mascot spots, and empty-state art. Example radii: `borderTopLeftRadius: 48, borderTopRightRadius: 32, borderBottomRightRadius: 56, borderBottomLeftRadius: 36`.
-- No nested cards. A card never contains another card. Use dividers or spacing inside a card.
+- **Nested cards are allowed, one level deep.** A card may hold small "mini cards" (see Unit 11) to group related facts. A mini card never contains another card. Do not wrap every row in a mini card. Use dividers or spacing when a list is enough.
 
 ---
 
@@ -220,6 +220,17 @@ All cards include: `bg-[#faf6f1] rounded-[2rem] border border-stone-200 p-6`.
 - Highlight cards (suggestions) use `bg-tan-100` with a `tan-300` border.
 - Title uses Lora. Body uses Source Sans.
 
+### Mini card (nested inside a card)
+
+Mini cards include: `bg-white rounded-[1.25rem] border border-stone-200 p-4`.
+
+- No shadow. One level only: a mini card never contains another card.
+- Radius is 20 px so it sits softly inside the 32 px outer card.
+- Works inside a normal card and inside a highlight card (`bg-tan-100`).
+- Use for: pairs of numbers (two mini cards side by side, `gap-2`), a small tip or callout, a "your vote" box, an old vs new comparison.
+- Do not use for: plain list rows (use List items), buttons, or whole sections.
+- Text rules do not change: Lora for numbers and titles, Source Sans for body, 12 px minimum.
+
 ### Input
 
 All inputs include: `px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200 transition-all duration-300`.
@@ -282,7 +293,8 @@ All inputs include: `px-5 py-3 bg-white border border-stone-200 rounded-full tex
 
 ```
 [ Header                                   ]
-[ Bill card (left) ][ Time slider (right)  ]
+[ Bill card (left) ][ ⏩ round button (right) ]
+[ Fast-forward panel (only when open)     ]
 [                                          ]
 [            Floorplan area (center)       ]
 [                                          ]
@@ -292,24 +304,41 @@ All inputs include: `px-5 py-3 bg-white border border-stone-200 rounded-full tex
 
 - The Simulator is a fixed screen. It does not scroll. Use `flex-1` for the floorplan so it fills the space between the top row and the suggestion area.
 - Outer padding: `px-6`. Gap between all blocks: `gap-4`.
-- Do not move, swap, or hide these four blocks. Only the suggestion area can be empty.
+- Do not move or swap these blocks. Only two blocks may be missing: the suggestion area (when empty) and the fast-forward panel (when closed). When the panel opens, the floorplan gets shorter. The panel never covers the floorplan.
 
 **1. Bill card (top left)**
-- Width: half of the row (`flex-1`), `gap-4` from the slider card.
+- Width: fills the row (`flex-1`), `gap-4` from the fast-forward button.
 - Uses the standard Card style (`bg-[#faf6f1] rounded-[2rem] border border-stone-200`), with `p-4` because the card is small.
 - Label: "Estimated monthly bill" (12 px, `stone-600`).
 - Hero number: Lora, 28 px (smaller than the normal 40 px so it fits). Format `RM 1,234`.
 - Tan accent: small `tan-400` leaf or plug icon next to the label.
 - When the bill changes (swap or solar), the number counts up or down over 700 ms.
 
-**2. Time slider (top right)**
-- Width: half of the row (`flex-1`). Same Card style and `p-4`.
+**2. Fast-forward button and panel (top right)**
+
+*Button (always visible)*
+- One round button, 48 × 48 px (`rounded-full`), top right of the row, aligned to the top of the bill card. Primary style: `bg-stone-800`, icon `stone-50`.
+- Three states, same size and fill, only the icon and the accessibility label change:
+
+| State | Icon (lucide, stroke 1.5) | Accessibility label |
+|---|---|---|
+| Closed | `fast-forward` | "Fast-forward. Opens the time selector." |
+| Open (panel showing) | `play` | "Play fast-forward for {1 month / 6 months / 1 year}" |
+| Playing | `square` | "Stop fast-forward" |
+
+*Interaction*
+1. **First tap:** the panel opens under the top row (fade and rise, 500 ms). Nothing plays.
+2. The user picks a period by dragging the slider or tapping a stop. Default: 1M.
+3. **Second tap:** the fast-forward animation plays (see 3c).
+4. Tap the button or drag the slider while it plays: the animation stops. Tap again to play again.
+5. The panel closes when the user taps outside it (not while it plays), or 10 s after the animation ends. Reduced motion: same rules.
+6. Letting go of the slider does not play anything.
+
+*Panel (Card style, `p-4`, full width inside `px-6`)*
 - Label: "Fast-forward" (12 px, `stone-600`).
-- Slider: use the Slider component from Unit 11, with 3 stops: **1M · 6M · 1Y**. Stop labels are 12 px under the track.
-- Value badge (`sage-100`) shows the selected period.
-- Savings result: one line under the slider, e.g. "Save RM 1,500" in `sage-600`, Lora 18 px. It counts up over 700 ms.
-- Default: "1M" selected.
-- Playback: when the user lets go of the slider, the fast-forward animation plays (see 3c). The savings number counts up with the calendar.
+- Slider: the Slider component from Unit 11, 3 stops: **1M · 6M · 1Y**. Stop labels are 12 px under the track. Value badge (`sage-100`) shows the selected period.
+- Savings line under the slider, e.g. "Save RM 1,500" in `sage-600`, Lora 18 px. Before play it shows the total for the chosen period and changes (700 ms count) when the period changes. When play starts it restarts at RM 0, counts up with the calendar, and ends at the same total.
+- Hint line (12 px, `stone-600`): "Tap ⏩ again to play." Hidden while playing.
 
 **3. Floorplan area (center)**
 - Large rounded canvas: `rounded-[2rem]`, `bg-white`, 1 px `stone-200` border. Fills all remaining height.
@@ -349,14 +378,14 @@ Backdrop behind the rooms (changes with the clock, 500 to 700 ms fades):
 | 19:00 – 07:00 | `stone-300` (warm gray) |
 
 **3c. Fast-forward animation**
-- Starts when the user lets go of the time slider on 1M, 6M, or 1Y.
+- Starts on the **second tap** of the fast-forward button, for the period chosen on the slider (1M, 6M, or 1Y).
 - A read-only date pill at the top center of the canvas (`cream`, Lora 14 px). It starts at today and counts forward fast to the end date. The speed slows down in the last 20%.
 - The backdrop cycles through the day colors above, one cycle for each avatar loop.
 - The avatar plays one typical weekday: leaves, the home turns energy-saving, the avatar comes back, lights come on, the avatar goes to bed. One loop is about 1.2 s.
 - Total time: 4 s (1M), 6 s (6M), 8 s (1Y).
-- The savings number in the slider card counts up with the calendar and stops at the total when the date pill reaches the end date.
-- Dragging the slider again stops the animation and starts a new one.
-- Reduced motion: no animation. Show the last date and the final savings. The avatar stays still.
+- The savings number in the fast-forward panel counts up with the calendar and stops at the total when the date pill reaches the end date.
+- Tapping the button or dragging the slider during playback stops the animation. It does not start a new one. The user taps again to play.
+- Reduced motion: the second tap skips the animation. Show the last date and final savings. The avatar stays still.
 
 **4. Suggestion area (bottom, just above the tab bar)**
 - Docked panel, 16 px above the bottom tab bar. Full width inside `px-6`.
@@ -380,7 +409,7 @@ Backdrop behind the rooms (changes with the clock, 500 to 700 ms fades):
 
 *Timeline* (full-height Bottom Sheet titled "My day")
 - Top: a toggle "Weekdays | Weekends" (only the away blocks change) and a thin read-only 24-hour strip (12 px high, rounded) that shows the blocks in a row.
-- Below: a vertical list of blocks in time order. No nested cards. Each block is a List item with the time range, name, room, and small icons for the appliances that are on.
+- Below: a vertical list of blocks in time order. Blocks are plain List items, not mini cards. Each block is a List item with the time range, name, room, and small icons for the appliances that are on.
 - Block fills (always with a text label): sleep `stone-200`, meals `tan-100`, evening `sage-100`, shower `sage-50`, away `stone-100` with a lock icon.
 - Tap a block: it expands in place. It shows start and end time pickers and a switch for each appliance in that room. A shower block shows "Minutes per shower" (stepper, 5 to 30).
 - Away blocks are locked. They show a text button "Edit schedule".
@@ -404,25 +433,47 @@ Backdrop behind the rooms (changes with the clock, 500 to 700 ms fades):
 
 ### 4. Community
 
-- **Voting card list:** each reward is a card (image, title, short text, vote button). Selected card gets `sage-100` fill and a check icon.
-- **Points board:** household points, progress bar toward the monthly reward, and a split of recycling points and energy points.
-- **Reward unlocked:** soft leaf animation, no confetti.
+Households only. Each household has one account, one vote per month, and one Living Leaf.
+
+- **Neighbourhood line (top of screen):** house-sprout icon + sector name (e.g. "Oakridge Commons • Sector 4B") on the left, month name (Lora) on the right.
+- **Living Leaf (hero):**
+  - A round dial about 190 px wide. Ring track `stone-200`, filled arc `sage-400`, 3 steps for 3 deeds. Hand-drawn leaf in the center. No glow, no gradient.
+  - Counter pill under the dial: "1 / 3 deeds today" (`sage-100`).
+  - Stage pill with icon and text: **Dry** (0 deeds, `stone-100`), **Healthy** (1 deed, `sage-100`), **Lush** (2–3 deeds, `sage-200`).
+  - Leaf art by stage: Dry = pale tan, drooping. Healthy = `sage-300`, upright. Lush = `sage-500`, full, small dew drops. Stage change: 500 ms fade.
+  - H2 (Lora) changes with the stage, plus one line of body text such as "Do 1 more green deed today to reach Lush." The leaf resets to Dry at midnight (Malaysia time).
+- **Stage stepper:** Dry → Healthy → Lush as three pills. The current one has a `sage-100` fill and a check icon.
+- **Monthly progress card:** title "This month", a Progress bar toward the monthly target with text ("340 / 500 pts", example numbers), and two mini cards side by side: Recycling points and Energy points. Footer line: "240 households contributing".
+- **Daily tasks ("Recommended for you"):** a horizontal row of small task cards (allowed horizontal scroll). Each card: icon, title, one line, badge (To do / Done), and a button that opens the right screen ("Go to Bin", "Go to Scanner", "Go to Simulator"). Done = `sage-100` fill and a check icon.
+- **Voting:** opens as a Bottom Sheet. Each reward is a card (image, title, short text, vote button). Selected card gets `sage-100` fill and a check icon. Text: "One vote per household per month." After voting: a mini card "Your household's vote" and a Progress bar for turnout (e.g. "184 / 240 households").
+- **Reward unlocked:** soft leaf animation, no confetti, no glow. Reduced motion: fade only.
+- **Month result:** announcement sheet with the winning reward and whether the target was reached.
 
 ### 5. Scanner (Bill Analyzer)
 
 - **Upload area:** large dashed-feel soft card (use a 1 px `stone-300` border, rounded). Buttons: "Take photo", "Upload PDF".
-- **Result card:** usage vs normal range, with a status badge (Normal / High).
-- **Anomaly alert:** warning style (amber). Example: "Water bill up 200%. Check for leaks." Include an icon and text.
+- **Result card:** usage vs normal range, with a status badge (Normal / Watch / Leak / Burst). Always icon + text.
+- **Anomaly alert (water):** four levels. Levels and limits are in `Feature_Requirements.md`, Appendix B. Every level has an icon and text, never color alone.
+
+| Level | Style | Content |
+|---|---|---|
+| Normal | No alert | Normal status badge only. |
+| Minor drip (Watch) | Info (`stone-100`, `stone-600`), a single line inside the result card. No banner. | A water-saving tip. |
+| Leak detected | Warning banner (`amber-50`, text #92600e, warning icon). | Title \"Anomaly detected\". Example: \"Water bill up 48% vs September. Check the toilet cistern seal and outdoor pipes.\" |
+| Major pipe burst | Error banner (#fbece8, text #a8442f, alert icon). Highest priority, sits above everything else. | Example: \"Water use doubled. Check for a burst pipe and consider closing the main valve.\" |
+
+  The percent next to the number uses an arrow icon plus text (for example \"↑ +48%\"), in terracotta for Leak and Burst.
 - **Chart:** monthly bars. Electricity = `tan-400`. Water = `sage-500`. Show values as text labels too. A filter row (All / Electricity / Water) uses pill option rows; the selected one has a `sage-100` fill. A one-sentence "Trend" line (Body, `stone-600`) sits under the chart.
 - **Archive list:** bills by month, thumbnail + amount + badge.
-- **AI Analysis card** (result screen and Bill Detail): standard Card with a leaf icon (not a sparkle or robot icon) and the title "AI Analysis" in Lora. Parts: summary (Body), history table (2 columns: label and value, each with an up or down arrow icon and text, never color alone), "Why" list, "Try this" list (each tip has a small leaf icon), and a 12 px footer note. Parts are separated by 1 px `stone-200` dividers. No nested cards.
+- **AI Analysis card** (result screen and Bill Detail): standard Card with a leaf icon (not a sparkle or robot icon) and the title "AI Analysis" in Lora. Parts: summary (Body), history table (2 columns: label and value, each with an up or down arrow icon and text, never color alone), "Why" list, "Try this" list (each tip has a small leaf icon), and a 12 px footer note. Parts are separated by 1 px `stone-200` dividers. Pairs of numbers (for example "Peak electricity" and "Base water") may sit in mini cards (Unit 11).
 - AI Analysis loading: skeleton lines and the text "Analyzing your bill..." (slow pulse). Error: amber note with a Secondary button "Try again".
 - On Scanner home, the latest bill card shows only the first line of the analysis.
 
 ### 6. Profile
 
 - Profile picture: the resident avatar's face in a soft blob frame (`sage-100` fill, 1 px `stone-200` border). Tapping it opens the Resident sheet: a small Bottom Sheet with the full avatar (about 120 px tall, slow breathing idle, 700 ms ease-in-out) and a status pill ("At home · Living room" in `sage-100`, or "Out · back at 18:00" in `tan-100`). Same avatar style as the Simulator (Unit 12, 3a). No buttons in the sheet. Reduced motion: no breathing.
-- Name, address.
+- Name, address, and a household line (for example "3-person household").
+- No row of summary numbers (money saved, total points, eco rating). It was removed.
 - List items: Account, Address, Household, Appliances, Notifications, Log out.
 - Log out uses Secondary button.
 
@@ -466,7 +517,7 @@ Never use:
 - Gradients (`bg-gradient-*`) and gradient text.
 - Neon or high-saturation colors.
 - Glassmorphism or blur as a default surface.
-- Nested cards.
+- Cards nested more than one level deep (a mini card inside a mini card).
 - Side-stripe accent borders (thick left/right border).
 - Bounce or elastic animation.
 - High-tech look: glow, grid lines, futuristic fonts.
@@ -491,8 +542,15 @@ Never use:
 - [ ] Buttons have `px-6 py-3 rounded-full font-medium` and a 300 ms transition.
 - [ ] Cards have `bg-[#faf6f1] rounded-[2rem] border border-stone-200`.
 - [ ] Inputs match Unit 11.
+- [ ] Nested cards are one level only and use the mini card style.
 - [ ] Headings are Lora. Body is Source Sans.
 - [ ] No item from Unit 15 appears.
 - [ ] Contrast and touch targets pass.
 - [ ] Reduced motion works.
 - [ ] The screen still looks warm, earthy, and handmade at a glance.
+
+---
+
+## Change log
+
+- 19 Oct 2026: Nested cards allowed (one level, mini card). Fast-forward is now one round button: first tap opens the 1M / 6M / 1Y slider, second tap plays. Community rewritten around Living Leaf, daily deeds, and one vote per household. Water anomaly levels added to Scanner. Profile summary numbers removed.
