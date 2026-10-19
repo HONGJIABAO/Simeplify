@@ -25,6 +25,9 @@ import { ApplianceDetailsSheet } from '@/features/simulator/components/Appliance
 import { FurnitureDetailsSheet } from '@/features/simulator/components/FurnitureDetailsSheet';
 import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
 import { BillModal } from '@/features/simulator/components/BillModal';
+import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
+import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
+import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 
 import {
   StoredRoom,
@@ -33,7 +36,14 @@ import {
   saveLayoutState,
   loadSimulationState,
   saveSimulationState,
+  loadRoutineBlocks,
+  saveRoutineBlocks,
 } from '@/features/simulator/logic/storage';
+import {
+  DEFAULT_ROUTINE_BLOCKS,
+  RoutineBlock,
+  getActiveBlockAtTime,
+} from '@/features/simulator/logic/myDayLogic';
 import {
   DEFAULT_ROUTINE,
   SimSpeed,
@@ -118,6 +128,22 @@ export default function SimulatorScreen() {
   const [namingRoom, setNamingRoom] = useState<StoredRoom | null>(null);
 
   const [billModalVisible, setBillModalVisible] = useState(false);
+
+  // ── Routine Blocks State (persisted) ──────────────────────────────────────
+  const [routineBlocks, setRoutineBlocks] = useState<RoutineBlock[]>(() => {
+    const saved = loadRoutineBlocks();
+    return saved && saved.length > 0 ? (saved as RoutineBlock[]) : DEFAULT_ROUTINE_BLOCKS;
+  });
+
+  useEffect(() => {
+    saveRoutineBlocks(routineBlocks);
+  }, [routineBlocks]);
+
+  // Routine Sheet Modal States
+  const [timelineVisible, setTimelineVisible] = useState(false);
+  const [addBlockVisible, setAddBlockVisible] = useState(false);
+  const [editBlockVisible, setEditBlockVisible] = useState(false);
+  const [selectedBlockForEdit, setSelectedBlockForEdit] = useState<RoutineBlock | null>(null);
 
   // Drag and Drop State
   const floorPlanRef = useRef<View>(null);
@@ -213,8 +239,22 @@ export default function SimulatorScreen() {
 
   // Update routine activities and waypoints when routine changes
   const currentRoutine = useMemo(() => {
+    const timeStr = formatTimeMinutes(simulatedMinutes);
+    const active = getActiveBlockAtTime(timeStr, routineBlocks);
+    if (active) {
+      return {
+        id: active.id,
+        name: active.name,
+        startTime: active.startTime,
+        endTime: active.endTime,
+        targetRoomType: (active.roomId === 'away' ? 'living' : (active.roomId as any)) || 'living',
+        isSleeping: active.iconType === 'sleep',
+        isAway: active.isAway,
+        activeApplianceTypes: active.applianceIds,
+      };
+    }
     return getCurrentRoutine(simulatedMinutes, DEFAULT_ROUTINE);
-  }, [simulatedMinutes]);
+  }, [simulatedMinutes, routineBlocks]);
 
   useEffect(() => {
     // Check if target room exists in user's rooms
@@ -602,12 +642,7 @@ export default function SimulatorScreen() {
             onCycleSpeed={handleCycleSpeed}
             onPressBillCard={() => setBillModalVisible(true)}
             onPressBell={() => router.push('/notifications')}
-            onPressCalendar={() =>
-              showToast(
-                `Active: ${currentRoutine.name} (${currentRoutine.startTime}-${currentRoutine.endTime})`,
-                'info'
-              )
-            }
+            onPressCalendar={() => setTimelineVisible(true)}
           />
 
           {/* ── Middle Section: Strictly FIXED Floor Plan Card (No Shrinking) ── */}
@@ -708,6 +743,65 @@ export default function SimulatorScreen() {
           onAddAppliances={() => {
             setBillModalVisible(false);
             setIsEditMode(true);
+          }}
+        />
+
+        {/* ── My Day Routine Timeline Sheet ───────────────────────────────── */}
+        <MyDayTimelineSheet
+          visible={timelineVisible}
+          onClose={() => setTimelineVisible(false)}
+          blocks={routineBlocks}
+          rooms={rooms}
+          onAddBlockPress={() => {
+            setAddBlockVisible(true);
+          }}
+          onEditBlockPress={(block) => {
+            setSelectedBlockForEdit(block);
+            setEditBlockVisible(true);
+          }}
+          onSaveSchedule={() => {
+            saveRoutineBlocks(routineBlocks);
+            showToast('Schedule saved', 'success');
+          }}
+        />
+
+        {/* ── Add Routine Block Sheet ─────────────────────────────────────── */}
+        <AddBlockSheet
+          visible={addBlockVisible}
+          onClose={() => setAddBlockVisible(false)}
+          rooms={rooms}
+          appliances={appliancesForBillModal}
+          existingBlocks={routineBlocks}
+          onSaveBlock={(newBlock) => {
+            const blockWithId: RoutineBlock = {
+              ...newBlock,
+              id: `block_${Date.now()}`,
+            };
+            setRoutineBlocks((prev) => [...prev, blockWithId]);
+            showToast(`Added ${newBlock.name}`, 'success');
+          }}
+        />
+
+        {/* ── Edit Routine Block Sheet ────────────────────────────────────── */}
+        <EditBlockSheet
+          visible={editBlockVisible}
+          onClose={() => {
+            setEditBlockVisible(false);
+            setSelectedBlockForEdit(null);
+          }}
+          block={selectedBlockForEdit}
+          rooms={rooms}
+          appliances={appliancesForBillModal}
+          existingBlocks={routineBlocks}
+          onUpdateBlock={(updated) => {
+            setRoutineBlocks((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b))
+            );
+            showToast(`Updated ${updated.name}`, 'success');
+          }}
+          onRemoveBlock={(blockId) => {
+            setRoutineBlocks((prev) => prev.filter((b) => b.id !== blockId));
+            showToast('Time block removed', 'info');
           }}
         />
       </View>

@@ -11,6 +11,14 @@
  * - A month is 30 days (5/7 weekdays, 2/7 weekend days).
  */
 
+export interface ApplianceInUse {
+  id: string;
+  name: string;
+  wattage: number;
+  timeRange?: string;
+  icon?: 'ac' | 'fan' | 'light' | 'tv';
+}
+
 export interface RoutineBlock {
   id: string;
   name: string;
@@ -23,6 +31,10 @@ export interface RoutineBlock {
   minutesPerShower?: number;
   iconType: 'sleep' | 'shower' | 'meal' | 'away' | 'evening' | 'custom';
   description?: string;
+  appliancesInUse?: ApplianceInUse[];
+  temperature?: number;
+  timerHours?: number;
+  fanSpeed?: 'Low' | 'Med' | 'High';
 }
 
 export const AWAY_RANGE_WEEKDAY = { start: '08:30', end: '17:30' };
@@ -34,9 +46,12 @@ export const DEFAULT_ROUTINE_BLOCKS: RoutineBlock[] = [
     startTime: '00:00',
     endTime: '06:30',
     roomId: 'bedroom',
-    applianceIds: ['ac1', 'fan1'],
+    applianceIds: ['ac1', 'fan1', 'lamp1'],
     iconType: 'sleep',
     description: 'Bedroom AC at 25°C, ceiling fan gentle',
+    temperature: 25,
+    timerHours: 7,
+    fanSpeed: 'Low',
   },
   {
     id: 'block-shower',
@@ -44,8 +59,8 @@ export const DEFAULT_ROUTINE_BLOCKS: RoutineBlock[] = [
     startTime: '06:30',
     endTime: '07:15',
     roomId: 'bathroom',
-    applianceIds: ['wh1'],
-    minutesPerShower: 10,
+    applianceIds: ['wh1', 'lights_bath', 'fan_bath'],
+    minutesPerShower: 15,
     iconType: 'shower',
     description: 'Storage water heater (15-min eco timer)',
   },
@@ -55,7 +70,7 @@ export const DEFAULT_ROUTINE_BLOCKS: RoutineBlock[] = [
     startTime: '07:15',
     endTime: '08:30',
     roomId: 'kitchen',
-    applianceIds: ['fridge1', 'lights1'],
+    applianceIds: ['fridge1', 'lights_kit', 'kettle1'],
     iconType: 'meal',
     description: 'Kitchen induction burner, kettle, warm pendant lighting',
   },
@@ -76,10 +91,36 @@ export const DEFAULT_ROUTINE_BLOCKS: RoutineBlock[] = [
     name: 'Evening Routine',
     startTime: '20:00',
     endTime: '23:00',
-    roomId: 'living',
-    applianceIds: ['ac1', 'fan1', 'lights1'],
+    roomId: 'bedroom',
+    applianceIds: ['ac1', 'fan1', 'lamp1'],
     iconType: 'evening',
     description: 'Living room relaxation with ambient lights and AC',
+    temperature: 23,
+    timerHours: 1,
+    fanSpeed: 'Med',
+    appliancesInUse: [
+      {
+        id: 'panasonic_ac',
+        name: 'Panasonic Air Conditioner',
+        timeRange: '20:00-23:00',
+        wattage: 1200,
+        icon: 'ac',
+      },
+      {
+        id: 'kdk_fan',
+        name: 'KDK Table Fan',
+        timeRange: '20:00-23:00',
+        wattage: 35,
+        icon: 'fan',
+      },
+      {
+        id: 'muji_lamp',
+        name: 'MUJI Bedside Lamp',
+        timeRange: '20:00-23:00',
+        wattage: 10,
+        icon: 'light',
+      },
+    ],
   },
 ];
 

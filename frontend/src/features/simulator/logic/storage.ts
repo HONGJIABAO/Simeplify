@@ -109,3 +109,25 @@ export function saveSimulationState(state: SimulationState): void {
     console.error('Failed to save simulation state:', err);
   }
 }
+
+const ROUTINE_KEY = 'simeplify_simulator_routine_blocks_v2';
+
+export function loadRoutineBlocks(): any[] | null {
+  try {
+    const raw = safeGetItem(ROUTINE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Failed to parse saved routine blocks:', err);
+  }
+  return null;
+}
+
+export function saveRoutineBlocks(blocks: any[]): void {
+  try {
+    safeSetItem(ROUTINE_KEY, JSON.stringify(blocks));
+  } catch (err) {
+    console.error('Failed to save routine blocks:', err);
+  }
+}

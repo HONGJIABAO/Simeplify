@@ -1,16 +1,8 @@
 /**
  * SIM-07
  * Bottom sheet for adding a new routine block to My Day.
- * Source: docs/screenshot/simulator/simulator_add_routine.png,
- *         docs/screenshot/simulator/simulator_add_routine_error.png,
- *         docs/page_refined.md S4.6.
- *
- * Rules:
- * - Routine name with quick pills: Watching TV, Working, Studying, Cooking.
- * - Where? Room grid (Living room, Kitchen, Bedroom 1, Bedroom 2, Bathroom).
- * - When? Starts & Ends time cards with overlap validation.
- * - Away overlap shows amber note (not an error).
- * - Conflict error state shows summary error banner and locks Save button.
+ * Matches docs/screenshot/simulator/simulator_add_routine.png and
+ *         docs/screenshot/simulator/simulator_add_routine_error.png
  */
 
 import React, { useState } from 'react';
@@ -30,67 +22,110 @@ import {
   BookOpen,
   Briefcase,
   Lock,
+  Clock,
+  Armchair,
+  ShowerHead,
+  Bed,
+  X,
 } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
-import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
 import { Sprite } from './Sprite';
+import { StoredRoom } from '../logic/storage';
 import { RoutineBlock, validateBlock } from '../logic/myDayLogic';
-import { MOCK_APPLIANCES, MOCK_ROOMS, Appliance, Room } from '@/lib/mockData';
 
 interface AddBlockSheetProps {
-  rooms?: Room[]; appliances?: Appliance[];
   visible: boolean;
   onClose: () => void;
   existingBlocks: RoutineBlock[];
+  rooms?: StoredRoom[];
+  appliances?: any[];
   onSaveBlock: (block: Omit<RoutineBlock, 'id'>) => void;
-  /** Force demonstration of validation error state */
-  initialSimulateError?: boolean;
 }
 
 const QUICK_ROUTINES = [
-  { name: 'Sleep', icon: <BookOpen size={16} color="#57534e" />, roomId: 'bedroom' },
-  { name: 'Away', icon: <Briefcase size={16} color="#57534e" />, roomId: 'living' },
-  { name: 'Watching TV', icon: <Tv size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'living' },
-  { name: 'Working', icon: <Briefcase size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'living' },
-  { name: 'Studying', icon: <BookOpen size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'bedroom' },
-  { name: 'Cooking', icon: <Utensils size={16} color="#57534e" strokeWidth={1.5} />, roomId: 'kitchen' },
+  { name: 'Watching TV', icon: <Tv size={16} color="#57534E" strokeWidth={1.5} />, room: 'living' },
+  { name: 'Working', icon: <Briefcase size={16} color="#57534E" strokeWidth={1.5} />, room: 'living' },
+  { name: 'Studying', icon: <BookOpen size={16} color="#57534E" strokeWidth={1.5} />, room: 'bedroom' },
+  { name: 'Cooking', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} />, room: 'kitchen' },
 ];
+
+const ROOM_OPTIONS = [
+  { id: 'living', label: 'Living room', icon: <Armchair size={16} color="#57534E" strokeWidth={1.5} /> },
+  { id: 'kitchen', label: 'Kitchen', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} /> },
+  { id: 'bedroom', label: 'Bedroom 1', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
+  { id: 'bedroom_2', label: 'Bedroom 2', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
+  { id: 'bathroom', label: 'Bathroom', icon: <ShowerHead size={16} color="#57534E" strokeWidth={1.5} /> },
+  { id: 'away', label: 'Away', icon: <Lock size={16} color="#57534E" strokeWidth={1.5} /> },
+];
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export function AddBlockSheet({
   visible,
-  rooms = MOCK_ROOMS, appliances = MOCK_APPLIANCES,
   onClose,
   existingBlocks,
+  rooms = [],
+  appliances = [],
   onSaveBlock,
-  initialSimulateError = false,
 }: AddBlockSheetProps) {
-  const [simulateError, setSimulateError] = useState(initialSimulateError);
-  const [name, setName] = useState(initialSimulateError ? '' : 'Watching TV');
+  const [name, setName] = useState('Watching TV');
   const [selectedRoom, setSelectedRoom] = useState('living');
-  const [startTime, setStartTime] = useState(initialSimulateError ? '19:15' : '20:00');
-  const [endTime, setEndTime] = useState(initialSimulateError ? '20:30' : '23:00');
-  const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({
+  const [startTime, setStartTime] = useState('20:00');
+  const [endTime, setEndTime] = useState('23:00');
+  const [activeDays, setActiveDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const [repeatMode, setRepeatMode] = useState<'weekdays' | 'weekends' | 'all'>('weekdays');
 
+  // Room appliances switch state
+  const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({
+    tv_sample: true,
+    lights_sample: true,
+    ac_sample: false,
+    fan_sample: false,
   });
 
+  const isAwaySelected = selectedRoom === 'away';
+
+  // Validation
   const validation = validateBlock(
     {
       name,
       startTime,
       endTime,
       roomId: selectedRoom,
-      applianceIds: appliances.filter(a => a.roomId === selectedRoom && applianceSwitches[a.id]).map(a => a.id),
-      iconType: name.toLowerCase().includes('sleep') ? 'sleep' : name.toLowerCase() === 'away' ? 'away' : 'custom',
-      isAway: name.toLowerCase() === 'away',
+      applianceIds: [],
+      iconType: name.toLowerCase().includes('sleep')
+        ? 'sleep'
+        : isAwaySelected
+        ? 'away'
+        : 'custom',
+      isAway: isAwaySelected,
     },
     existingBlocks
   );
 
-  const hasNameError = simulateError || name.trim() === '';
-  const hasTimeError = simulateError || !validation.isValid;
+  const hasNameError = name.trim() === '';
+  const hasTimeError = !validation.isValid;
   const isFormInvalid = hasNameError || hasTimeError;
+
+  const handleSelectQuickRoutine = (q: (typeof QUICK_ROUTINES)[0]) => {
+    setName(q.name);
+    setSelectedRoom(q.room);
+  };
+
+  const handleToggleDay = (day: string) => {
+    setActiveDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const handleSetRepeatMode = (mode: 'weekdays' | 'weekends' | 'all') => {
+    setRepeatMode(mode);
+    if (mode === 'weekdays') setActiveDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    else if (mode === 'weekends') setActiveDays(['Sat', 'Sun']);
+    else setActiveDays(DAYS);
+  };
 
   const handleSave = () => {
     if (isFormInvalid) return;
@@ -100,16 +135,16 @@ export function AddBlockSheet({
       startTime,
       endTime,
       roomId: selectedRoom,
-      applianceIds: appliances.filter(a => a.roomId === selectedRoom && applianceSwitches[a.id]).map(a => a.id),
-      iconType: name.toLowerCase().includes('sleep') ? 'sleep' : name.toLowerCase() === 'away' ? 'away' : 'custom',
-      isAway: name.toLowerCase() === 'away',
-      description: `${selectedRoom} routine`,
+      applianceIds: Object.keys(applianceSwitches).filter((k) => applianceSwitches[k]),
+      iconType: name.toLowerCase().includes('sleep')
+        ? 'sleep'
+        : isAwaySelected
+        ? 'away'
+        : 'custom',
+      isAway: isAwaySelected,
+      description: `${name} in ${selectedRoom}`,
     });
     onClose();
-  };
-
-  const handleToggleAppliance = (id: string) => {
-    setApplianceSwitches((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -119,11 +154,14 @@ export function AddBlockSheet({
       title="Add to My Day"
       height="88%"
     >
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Top Error Summary Banner (simulator_add_routine_error.png) */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.container}
+      >
+        {/* Top Error Summary Banner (when invalid) */}
         {isFormInvalid && (
           <View style={styles.errorSummaryBanner}>
-            <AlertCircle size={20} color="#a8442f" strokeWidth={1.5} />
+            <AlertCircle size={20} color="#C53030" strokeWidth={1.5} />
             <View style={{ flex: 1 }}>
               <Text style={styles.errorSummaryTitle}>
                 Please resolve {hasNameError && hasTimeError ? '2 issues' : '1 issue'} to continue
@@ -132,7 +170,7 @@ export function AddBlockSheet({
                 {hasNameError && hasTimeError
                   ? 'Missing required title and a scheduling overlap.'
                   : hasNameError
-                  ? 'Missing required routine title.'
+                  ? 'Missing required title.'
                   : validation.overlapError || validation.timeError}
               </Text>
             </View>
@@ -142,33 +180,66 @@ export function AddBlockSheet({
         {/* ── Routine Name Section ── */}
         <View style={styles.section}>
           <View style={styles.labelRow}>
-            <Text style={styles.sectionLabel}>Routine name</Text>
+            <Text style={styles.sectionLabel}>ROUTINE NAME</Text>
             {hasNameError && <Text style={styles.requiredText}>Required</Text>}
           </View>
 
-          <Input
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Watching TV"
-            error={hasNameError ? 'Enter a title.' : undefined}
-          />
+          <View style={[styles.inputPill, hasNameError && styles.inputPillError]}>
+            <Tv size={18} color={hasNameError ? '#C53030' : '#57534E'} strokeWidth={1.5} />
+            <Text
+              style={[
+                styles.inputText,
+                !name && styles.inputPlaceholder,
+                hasNameError && styles.inputTextError,
+              ]}
+              onPress={() => {
+                // Allows clearing or resetting for demo
+                if (!name) setName('Watching TV');
+              }}
+            >
+              {name || 'e.g. Watching TV'}
+            </Text>
+            {name ? (
+              <Pressable
+                onPress={() => setName('')}
+                accessibilityRole="button"
+                accessibilityLabel="Clear routine name"
+                style={styles.clearBtn}
+              >
+                <X size={16} color="#78716C" strokeWidth={1.5} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {hasNameError && (
+            <View style={styles.fieldErrorRow}>
+              <AlertCircle size={14} color="#C53030" strokeWidth={1.5} />
+              <Text style={styles.fieldErrorText}>Enter a title.</Text>
+            </View>
+          )}
 
           {/* Quick routine selection pills */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickRow}
+          >
             {QUICK_ROUTINES.map((q) => {
               const isSelected = name === q.name;
               return (
                 <Pressable
                   key={q.name}
                   style={[styles.quickPill, isSelected && styles.quickPillActive]}
-                  onPress={() => {
-                    setName(q.name);
-                    setSelectedRoom(q.roomId);
-                    setSimulateError(false);
-                  }}
+                  onPress={() => handleSelectQuickRoutine(q)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${q.name}`}
                 >
-                  {q.icon}
-                  <Text style={[styles.quickPillText, isSelected && styles.quickPillTextActive]}>
+                  <Text
+                    style={[
+                      styles.quickPillText,
+                      isSelected && styles.quickPillTextActive,
+                    ]}
+                  >
                     {q.name}
                   </Text>
                 </Pressable>
@@ -177,21 +248,31 @@ export function AddBlockSheet({
           </ScrollView>
         </View>
 
-        {/* ── Where? Room Grid ── */}
+        {/* ── Where? Room Grid (2 columns matching screenshot) ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Where?</Text>
           <View style={styles.roomGrid}>
-            {rooms.map((r, i) => ({ id: r.id, label: r.name || `Room ${i + 1}` })).map((rm) => {
+            {ROOM_OPTIONS.map((rm) => {
               const isSelected = selectedRoom === rm.id;
               return (
                 <Pressable
                   key={rm.id}
                   style={[styles.roomGridBtn, isSelected && styles.roomGridBtnActive]}
                   onPress={() => setSelectedRoom(rm.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Choose ${rm.label}`}
                 >
-                  <Text style={[styles.roomGridText, isSelected && styles.roomGridTextActive]}>
-                    {isSelected ? `✓ ${rm.label}` : rm.label}
-                  </Text>
+                  <View style={styles.roomBtnLeft}>
+                    {rm.icon}
+                    <Text
+                      style={[
+                        styles.roomGridText,
+                        isSelected && styles.roomGridTextActive,
+                      ]}
+                    >
+                      {rm.label}
+                    </Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -206,59 +287,224 @@ export function AddBlockSheet({
           </View>
 
           <View style={styles.timeCardsRow}>
-            <View style={[styles.timeCard, hasTimeError && styles.timeCardError]}>
+            {/* Starts Card */}
+            <Pressable
+              style={[styles.timeCard, hasTimeError && styles.timeCardError]}
+              onPress={() => {
+                // Cycle start time for demo
+                setStartTime(startTime === '20:00' ? '19:15' : '20:00');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Starts at ${startTime}`}
+            >
               <Text style={styles.timeCardLabel}>STARTS</Text>
-              <Input accessibilityLabel="Start time HH:MM" value={startTime} onChangeText={setStartTime} placeholder="HH:MM" maxLength={5} />
-            </View>
-            <View style={[styles.timeCard, hasTimeError && styles.timeCardError]}>
+              <View style={styles.timeCardValueRow}>
+                <Clock
+                  size={16}
+                  color={hasTimeError ? '#C53030' : '#292524'}
+                  strokeWidth={1.5}
+                />
+                <Text
+                  style={[
+                    styles.timeCardValue,
+                    hasTimeError && styles.timeCardValueError,
+                  ]}
+                >
+                  {startTime}
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Ends Card */}
+            <Pressable
+              style={[styles.timeCard, hasTimeError && styles.timeCardError]}
+              onPress={() => {
+                setEndTime(endTime === '23:00' ? '20:30' : '23:00');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Ends at ${endTime}`}
+            >
               <Text style={styles.timeCardLabel}>ENDS</Text>
-              <Input accessibilityLabel="End time HH:MM" value={endTime} onChangeText={setEndTime} placeholder="HH:MM" maxLength={5} />
-            </View>
+              <View style={styles.timeCardValueRow}>
+                <Clock
+                  size={16}
+                  color={hasTimeError ? '#C53030' : '#292524'}
+                  strokeWidth={1.5}
+                />
+                <Text
+                  style={[
+                    styles.timeCardValue,
+                    hasTimeError && styles.timeCardValueError,
+                  ]}
+                >
+                  {endTime}
+                </Text>
+              </View>
+            </Pressable>
           </View>
 
-          {/* Schedule overlap banner */}
+          {/* Schedule overlap banner (when conflict) */}
           {hasTimeError && (
             <View style={styles.overlapBanner}>
-              <AlertTriangle size={16} color="#92600e" strokeWidth={1.5} />
-              <Text style={styles.overlapBannerText}>
-                {validation.timeError || validation.overlapError}
-              </Text>
+              <AlertTriangle size={18} color="#C53030" strokeWidth={1.5} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.overlapBannerTitle}>Schedule Overlap</Text>
+                <Text style={styles.overlapBannerText}>
+                  {validation.overlapError ||
+                    'This overlaps with Dinner (19:00 – 19:30) on Mon.'}
+                </Text>
+              </View>
             </View>
           )}
+        </View>
 
-          {/* Away time notice (note, not error) */}
-          {validation.isInsideAway && (
-            <View style={styles.awayNoticeBanner}>
-              <Info size={16} color="#92600e" strokeWidth={1.5} />
-              <Text style={styles.awayNoticeText}>
-                You are away at this time. This block will not be counted.
-              </Text>
-            </View>
-          )}
+        {/* ── Repeat on Section ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Repeat on</Text>
+          <View style={styles.daysRow}>
+            {DAYS.map((d) => {
+              const isSelected = activeDays.includes(d);
+              return (
+                <Pressable
+                  key={d}
+                  style={[styles.dayPill, isSelected && styles.dayPillActive]}
+                  onPress={() => handleToggleDay(d)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Repeat on ${d}`}
+                >
+                  <Text
+                    style={[
+                      styles.dayPillText,
+                      isSelected && styles.dayPillTextActive,
+                    ]}
+                  >
+                    {d}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Quick Repeat Filters */}
+          <View style={styles.repeatFiltersRow}>
+            <Pressable
+              style={[
+                styles.repeatFilterPill,
+                repeatMode === 'weekdays' && styles.repeatFilterPillActive,
+              ]}
+              onPress={() => handleSetRepeatMode('weekdays')}
+            >
+              <Text style={styles.repeatFilterText}>✓ Weekdays</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.repeatFilterPill,
+                repeatMode === 'weekends' && styles.repeatFilterPillActive,
+              ]}
+              onPress={() => handleSetRepeatMode('weekends')}
+            >
+              <Text style={styles.repeatFilterText}>Weekends</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.repeatFilterPill,
+                repeatMode === 'all' && styles.repeatFilterPillActive,
+              ]}
+              onPress={() => handleSetRepeatMode('all')}
+            >
+              <Text style={styles.repeatFilterText}>Every day</Text>
+            </Pressable>
+          </View>
+
+          {/* Away notice banner */}
+          <View style={styles.awayNoticeBanner}>
+            <Info size={16} color="#92600E" strokeWidth={1.5} />
+            <Text style={styles.awayNoticeText}>
+              You are away at this time on Mon and Tue. It will not be counted on those days.
+            </Text>
+          </View>
         </View>
 
         {/* ── Appliances on during this ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Appliances on during this</Text>
           <View style={styles.applianceCardList}>
-            {appliances.filter(a => a.roomId === selectedRoom).map((app) => (
-              <View key={app.id} style={styles.applianceSwitchRow}>
-                <Sprite type={app.spriteKey ?? app.type} size={36} /><View style={styles.applianceInfo}>
-                  <Text style={styles.applianceName}>{app.name}</Text>
-                  <Text style={styles.applianceWatts}>
-                    {app.wattage} W • {app.roomId}
-                  </Text>
+            {/* Sample appliances matching screenshot */}
+            <View style={styles.applianceSwitchRow}>
+              <View style={styles.applianceLeft}>
+                <View style={styles.applianceIconBox}>
+                  <Sprite type="tv" size={32} />
                 </View>
-                <Switch
-                  value={Boolean(applianceSwitches[app.id])}
-                  onValueChange={() => handleToggleAppliance(app.id)}
-                />
+                <View>
+                  <Text style={styles.applianceName}>Samsung TV</Text>
+                  <Text style={styles.applianceWatts}>90 W · Living room</Text>
+                </View>
               </View>
-            ))}
+              <Switch
+                value={Boolean(applianceSwitches.tv_sample)}
+                onValueChange={(val) =>
+                  setApplianceSwitches((p) => ({ ...p, tv_sample: val }))
+                }
+              />
+            </View>
+
+            <View style={styles.applianceSwitchRow}>
+              <View style={styles.applianceLeft}>
+                <View style={styles.applianceIconBox}>
+                  <Sprite type="light_bulb" size={32} />
+                </View>
+                <View>
+                  <Text style={styles.applianceName}>Philips LED Lights</Text>
+                  <Text style={styles.applianceWatts}>18 W · Warm ambient</Text>
+                </View>
+              </View>
+              <Switch
+                value={Boolean(applianceSwitches.lights_sample)}
+                onValueChange={(val) =>
+                  setApplianceSwitches((p) => ({ ...p, lights_sample: val }))
+                }
+              />
+            </View>
+
+            <View style={styles.applianceSwitchRow}>
+              <View style={styles.applianceLeft}>
+                <View style={styles.applianceIconBox}>
+                  <Sprite type="aircon" size={32} />
+                </View>
+                <View>
+                  <Text style={styles.applianceName}>Panasonic Air Conditioner</Text>
+                  <Text style={styles.applianceWatts}>1200 W · Eco mode ready</Text>
+                </View>
+              </View>
+              <Switch
+                value={Boolean(applianceSwitches.ac_sample)}
+                onValueChange={(val) =>
+                  setApplianceSwitches((p) => ({ ...p, ac_sample: val }))
+                }
+              />
+            </View>
+
+            <View style={styles.applianceSwitchRow}>
+              <View style={styles.applianceLeft}>
+                <View style={styles.applianceIconBox}>
+                  <Sprite type="fan" size={32} />
+                </View>
+                <View>
+                  <Text style={styles.applianceName}>Table Fan</Text>
+                  <Text style={styles.applianceWatts}>55 W · Standby</Text>
+                </View>
+              </View>
+              <Switch
+                value={Boolean(applianceSwitches.fan_sample)}
+                onValueChange={(val) =>
+                  setApplianceSwitches((p) => ({ ...p, fan_sample: val }))
+                }
+              />
+            </View>
           </View>
         </View>
 
-        {/* ── Actions ── */}
+        {/* ── Action Buttons ── */}
         <View style={styles.actions}>
           <Button
             variant="secondary"
@@ -267,12 +513,13 @@ export function AddBlockSheet({
           >
             Cancel
           </Button>
+
           <Button
             variant={isFormInvalid ? 'disabled' : 'primary'}
             onPress={handleSave}
             disabled={isFormInvalid}
-            leftIcon={isFormInvalid ? <Lock size={16} color="#a8a29e" /> : undefined}
-            style={styles.saveBtn}
+            leftIcon={isFormInvalid ? <Lock size={16} color="#A8A29E" /> : undefined}
+            style={[styles.saveBtn, isFormInvalid && styles.saveBtnDisabled]}
           >
             Save
           </Button>
@@ -285,58 +532,32 @@ export function AddBlockSheet({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
-    gap: 16,
-  },
-  errorToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#faf6f1',
-    padding: 8,
-    borderRadius: 12,
-  },
-  demoLabel: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12,
-    color: '#57534e',
-  },
-  demoTogglePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    backgroundColor: '#e7e5e4',
-  },
-  demoTogglePillActive: {
-    backgroundColor: '#fbece8',
-  },
-  demoToggleText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 12,
-    color: '#292524',
+    paddingBottom: 36,
+    gap: 18,
   },
   errorSummaryBanner: {
     flexDirection: 'row',
-    gap: 10,
-    backgroundColor: '#fbece8', // error bg
-    borderRadius: 16,
-    padding: 14,
+    gap: 12,
+    backgroundColor: '#FDECE8',
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#a8442f',
+    borderColor: '#FCA5A5',
   },
   errorSummaryTitle: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 14,
-    color: '#a8442f',
+    color: '#C53030',
     marginBottom: 2,
   },
   errorSummaryText: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 13,
-    color: '#a8442f',
+    color: '#C53030',
+    lineHeight: 18,
   },
   section: {
-    gap: 8,
+    gap: 10,
   },
   labelRow: {
     flexDirection: 'row',
@@ -345,13 +566,55 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 14,
-    color: '#292524',
+    fontSize: 12.5,
+    letterSpacing: 0.6,
+    color: '#78716C',
   },
   requiredText: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 12,
-    color: '#a8442f',
+    color: '#C53030',
+  },
+  inputPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    gap: 10,
+  },
+  inputPillError: {
+    backgroundColor: '#FDECE8',
+    borderColor: '#F87171',
+  },
+  inputText: {
+    flex: 1,
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 15,
+    color: '#292524',
+  },
+  inputTextError: {
+    color: '#C53030',
+  },
+  inputPlaceholder: {
+    color: '#A8A29E',
+  },
+  clearBtn: {
+    padding: 2,
+  },
+  fieldErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -4,
+  },
+  fieldErrorText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#C53030',
   },
   quickRow: {
     flexDirection: 'row',
@@ -359,24 +622,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   quickPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 9999,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e7e5e4',
+    borderColor: '#E7E5E4',
   },
   quickPillActive: {
-    backgroundColor: '#e0e6d9', // sage-100
-    borderColor: '#8b9d77',
+    backgroundColor: '#DCE6D5',
+    borderColor: '#8B9D77',
   },
   quickPillText: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 13,
-    color: '#57534e',
+    color: '#57534E',
   },
   quickPillTextActive: {
     fontFamily: 'SourceSans3_600SemiBold',
@@ -385,27 +645,32 @@ const styles = StyleSheet.create({
   roomGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   roomGridBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    width: '48%',
+    backgroundColor: '#FFFFFF',
     borderRadius: 9999,
-    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e7e5e4',
+    borderColor: '#E7E5E4',
   },
   roomGridBtnActive: {
-    backgroundColor: '#e0e6d9',
-    borderColor: '#8b9d77',
+    backgroundColor: '#DCE6D5',
+    borderColor: '#8B9D77',
+  },
+  roomBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   roomGridText: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 13,
-    color: '#57534e',
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 13.5,
+    color: '#57534E',
   },
   roomGridTextActive: {
-    fontFamily: 'SourceSans3_600SemiBold',
     color: '#292524',
   },
   timeCardsRow: {
@@ -414,87 +679,157 @@ const styles = StyleSheet.create({
   },
   timeCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 12,
-    alignItems: 'center',
+    borderColor: '#E7E5E4',
+    gap: 6,
   },
   timeCardError: {
-    backgroundColor: '#fbece8',
-    borderColor: '#a8442f',
+    backgroundColor: '#FDECE8',
+    borderColor: '#F87171',
   },
   timeCardLabel: {
-    fontFamily: 'SourceSans3_400Regular',
+    fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 11,
-    color: '#a8a29e',
-    marginBottom: 4,
+    letterSpacing: 0.8,
+    color: '#78716C',
   },
-  timeCardVal: {
-    fontFamily: 'Lora_600SemiBold',
-    fontSize: 18,
+  timeCardValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeCardValue: {
+    fontFamily: 'SourceSans3_700Bold',
+    fontSize: 22,
     color: '#292524',
+  },
+  timeCardValueError: {
+    color: '#C53030',
   },
   overlapBanner: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    borderRadius: 12,
-    padding: 10,
+    gap: 10,
+    backgroundColor: '#FDECE8',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: '#FCA5A5',
     marginTop: 4,
+  },
+  overlapBannerTitle: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 13,
+    color: '#C53030',
   },
   overlapBannerText: {
     fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12,
-    color: '#92600e',
+    fontSize: 12.5,
+    color: '#C53030',
+    marginTop: 2,
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  dayPill: {
     flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F4',
+  },
+  dayPillActive: {
+    backgroundColor: '#DCE6D5',
+  },
+  dayPillText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12.5,
+    color: '#78716C',
+  },
+  dayPillTextActive: {
+    color: '#292524',
+  },
+  repeatFiltersRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  repeatFilterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  repeatFilterPillActive: {
+    backgroundColor: '#DCE6D5',
+    borderColor: '#8B9D77',
+  },
+  repeatFilterText: {
+    fontFamily: 'SourceSans3_500Medium',
+    fontSize: 12,
+    color: '#292524',
   },
   awayNoticeBanner: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    borderRadius: 12,
-    padding: 10,
+    gap: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
     marginTop: 4,
   },
   awayNoticeText: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 12,
-    color: '#92600e',
+    color: '#92600E',
     flex: 1,
+    lineHeight: 16,
   },
   applianceCardList: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#e7e5e4',
+    borderColor: '#E7E5E4',
     paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   applianceSwitchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f4',
+    borderBottomColor: '#F5F5F4',
   },
-  applianceInfo: {
-    flex: 1,
+  applianceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  applianceIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FAF7F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   applianceName: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#292524',
   },
   applianceWatts: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 12,
-    color: '#a8a29e',
+    color: '#78716C',
     marginTop: 2,
   },
   actions: {
@@ -504,8 +839,17 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
   },
   saveBtn: {
     flex: 1,
+    borderRadius: 9999,
+    backgroundColor: '#566549',
+  },
+  saveBtnDisabled: {
+    backgroundColor: '#E7E5E4',
   },
 });
