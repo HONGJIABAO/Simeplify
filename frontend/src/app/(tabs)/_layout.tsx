@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { House, Recycle, Sprout, ReceiptText, User } from 'lucide-react-native';
 
@@ -17,13 +17,13 @@ const TAB_CONFIG: Record<
 
 type TabsTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-function FloatingTabBar({ state, navigateToTab }: TabsTabBarProps) {
+function FloatingTabBar({ state }: any) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.barWrapper, { bottom: Math.max(insets.bottom, 16) }]}>
       <View style={styles.barContainer}>
-        {state.routes.map((route, index) => {
+        {state.routes.map((route: any, index: number) => {
           const isFocused = state.index === index;
           const config = TAB_CONFIG[route.name] || {
             label: route.name,
@@ -33,7 +33,7 @@ function FloatingTabBar({ state, navigateToTab }: TabsTabBarProps) {
 
           const onPress = () => {
             if (!isFocused) {
-              navigateToTab(route.key);
+              router.navigate(`/(tabs)/${route.name}` as any);
             }
           };
 

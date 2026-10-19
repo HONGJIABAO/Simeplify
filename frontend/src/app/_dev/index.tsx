@@ -10,10 +10,16 @@ const SCREENS = [
   { id: 'S3.1', title: 'Onboarding: Schedule', route: '/(onboarding)/schedule', status: 'coming soon' },
   { id: 'S3.2', title: 'Onboarding: Layout', route: '/(onboarding)/layout', status: 'coming soon' },
   { id: 'S3.3', title: 'Onboarding: Appliances', route: '/(onboarding)/appliances', status: 'coming soon' },
-  { id: 'S4', title: 'Simulator', route: '/(tabs)/simulator', status: 'Tab placeholder' },
+  { id: 'S4', title: 'Simulator', route: '/(tabs)/simulator', status: 'Stage 8 ✓' },
+  { id: 'S4 Gallery', title: 'Simulator: All States', route: '/_dev/simulator', status: 'Stages 6, 7 & 8 ✓' },
   { id: 'S5', title: 'Bin', route: '/(tabs)/bin', status: 'Tab placeholder' },
+
   { id: 'S6', title: 'Community', route: '/(tabs)/community', status: 'Tab placeholder' },
   { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Built (S7.1-S7.4)' },
+
+  { id: 'S6', title: 'Community', route: '/(tabs)/community', status: '100% Interactive ✓' },
+  { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Tab placeholder' },
+
   { id: 'S8', title: 'Profile', route: '/(tabs)/profile', status: 'Tab placeholder' },
   { id: 'S9', title: 'Notifications', route: '/notifications', status: 'Placeholder' },
 ];
