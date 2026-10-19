@@ -1,6 +1,10 @@
 import React from 'react';
-import { TabPlaceholderScreen } from '@/components/layout/TabPlaceholderScreen';
+import { useLocalSearchParams } from 'expo-router';
+import ProfileScreen from '@/features/profile/ProfileScreen';
+import { UserGender } from '@/lib/authSession';
 
-export default function ProfileScreen() {
-  return <TabPlaceholderScreen title="Profile" />;
+export default function ProfileTab() {
+  const { gender } = useLocalSearchParams<{ gender?: UserGender }>();
+
+  return <ProfileScreen initialGender={gender} />;
 }

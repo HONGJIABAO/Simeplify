@@ -5,22 +5,35 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 
 const SCREENS = [
-  { id: 'S1', title: 'Login', route: '/(auth)/login', status: 'coming soon' },
-  { id: 'S2', title: 'Sign Up', route: '/(auth)/sign-up', status: 'coming soon' },
+  { id: 'S1', title: 'Login: Default', route: '/(auth)/login', status: 'Ready' },
+  { id: 'S1a', title: 'Login: Wrong Password Error', route: '/(auth)/login?state=error', status: 'Ready' },
+  { id: 'S1b', title: 'Login: Loading Spinner', route: '/(auth)/login?state=loading', status: 'Ready' },
+  { id: 'S2', title: 'Sign Up: Empty (Disabled)', route: '/(auth)/sign-up', status: 'Ready' },
+  { id: 'S2a', title: 'Sign Up: Filled State', route: '/(auth)/sign-up?state=filled', status: 'Ready' },
+  { id: 'S2b', title: 'Sign Up: Field Errors', route: '/(auth)/sign-up?state=error', status: 'Ready' },
   { id: 'S3.1', title: 'Onboarding: Schedule', route: '/(onboarding)/schedule', status: 'coming soon' },
   { id: 'S3.2', title: 'Onboarding: Layout', route: '/(onboarding)/layout', status: 'coming soon' },
   { id: 'S3.3', title: 'Onboarding: Appliances', route: '/(onboarding)/appliances', status: 'coming soon' },
   { id: 'S4', title: 'Simulator', route: '/(tabs)/simulator', status: 'Stage 8 ✓' },
   { id: 'S4 Gallery', title: 'Simulator: All States', route: '/_dev/simulator', status: 'Stages 6, 7 & 8 ✓' },
-  { id: 'S5', title: 'Bin', route: '/(tabs)/bin', status: 'Tab placeholder' },
-
-  { id: 'S6', title: 'Community', route: '/(tabs)/community', status: 'Tab placeholder' },
-  { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Built (S7.1-S7.4)' },
-
+  { id: 'S5.1', title: 'Bin: Home', route: '/(tabs)/bin', status: 'Ready' },
+  { id: 'S5.2a', title: 'Bin: Camera Scanner (Ready)', route: '/bin/scanner', status: 'Ready' },
+  { id: 'S5.2b', title: 'Bin: Camera (Permission Denied)', route: '/bin/scanner?state=permission-denied', status: 'Ready' },
+  { id: 'S5.2c', title: 'Bin: Camera (Scanning Spinner)', route: '/bin/scanner?state=scanning', status: 'Ready' },
+  { id: 'S5.2d', title: 'Bin: Gallery Upload', route: '/bin/upload', status: 'Ready' },
+  { id: 'S5.3a', title: 'Bin: Result - Paper (+10 pts)', route: '/bin/result?binType=paper', status: 'Ready' },
+  { id: 'S5.3b', title: 'Bin: Result - Plastic (+10 pts)', route: '/bin/result?binType=plastic', status: 'Ready' },
+  { id: 'S5.3c', title: 'Bin: Result - Glass & Metal (+10 pts)', route: '/bin/result?binType=glass_metal', status: 'Ready' },
+  { id: 'S5.3d', title: 'Bin: Result - General Waste (0 pts)', route: '/bin/result?binType=general', status: 'Ready' },
+  { id: 'S5.3e', title: 'Bin: Result - Daily Limit Reached', route: '/bin/result?binType=paper&state=daily-limit', status: 'Ready' },
+  { id: 'S5.3f', title: 'Bin: Result - Low Confidence', route: '/bin/result?state=low-confidence', status: 'Ready' },
+  { id: 'S5.3g', title: 'Bin: Result - AI Error', route: '/bin/result?state=error', status: 'Ready' },
+  { id: 'S5.3h', title: 'Bin: Result - Loading Spinner', route: '/bin/result?state=loading', status: 'Ready' },
   { id: 'S6', title: 'Community', route: '/(tabs)/community', status: '100% Interactive ✓' },
-  { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Tab placeholder' },
-
-  { id: 'S8', title: 'Profile', route: '/(tabs)/profile', status: 'Tab placeholder' },
+  { id: 'S7', title: 'Scanner', route: '/(tabs)/scanner', status: 'Built (S7.1-S7.4)' },
+  { id: 'S8', title: 'Profile: Current Session', route: '/(tabs)/profile', status: 'Ready' },
+  { id: 'S8a', title: 'Profile: Boy Avatar Preview', route: '/(tabs)/profile?gender=boy', status: 'Ready' },
+  { id: 'S8b', title: 'Profile: Girl Avatar Preview', route: '/(tabs)/profile?gender=girl', status: 'Ready' },
   { id: 'S9', title: 'Notifications', route: '/notifications', status: 'Placeholder' },
 ];
 

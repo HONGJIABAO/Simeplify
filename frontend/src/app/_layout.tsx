@@ -20,14 +20,62 @@ import {
 import { ToastProvider } from '@/components/Toast';
 import '../global.css';
 
+// Silence React 19 / react-native-web responder event warnings on web
+if (typeof window !== 'undefined') {
+  try {
+    // Register with @expo/log-box directly on web if available
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const expoLogBox = require('@expo/log-box');
+    if (expoLogBox?.default?.ignoreLogs) {
+      expoLogBox.default.ignoreLogs([
+        'Unknown event handler property `onResponderTerminate`',
+        'Unknown event handler property',
+        /onResponderTerminate/,
+        /onResponder/,
+        /Unknown event handler property/,
+      ]);
+    }
+  } catch {
+    // ignore
+  }
+
+  const shouldSuppress = (args: unknown[]) => {
+    const text = args
+      .map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a ?? '')))
+      .join(' ');
+    return (
+      text.includes('onResponder') ||
+      text.includes('onResponderTerminate') ||
+      text.includes('Unknown event handler property') ||
+      text.includes('onStartShouldSetResponder')
+    );
+  };
+
+  const origError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (shouldSuppress(args)) return;
+    origError.apply(console, args);
+  };
+
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (shouldSuppress(args)) return;
+    origWarn.apply(console, args);
+  };
+}
+
 LogBox.ignoreLogs([
+  'Unknown event handler property `onResponderTerminate`',
   'Unknown event handler property',
   'onResponder',
+  /onResponderTerminate/,
+  /onResponder/,
+  /Unknown event handler property/,
 ]);
+
 if (Platform.OS === 'web') {
   LogBox.ignoreAllLogs();
 }
-
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
