@@ -12,9 +12,11 @@
  */
 
 import { HOUSEHOLD_MILESTONE_PTS, LEAF_DAILY_DEED_CAP, SHOW_CO2_CARD } from './flags';
+import { MOCK_SIMULATOR_ITEMS } from '@/features/simulator/logic/mockHomeData';
 import { createDefaultRooms } from '@/features/simulator/logic/roomData';
-import { WORKPLACE_DEFAULT_WATTS } from '@/features/simulator/logic/spriteMap';
-import type { StoredPlacedItem, StoredRoom } from '@/features/simulator/logic/storage';
+import type { StoredRoom } from '@/features/simulator/logic/storage';
+
+export const WORKPLACE_DEFAULT_WATTS = 80;
 export { SHOW_CO2_CARD };
 
 // ---------------------------------------------------------------------------
@@ -113,115 +115,53 @@ export type Appliance = {
   color: string;
 };
 
-export const MOCK_APPLIANCES: Appliance[] = [
-  {
-    id: 'ac1',
-    name: 'Panasonic Air Conditioner',
-    type: 'air_conditioner',
-    brand: 'Panasonic',
-    wattage: 1200,
-    stars: 3,
-    roomId: 'bedroom',
-    posX: 0.25,
-    posY: 0.65,
-    alwaysOn: false,
-    color: '#d4a373', // tan-400
-  },
-  {
-    id: 'wh1',
-    name: 'Water heater',
-    type: 'water_heater',
-    brand: 'Rheem',
-    wattage: 3500,
-    stars: 3,
-    roomId: 'bathroom',
-    posX: 0.7,
-    posY: 0.75,
-    alwaysOn: false,
-    color: '#8b9d77', // sage-400
-  },
-  {
-    id: 'fridge1',
-    name: 'Inverter Fridge',
-    type: 'refrigerator',
-    brand: 'Sharp',
-    wattage: 100,
-    stars: 4,
-    roomId: 'kitchen',
-    posX: 0.65,
-    posY: 0.25,
-    alwaysOn: true,
-    color: '#5c4033', // brown
-  },
-  {
-    id: 'fan1',
-    name: 'Table Fan',
-    type: 'fan',
-    brand: 'Panasonic',
-    wattage: 50,
-    stars: 3,
-    roomId: 'bedroom',
-    posX: 0.15,
-    posY: 0.75,
-    alwaysOn: false,
-    color: '#a8b896', // sage-300
-  },
-  {
-    id: 'lights1',
-    name: 'Philips LED Lights',
-    type: 'lights',
-    brand: 'Philips',
-    wattage: 20,
-    stars: 5,
-    roomId: 'living',
-    posX: 0.2,
-    posY: 0.2,
-    alwaysOn: false,
-    color: '#f6e8d8', // tan-100 (with stone-800 text)
-  },
-  {
-    id: 'workplace1',
-    name: 'Workplace',
-    type: 'workplace',
-    brand: '',
-    wattage: WORKPLACE_DEFAULT_WATTS,
-    stars: 0,
-    roomId: 'f2-A',
-    posX: 0.28,
-    posY: 0.24,
-    alwaysOn: false,
-    color: '#8B9D77',
-    spriteKey: 'workplace',
-  },
-];
+export {
+  type RawSpecItem,
+  RAW_SPEC_APPLIANCES,
+  RAW_SPEC_FURNITURE,
+  SKIPPED_ITEM_TYPES,
+  MOCK_FLOOR2_EXTRA_ITEMS,
+  MOCK_SIMULATOR_ITEMS,
+  MOCK_SIMULATOR_ITEMS_ALL,
+} from '@/features/simulator/logic/mockHomeData';
 
-export const MOCK_SIMULATOR_ITEMS: StoredPlacedItem[] = [
-  ...MOCK_APPLIANCES.map((appliance) => ({
-    ...appliance,
-    category: 'Appliances' as const,
-    spriteKey: appliance.spriteKey || appliance.type,
-    roomId: appliance.roomId.startsWith('f') ? appliance.roomId : ({
-      living: 'f1-A', kitchen: 'f1-B', bedroom: 'f1-C', bathroom: 'f1-D',
-    } as Record<string, string>)[appliance.roomId] || appliance.roomId,
-  })),
-  { id: 'bed1', category: 'Furniture', type: 'bed', spriteKey: 'bed', name: 'Bed', roomId: 'f1-C', posX: 0.20, posY: 0.77, rotation: 0 },
-  { id: 'sofa1', category: 'Furniture', type: 'sofa', spriteKey: 'sofa', name: 'Sofa', roomId: 'f1-A', posX: 0.28, posY: 0.34, rotation: 0 },
-];
+export const MOCK_APPLIANCES: Appliance[] = MOCK_SIMULATOR_ITEMS
+  .filter((item) => item.category === 'Appliances')
+  .map((item) => ({
+    id: item.id,
+    name: item.name,
+    type: item.type as ApplianceType,
+    brand: item.brand ?? '',
+    wattage: item.wattage ?? 100,
+    stars: item.stars ?? 3,
+    roomId: item.roomId,
+    posX: item.posX,
+    posY: item.posY,
+    alwaysOn: Boolean(item.alwaysOn),
+    color: item.color ?? '#8b9d77',
+    spriteKey: item.spriteKey,
+  }));
 
 // ---------------------------------------------------------------------------
 // Bill mock numbers
 // kWh is the source; RM amounts are computed by billCalc.
-// One set of numbers everywhere (page_refined.md §4).
+// Total from current furnished appliances: 773 kWh (max bill: RM 353.32)
 // ---------------------------------------------------------------------------
-export const MOCK_MONTHLY_KWH = 525; // → RM 233 from billCalc (no AFA)
+export const MOCK_MONTHLY_KWH = 773;
 
 // Appliance breakdown (kWh/month) — totals to MOCK_MONTHLY_KWH
 export const MOCK_APPLIANCE_KWH: Record<string, number> = {
-  ac1: 284,      // ~54% of bill
-  wh1: 105,      // ~20%
-  fridge1: 100,  // ~19%
-  fan1: 18,      // ~3%
-  lights1: 18,   // ~2%  (remaining)
+  'f2-ac-master': 276,
+  'f1-ac-living': 245,
+  'f1-fridge-kitchen': 108,
+  'f1-wh-bath': 105,
+  'f2-workplace-bed2': 19,
+  'f1-tv-living': 11,
+  'f1-lamp-living': 2,
+  'f1-lamp-kitchen': 2,
+  'f2-lamp-master': 2,
+  'f1-lamp-bed1': 1,
+  'f2-lamp-bed2': 1,
 };
 
 // ---------------------------------------------------------------------------

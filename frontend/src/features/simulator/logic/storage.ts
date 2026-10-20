@@ -50,8 +50,8 @@ export interface SimulationState {
   viewedFloor?: 1 | 2;
 }
 
-const LAYOUT_KEY = 'simeplify_simulator_layout_v3';
-const LEGACY_LAYOUT_KEY = 'simeplify_simulator_layout_v2';
+const LAYOUT_KEY = 'simeplify_simulator_layout_v4';
+const LEGACY_LAYOUT_KEY = 'simeplify_simulator_layout_v3';
 const SIM_KEY = 'simeplify_simulator_sim_v2';
 
 // In-memory fallback if localStorage is unavailable
@@ -83,7 +83,16 @@ export function loadLayoutState(): LayoutState | null {
   try {
     const raw = safeGetItem(LAYOUT_KEY) || safeGetItem(LEGACY_LAYOUT_KEY);
     if (raw) {
-      return JSON.parse(raw) as LayoutState;
+      const parsed = JSON.parse(raw) as LayoutState;
+      if (parsed.items) {
+        parsed.items = parsed.items.map((item) => {
+          if ((item.type === 'refrigerator' || item.spriteKey === 'refrigerator') && item.roomId !== 'f1-B') {
+            return { ...item, roomId: 'f1-B', posX: 0.7060, posY: 0.1374 };
+          }
+          return item;
+        });
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Failed to parse saved layout state:', err);

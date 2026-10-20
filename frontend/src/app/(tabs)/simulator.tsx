@@ -29,7 +29,7 @@ import { SPRITE_MAP, SpriteItemDef } from '@/features/simulator/logic/spriteMap'
 import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms } from '@/features/simulator/logic/roomData';
 import { clampPointToRect, containsPoint, FloorNumber, getFloorPlanLayout, getSlotRect, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
 import { getFloorSpriteSizes } from '@/features/simulator/logic/spriteSizing';
-import { Appliance } from '@/lib/mockData';
+import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 
 const FAST_FORWARD_CONFIG: Record<FastForwardPeriod, { durationSeconds: number; label: string }> = {
   '1w': { durationSeconds: 5, label: '1 week' },
@@ -51,7 +51,7 @@ export default function SimulatorScreen() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [rooms, setRooms] = useState<StoredRoom[]>(() => normalizeStoredRooms(initialLayout?.rooms));
   const [items, setItems] = useState<StoredPlacedItem[]>(() =>
-    (initialLayout?.items ?? []).map((item) => ({ ...item, roomId: migrateRoomId(item.roomId) }))
+    (initialLayout?.items && initialLayout.items.length > 0 ? initialLayout.items : MOCK_SIMULATOR_ITEMS).map((item) => ({ ...item, roomId: migrateRoomId(item.roomId) }))
   );
   const [currentFloor, setCurrentFloor] = useState<FloorNumber>(initialSimulation?.viewedFloor ?? 1);
   const setupRooms = useMemo(() => getSetUpRooms(rooms), [rooms]);

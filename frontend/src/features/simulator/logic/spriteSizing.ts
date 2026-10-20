@@ -29,12 +29,26 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     contentHeight: 279,
     targetRoomHeightFraction: 0.34,
   },
+  refrigerator: {
+    canvasWidth: 520,
+    canvasHeight: 388,
+    contentWidth: 161,
+    contentHeight: 279,
+    targetRoomHeightFraction: 0.34,
+  },
   shower: {
     canvasWidth: 520,
     canvasHeight: 388,
     contentWidth: 202,
     contentHeight: 235,
     targetRoomHeightFraction: 0.34,
+  },
+  water_heater: {
+    canvasWidth: 520,
+    canvasHeight: 388,
+    contentWidth: 202,
+    contentHeight: 235,
+    targetRoomHeightFraction: 0.12, // wall item (12%)
   },
   bed: {
     canvasWidth: 520,
@@ -100,6 +114,13 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     targetRoomHeightFraction: 0.18,
   },
   aircon: {
+    canvasWidth: 520,
+    canvasHeight: 388,
+    contentWidth: 320,
+    contentHeight: 130,
+    targetRoomHeightFraction: 0.12,
+  },
+  air_conditioner: {
     canvasWidth: 520,
     canvasHeight: 388,
     contentWidth: 320,

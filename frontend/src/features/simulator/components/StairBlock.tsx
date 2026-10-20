@@ -54,7 +54,7 @@ export function StairBlock({ floor, width, height, left, top, onChangeFloor }: S
         {goesUp
           ? <ArrowUp size={13} color="#566549" strokeWidth={1.5} />
           : <ArrowDown size={13} color="#566549" strokeWidth={1.5} />}
-        <Text style={styles.directionText}>{label}</Text>
+        <Text numberOfLines={1} style={styles.directionText}>{label}</Text>
       </View>
     </Pressable>
   );
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   pressed: {
     opacity: 0.85,
@@ -74,19 +74,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     minHeight: 24,
+    width: 'auto',
+    alignSelf: 'center',
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     gap: 3,
     paddingHorizontal: 6,
+    marginHorizontal: 2,
     borderRadius: 9999,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E7E5E4',
+    zIndex: 10,
   },
   directionText: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 12,
     color: '#566549',
+    flexShrink: 0,
   },
 });
 

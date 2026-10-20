@@ -21,6 +21,9 @@ export const ENABLE_FURNITURE_TAB: boolean = false;
 // TODO(open-item 7 / page_refined §5 item 7): "High usage" badge on Bill card has no threshold rule yet.
 export const HIGH_USAGE_THRESHOLD_RM: number | null = null;
 
+/** Flag to set up and furnish all floor 2 rooms (Bedroom 3 and Bathroom 2) */
+export const MOCK_FLOOR2_SETUP_ALL: boolean = false;
+
 // TODO(open-item 9 / page_refined §5 item 9): "Full Home LED" lights swap suggestion rule until lighting star rating rule exists.
 export const ENABLE_LIGHTS_SWAP: boolean = false;
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
-import { Hand, UserRound } from 'lucide-react-native';
+import { Hand } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -324,9 +324,9 @@ export function FloorPlan({
     );
   };
 
-  const currentFloorHasAppliance = items.some((item) => {
+  const homeHasAppliance = items.some((item) => {
     const room = rooms.find((candidate) => candidate.id === item.roomId);
-    return item.category === 'Appliances' && room?.floor === currentFloor && room.isSetUp;
+    return item.category === 'Appliances' && room?.isSetUp;
   });
 
   return (
@@ -343,19 +343,8 @@ export function FloorPlan({
               </Animated.View>
             </Animated.View>
 
-            <View pointerEvents="none" style={styles.floorPill}>
-              <Text style={styles.floorPillText}>{currentFloor}F</Text>
-            </View>
-
-            {avatarState.currentFloor !== currentFloor && (
-              <View pointerEvents="none" style={styles.residentPill}>
-                <UserRound size={14} color="#57534E" strokeWidth={1.5} />
-                <Text style={styles.residentPillText}>Resident is on {avatarState.currentFloor}F</Text>
-              </View>
-            )}
-
-            {!currentFloorHasAppliance && (
-              <View pointerEvents="none" style={styles.emptyPill}>
+            {!homeHasAppliance && (
+              <View pointerEvents="none" style={[styles.emptyPill, { right: Math.ceil(width * 0.14) + 14 }]}>
                 <Hand size={15} color="#57534E" strokeWidth={1.5} />
                 <Text style={styles.emptyPillText}>{isEditMode ? 'Nothing here yet. Drag an appliance from below.' : 'Nothing here yet. Tap Edit to add appliances.'}</Text>
               </View>
@@ -395,19 +384,6 @@ const styles = StyleSheet.create({
   floorLayer: { ...StyleSheet.absoluteFill },
   planBase: { position: 'absolute', top: 0, left: 0, backgroundColor: '#EFEAD8' },
   walkPath: { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: 'rgba(86, 101, 73, 0.55)', zIndex: 15 },
-  floorPill: {
-    position: 'absolute', top: 10, right: 10, minWidth: 42, minHeight: 30,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10,
-    borderRadius: 9999, backgroundColor: '#FAF6F1', borderWidth: 1,
-    borderColor: '#D6D3D1', zIndex: 80,
-  },
-  floorPillText: { fontFamily: 'Lora_600SemiBold', fontSize: 13, color: '#292524' },
-  residentPill: {
-    position: 'absolute', top: 10, left: 10, minHeight: 30, flexDirection: 'row',
-    alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 9999,
-    backgroundColor: '#FAF6F1', borderWidth: 1, borderColor: '#D6D3D1', zIndex: 80,
-  },
-  residentPillText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#57534E' },
   emptyPill: {
     position: 'absolute', bottom: 10, left: 10, right: 10, minHeight: 36,
     backgroundColor: '#FFFFFF', borderRadius: 9999, paddingVertical: 8,

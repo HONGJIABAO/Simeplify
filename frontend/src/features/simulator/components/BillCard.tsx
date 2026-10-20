@@ -7,7 +7,7 @@ export type FastForwardPeriod = '1w' | '1m' | '1y';
 
 interface BillCardProps {
   monthlyBillRm: number;
-  usageBadge: 'Low Usage' | 'Normal Usage' | 'High Usage';
+  usageBadge?: 'Low Usage' | 'Normal Usage' | 'High Usage' | null;
   simulatedDateStr: string;
   activeFastForward: FastForwardPeriod | null;
   isEditMode?: boolean;
@@ -20,7 +20,7 @@ interface BillCardProps {
 
 export function BillCard({
   monthlyBillRm,
-  usageBadge,
+  usageBadge: _usageBadge,
   simulatedDateStr,
   activeFastForward,
   isEditMode = false,
@@ -45,12 +45,6 @@ export function BillCard({
     transform: [{ translateX: (1 - menuProgress.value) * 20 }],
   }));
 
-  const badgeColors = {
-    'High Usage': { bg: '#F5DCC8', text: '#8C6541' },
-    'Normal Usage': { bg: '#EAE5D9', text: '#6B604B' },
-    'Low Usage': { bg: '#E0E6D9', text: '#566549' },
-  }[usageBadge];
-
   return (
     <View style={styles.topContainer}>
       <View style={styles.topRow}>
@@ -59,18 +53,13 @@ export function BillCard({
           style={styles.billCard}
           onPress={onPressBillCard}
           accessibilityRole="button"
-          accessibilityLabel={`Estimated monthly bill RM ${monthlyBillRm}, ${usageBadge}`}
+          accessibilityLabel={`Estimated monthly bill RM ${monthlyBillRm}`}
         >
-        {/* Header row with badge */}
+        {/* Header row */}
         <View style={styles.cardHeaderRow}>
           <View style={styles.titleRow}>
             <Gauge size={13} color="#78716C" strokeWidth={1.5} />
             <Text style={styles.cardTitle}>ESTIMATED BILL</Text>
-          </View>
-          <View style={[styles.badgeContainer, { backgroundColor: badgeColors.bg }]}>
-            <Text style={[styles.badgeText, { color: badgeColors.text }]}>
-              {usageBadge}
-            </Text>
           </View>
         </View>
 
