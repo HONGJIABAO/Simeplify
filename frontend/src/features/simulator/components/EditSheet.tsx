@@ -1,31 +1,73 @@
-import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, View, Text, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
+import { ChevronDown, ChevronUp, PackageOpen } from 'lucide-react-native';
 import { APPLIANCE_SPRITES, FURNITURE_SPRITES, SpriteItemDef } from '../logic/spriteMap';
 import { Sprite } from './Sprite';
 
 interface EditSheetProps {
   visible: boolean;
   onItemPointerDown: (item: SpriteItemDef, clientX: number, clientY: number) => void;
+  onItemDragMove?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
+  onItemDragEnd?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
   onItemTap: (item: SpriteItemDef) => void;
   selectedPendingKey?: string | null;
+  isDragging?: boolean;
+  initialCollapsed?: boolean;
 }
 
 export function EditSheet({
   visible,
   onItemPointerDown,
+  onItemDragMove,
+  onItemDragEnd,
   onItemTap,
   selectedPendingKey,
+  isDragging = false,
+  initialCollapsed = false,
 }: EditSheetProps) {
   const [activeTab, setActiveTab] = useState<'Appliances' | 'Furniture'>('Appliances');
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const [opacity] = useState(() => new Animated.Value(1));
+  const nativeDraggedKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!active) return;
+      Animated.timing(opacity, {
+        toValue: isDragging ? 0.3 : 1,
+        duration: reduced ? 0 : 400,
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => { active = false; };
+  }, [isDragging, opacity]);
 
   if (!visible) return null;
 
-  const currentItems = activeTab === 'Appliances' ? APPLIANCE_SPRITES : FURNITURE_SPRITES;
+  const currentItems = (activeTab === 'Appliances' ? APPLIANCE_SPRITES : FURNITURE_SPRITES)
+    .filter((item) => item.inTray);
 
   return (
-    <View style={styles.sheetContainer}>
-      {/* Drag Handle */}
-      <View style={styles.handle} />
+    <Animated.View style={[styles.sheetContainer, collapsed && styles.sheetCollapsed, { opacity }]}>
+      <Pressable
+        onPress={() => setCollapsed((value) => !value)}
+        style={styles.handleButton}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={collapsed ? 'Show item tray' : 'Collapse item tray'}
+      >
+        {collapsed ? <ChevronUp size={18} color="#57534E" /> : <ChevronDown size={18} color="#57534E" />}
+        <View style={styles.handle} />
+        <Text style={styles.handleText}>{collapsed ? 'Show item tray' : 'Collapse item tray'}</Text>
+      </Pressable>
+
+      {collapsed ? (
+        <View style={styles.collapsedStatus}>
+          <PackageOpen size={16} color="#566549" strokeWidth={1.5} />
+          <Text style={styles.collapsedText}>Items hidden</Text>
+        </View>
+      ) : <>
 
       {/* Segmented Tab Pill */}
       <View style={styles.segmentedContainer}>
@@ -81,14 +123,38 @@ export function EditSheet({
                       },
                     }
                   : {})}
+                {...(Platform.OS !== 'web'
+                  ? {
+                      onTouchStart: (event: any) => {
+                        nativeDraggedKey.current = null;
+                        onItemPointerDown(item, event.nativeEvent.pageX, event.nativeEvent.pageY);
+                      },
+                      onTouchMove: (event: any) => {
+                        nativeDraggedKey.current = item.key;
+                        onItemDragMove?.(item, event.nativeEvent.pageX, event.nativeEvent.pageY);
+                      },
+                      onTouchEnd: (event: any) => {
+                        if (nativeDraggedKey.current === item.key) {
+                          const touch = event.nativeEvent.changedTouches?.[0] ?? event.nativeEvent;
+                          onItemDragEnd?.(item, touch.pageX, touch.pageY);
+                        }
+                      },
+                    }
+                  : {})}
               >
                 <Pressable
-                  onPress={() => onItemTap(item)}
+                  onPress={() => {
+                    if (nativeDraggedKey.current === item.key) {
+                      nativeDraggedKey.current = null;
+                      return;
+                    }
+                    onItemTap(item);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={`Add ${item.label}`}
                   style={[styles.itemCard, isSelected && styles.itemCardSelected]}
                 >
-                  <Sprite type={item.key} size={48} />
+                  <Sprite type={item.key} size={52} />
                 </Pressable>
               </View>
               <Text style={styles.itemLabel} numberOfLines={1}>
@@ -98,7 +164,8 @@ export function EditSheet({
           );
         })}
       </ScrollView>
-    </View>
+      </>}
+    </Animated.View>
   );
 }
 
@@ -107,8 +174,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F2',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    paddingTop: 12,
-    paddingBottom: 94, // Clears floating bottom tab bar
+    paddingTop: 2,
+    paddingBottom: 12,
     paddingHorizontal: 16,
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: -4 },
@@ -118,20 +185,31 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: '#ECE7DE',
   },
+  sheetCollapsed: { paddingBottom: 2 },
+  handleButton: {
+    minHeight: 48,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   handle: {
     width: 38,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#D6D3D1',
     alignSelf: 'center',
-    marginBottom: 12,
   },
+  handleText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#57534E' },
+  collapsedStatus: { minHeight: 48, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
+  collapsedText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549' },
   segmentedContainer: {
     flexDirection: 'row',
     backgroundColor: '#EAE7E0',
     borderRadius: 9999,
     padding: 3,
-    marginBottom: 14,
+    marginBottom: 8,
     alignSelf: 'center',
     width: 230,
   },
@@ -144,7 +222,7 @@ const styles = StyleSheet.create({
   },
   segmentBtnActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
+    shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -169,8 +247,8 @@ const styles = StyleSheet.create({
     width: 64,
   },
   itemCard: {
-    width: 62,
-    height: 62,
+    width: 64,
+    height: 64,
     borderRadius: 18,
     backgroundColor: '#F6F4EE',
     alignItems: 'center',

@@ -84,7 +84,11 @@ export function BillModal({
   const applianceData = useMemo(() => {
     return appliances.map((app) => {
       const kWh = usage?.[app.id] ?? MOCK_APPLIANCE_KWH[app.id] ?? 0;
-      const room = rooms?.find(r => r.id === app.roomId)?.name || 'Unnamed room';
+      const roomEntry = rooms?.find(r => r.id === app.roomId);
+      const baseName = roomEntry?.name || 'Unnamed room';
+      const duplicates = rooms?.filter((candidate) => candidate.name === baseName).length ?? 0;
+      const room = duplicates > 1 && (roomEntry as any)?.floor
+        ? `${baseName} (${(roomEntry as any).floor}F)` : baseName;
       const { rm, pct } = applianceShare(kWh, totalKwh, totalBillRm);
       return { app, kWh, rm, pct, room };
     });
@@ -175,7 +179,7 @@ export function BillModal({
             >
               <Text style={styles.byApplianceHeading}>By appliance</Text>
 
-              {applianceData.map(({ app, rm, pct }, idx) => (
+              {applianceData.map(({ app, rm, pct, room }, idx) => (
                 <View key={app.id}>
                   {/* Appliance row */}
                   <View style={styles.applianceRow}>
@@ -202,7 +206,7 @@ export function BillModal({
                       <View style={styles.applianceMeta}>
                         <Text style={styles.applianceName}>{app.name}</Text>
                         <Text style={styles.applianceRoom}>
-                          {roomDisplayName(app.roomId)}
+                          {room}
                         </Text>
                       </View>
                     </View>
@@ -245,19 +249,6 @@ export function BillModal({
       </View>
     </Modal>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function roomDisplayName(roomId: string): string {
-  const MAP: Record<string, string> = {
-    living: 'Living room',
-    kitchen: 'Kitchen',
-    bedroom: 'Bedroom 1',
-    bathroom: 'Bathroom',
-  };
-  return MAP[roomId] ?? roomId;
 }
 
 // ---------------------------------------------------------------------------

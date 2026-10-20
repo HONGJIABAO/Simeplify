@@ -12,6 +12,9 @@
  */
 
 import { HOUSEHOLD_MILESTONE_PTS, LEAF_DAILY_DEED_CAP, SHOW_CO2_CARD } from './flags';
+import { createDefaultRooms } from '@/features/simulator/logic/roomData';
+import { WORKPLACE_DEFAULT_WATTS } from '@/features/simulator/logic/spriteMap';
+import type { StoredPlacedItem, StoredRoom } from '@/features/simulator/logic/storage';
 export { SHOW_CO2_CARD };
 
 // ---------------------------------------------------------------------------
@@ -74,6 +77,9 @@ export const MOCK_ROOMS: Room[] = [
   { id: 'bathroom', name: 'Bathroom', type: 'bathroom', gridCol: 2, gridRow: 2, gridColSpan: 2, gridRowSpan: 2 },
 ];
 
+/** Stage 6/7 two-floor mock: floor 1 is fully set up; floor 2 has two dark rooms. */
+export const MOCK_SIMULATOR_ROOMS: StoredRoom[] = createDefaultRooms();
+
 // ---------------------------------------------------------------------------
 // Appliances (ONB-03 / SIM-01 / SIM-02)
 // ---------------------------------------------------------------------------
@@ -83,7 +89,8 @@ export type ApplianceType =
   | 'water_heater'
   | 'tv'
   | 'fan'
-  | 'lights';
+  | 'lights'
+  | 'workplace';
 
 export type Appliance = {
   spriteKey?: string;
@@ -172,6 +179,33 @@ export const MOCK_APPLIANCES: Appliance[] = [
     alwaysOn: false,
     color: '#f6e8d8', // tan-100 (with stone-800 text)
   },
+  {
+    id: 'workplace1',
+    name: 'Workplace',
+    type: 'workplace',
+    brand: '',
+    wattage: WORKPLACE_DEFAULT_WATTS,
+    stars: 0,
+    roomId: 'f2-A',
+    posX: 0.28,
+    posY: 0.24,
+    alwaysOn: false,
+    color: '#8B9D77',
+    spriteKey: 'workplace',
+  },
+];
+
+export const MOCK_SIMULATOR_ITEMS: StoredPlacedItem[] = [
+  ...MOCK_APPLIANCES.map((appliance) => ({
+    ...appliance,
+    category: 'Appliances' as const,
+    spriteKey: appliance.spriteKey || appliance.type,
+    roomId: appliance.roomId.startsWith('f') ? appliance.roomId : ({
+      living: 'f1-A', kitchen: 'f1-B', bedroom: 'f1-C', bathroom: 'f1-D',
+    } as Record<string, string>)[appliance.roomId] || appliance.roomId,
+  })),
+  { id: 'bed1', category: 'Furniture', type: 'bed', spriteKey: 'bed', name: 'Bed', roomId: 'f1-C', posX: 0.20, posY: 0.77, rotation: 0 },
+  { id: 'sofa1', category: 'Furniture', type: 'sofa', spriteKey: 'sofa', name: 'Sofa', roomId: 'f1-A', posX: 0.28, posY: 0.34, rotation: 0 },
 ];
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ import {
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { StoredRoom } from '../logic/storage';
+import { getRoomDisplayName } from '../logic/roomData';
 import { RoutineBlock, ApplianceInUse } from '../logic/myDayLogic';
 import { Appliance } from '@/lib/mockData';
 
@@ -111,10 +112,7 @@ export function MyDayTimelineSheet({
 
   const getRoomName = (roomId: string) => {
     const found = rooms.find((r) => r.id === roomId || r.type === roomId);
-    if (found?.name) return found.name;
-    if (found?.type) {
-      return found.type.charAt(0).toUpperCase() + found.type.slice(1);
-    }
+    if (found) return getRoomDisplayName(found, rooms);
     return roomId.charAt(0).toUpperCase() + roomId.slice(1);
   };
 

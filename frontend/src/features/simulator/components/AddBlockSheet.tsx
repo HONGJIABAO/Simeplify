@@ -36,6 +36,7 @@ import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
 import { Sprite } from './Sprite';
 import { StoredRoom } from '../logic/storage';
+import { getRoomDisplayName } from '../logic/roomData';
 import { RoutineBlock, validateBlock } from '../logic/myDayLogic';
 import { Appliance } from '@/lib/mockData';
 
@@ -88,16 +89,11 @@ export function AddBlockSheet({
 
   const roomOptions = useMemo(
     () => [
-      ...rooms.map((room, index) => {
-        const typeLabel = `${room.type.charAt(0).toUpperCase()}${room.type.slice(1)}`;
-        const sameTypeCount = rooms.filter((candidate) => candidate.type === room.type).length;
-        const typeIndex = rooms
-          .slice(0, index + 1)
-          .filter((candidate) => candidate.type === room.type).length;
+      ...rooms.filter((room) => room.isSetUp).map((room) => {
         return {
           id: room.id,
           type: room.type,
-          label: room.name?.trim() || (sameTypeCount > 1 ? `${typeLabel} ${typeIndex}` : typeLabel),
+          label: getRoomDisplayName(room, rooms),
         };
       }),
       { id: 'away', type: 'away' as const, label: 'Away' },

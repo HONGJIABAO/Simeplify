@@ -7,6 +7,8 @@
 import { DEFAULT_ROUTINE, RoutineItem, STAR_EFFICIENCY_FACTORS, USAGE_THRESHOLDS } from './routineConfig';
 import { StoredPlacedItem, StoredRoom } from './storage';
 import { calcBillFromKwh } from './billCalc';
+import { getSlotRect } from './roomLayout';
+import { SPRITE_MAP } from './spriteMap';
 
 export interface Point {
   x: number;
@@ -22,6 +24,10 @@ export interface AvatarSimulationState {
   currentRoomId: string | null;
   targetRoomId: string | null;
   currentActivity: string;
+  currentFloor: 1 | 2;
+  targetFloor: 1 | 2;
+  isFloorTransitioning: boolean;
+  isSitting: boolean;
 }
 
 export interface EngineTickResult {
@@ -89,9 +95,8 @@ export function getCurrentRoutine(
  * Get the target center position for a room
  */
 export function getRoomCenter(room: StoredRoom): Point {
-  const cx = (room.gridCol + room.gridColSpan * 0.5) / 4;
-  const cy = (room.gridRow + room.gridRowSpan * 0.5) / 4;
-  return { x: cx, y: cy };
+  const rect = getSlotRect(room.slot);
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
 }
 
 /**
@@ -140,11 +145,13 @@ export function computeSimulationBill(appliances: StoredPlacedItem[]): {
   for (const app of appList) {
     const wattage = app.wattage || 100;
     const hours = app.alwaysOn ? 24 : app.hoursPerDay || 6;
-    const starRating = app.stars || 3;
-    const starFactor = STAR_EFFICIENCY_FACTORS[starRating] || 1.0;
+    const type = SPRITE_MAP[app.spriteKey || app.type];
+    const starRating = type?.hasStarRating === false ? 0 : app.stars || 3;
+    const starFactor = starRating === 0 ? 1 : STAR_EFFICIENCY_FACTORS[starRating] || 1.0;
+    const quantity = Math.max(1, app.quantity || 1);
 
     // Monthly kWh = (W * h / 1000) * 30 * efficiency
-    const kwh = (wattage * hours / 1000) * 30 * starFactor;
+    const kwh = (wattage * hours / 1000) * 30 * starFactor * quantity;
     totalMonthlyKwh += kwh;
   }
 

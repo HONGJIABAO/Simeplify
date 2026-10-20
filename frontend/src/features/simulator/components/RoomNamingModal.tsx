@@ -4,6 +4,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { StoredRoom } from '../logic/storage';
+import { getRoomSuggestedName, ROOM_TYPE_SETTINGS } from '../logic/roomData';
 
 interface RoomNamingModalProps {
   visible: boolean;
@@ -11,13 +12,6 @@ interface RoomNamingModalProps {
   onSave: (roomId: string, name: string, type: StoredRoom['type']) => void;
   onClose: () => void;
 }
-
-const PRESET_SUGGESTIONS: { label: string; type: StoredRoom['type'] }[] = [
-  { label: 'Living room', type: 'living' },
-  { label: 'Kitchen', type: 'kitchen' },
-  { label: 'Bedroom', type: 'bedroom' },
-  { label: 'Bathroom', type: 'bathroom' },
-];
 
 function RoomNamingModalInner({
   room,
@@ -28,13 +22,8 @@ function RoomNamingModalInner({
   onSave: (roomId: string, name: string, type: StoredRoom['type']) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(room.name || '');
+  const [name, setName] = useState(room.name || getRoomSuggestedName(room));
   const [selectedType, setSelectedType] = useState<StoredRoom['type']>(room.type || 'living');
-
-  const handleSelectPreset = (preset: (typeof PRESET_SUGGESTIONS)[0]) => {
-    setName(preset.label);
-    setSelectedType(preset.type);
-  };
 
   const handleSave = () => {
     if (!name.trim()) return;
@@ -46,31 +35,10 @@ function RoomNamingModalInner({
     <BottomSheet
       visible
       onClose={onClose}
-      title="Name This Room"
+      title="Set up this room"
       contentStyle={{ paddingHorizontal: 0 }}
     >
       <View style={styles.content}>
-        {/* Quick Suggestion Chips */}
-        <Text style={styles.sectionLabel}>Suggested names</Text>
-        <View style={styles.chipsRow}>
-          {PRESET_SUGGESTIONS.map((preset) => {
-            const isSelected = name === preset.label;
-            return (
-              <Pressable
-                key={preset.label}
-                onPress={() => handleSelectPreset(preset)}
-                style={[styles.chip, isSelected && styles.chipSelected]}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose ${preset.label}`}
-              >
-                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                  {preset.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
         {/* Custom Input */}
         <View style={styles.inputSection}>
           <Text style={styles.sectionLabel}>Room name</Text>
@@ -84,9 +52,9 @@ function RoomNamingModalInner({
 
         {/* Room Type Selector for Avatar Routine */}
         <View style={styles.typeSection}>
-          <Text style={styles.sectionLabel}>Routine room role</Text>
+          <Text style={styles.sectionLabel}>Room type</Text>
           <Text style={styles.helpText}>
-            Sets how the resident interacts with this room during daily simulation.
+            The room type sets its floor colour and routine role.
           </Text>
           <View style={styles.typesRow}>
             {(['living', 'kitchen', 'bedroom', 'bathroom'] as const).map((t) => {
@@ -100,7 +68,7 @@ function RoomNamingModalInner({
                   accessibilityLabel={`Assign routine role as ${t}`}
                 >
                   <Text style={[styles.typeText, isCurrent && styles.typeTextSelected]}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                    {ROOM_TYPE_SETTINGS[t].label}
                   </Text>
                 </Pressable>
               );
@@ -116,7 +84,7 @@ function RoomNamingModalInner({
             disabled={!name.trim()}
             style={styles.saveBtn}
           >
-            Save room name
+            Save
           </Button>
           <Button variant="secondary" onPress={onClose} style={styles.cancelBtn}>
             Cancel

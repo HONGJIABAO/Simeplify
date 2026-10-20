@@ -15,6 +15,7 @@
 import { Appliance } from '@/lib/mockData';
 import { ENABLE_LIGHTS_SWAP } from '@/lib/flags';
 import { calcBillFromKwh } from './billCalc';
+import { SPRITE_MAP } from './spriteMap';
 
 export interface SwapSuggestion {
   id: string;
@@ -40,6 +41,8 @@ export function getSwapSuggestions(
   const suggestions: SwapSuggestion[] = [];
 
   for (const app of appliances) {
+    const typeDefinition = SPRITE_MAP[app.spriteKey || app.type];
+    if (typeDefinition?.swapEligible === false) continue;
     // 5-star appliances have no higher rating to upgrade to
     if (app.stars >= 5) continue;
 

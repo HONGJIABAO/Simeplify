@@ -1,7 +1,9 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Svg, { Line, Circle } from 'react-native-svg';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Line } from 'react-native-svg';
+import { Plus } from 'lucide-react-native';
 import { StoredRoom } from '../logic/storage';
+import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
 
 interface RoomProps {
   room: StoredRoom;
@@ -14,248 +16,123 @@ interface RoomProps {
   onPress: (room: StoredRoom) => void;
 }
 
-const ROOM_THEMES = {
-  living: {
-    bgColor: '#E8C8A2',
-    dotColor: '#7C4A26',
-    borderWall: '#80624E',
-  },
-  kitchen: {
-    bgColor: '#F4EFE6',
-    dotColor: '#7C4A26',
-    borderWall: '#80624E',
-  },
-  bedroom: {
-    bgColor: '#B4C5A6',
-    dotColor: '#4A633F',
-    borderWall: '#80624E',
-  },
-  bathroom: {
-    bgColor: '#D9D5CF',
-    dotColor: '#57534E',
-    borderWall: '#80624E',
-  },
+type Side = 'top' | 'right' | 'bottom' | 'left';
+
+const ROOM_DOORS: Record<StoredRoom['slot'], Partial<Record<Side, number>>> = {
+  A: { right: 0.545, bottom: 0.483 },
+  B: { left: 0.545, bottom: 0.833 },
+  C: { top: 0.56, right: 0.51 },
+  D: { left: 0.51, right: 0.51 },
 };
 
-export function Room({
-  room,
-  width,
-  height,
-  left,
-  top,
-  isLightOn,
-  isHovered,
-  onPress,
-}: RoomProps) {
-  const theme = ROOM_THEMES[room.type] || ROOM_THEMES.living;
+export function Room({ room, width, height, left, top, isLightOn, isHovered, onPress }: RoomProps) {
+  const theme = ROOM_TYPE_SETTINGS[room.type];
+  const [darkOpacity] = useState(() => new Animated.Value(room.isSetUp ? 0 : 0.45));
+  const [reduceMotion, setReduceMotion] = useState(false);
 
-  // Doorways coordinates per room type
-  // Living room: doorway at bottom wall
-  // Kitchen: doorway at bottom wall
-  // Bedroom: doorway at right wall
-  // Bathroom: doorway at left wall
-  const isLiving = room.type === 'living';
-  const isKitchen = room.type === 'kitchen';
-  const isBedroom = room.type === 'bedroom';
-  const isBathroom = room.type === 'bathroom';
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => subscription.remove();
+  }, []);
 
-  const doorGapSize = 34;
+  useEffect(() => {
+    Animated.timing(darkOpacity, {
+      toValue: room.isSetUp ? 0 : 0.45,
+      duration: reduceMotion ? 0 : 500,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [darkOpacity, reduceMotion, room.isSetUp]);
+
+  const doorGap = Math.max(24, Math.min(38, Math.min(width, height) * 0.24));
+  const doors = ROOM_DOORS[room.slot];
+
+  const wallLines = useMemo(() => {
+    const walls: React.ReactNode[] = [];
+    const addWall = (side: Side, length: number, gapRatio?: number) => {
+      const gapStart = gapRatio === undefined ? length : Math.max(8, length * gapRatio - doorGap / 2);
+      const gapEnd = gapRatio === undefined ? length : Math.min(length - 8, length * gapRatio + doorGap / 2);
+      const segments = gapRatio === undefined ? [[0, length]] : [[0, gapStart], [gapEnd, length]];
+      segments.forEach(([start, end], index) => {
+        const horizontal = side === 'top' || side === 'bottom';
+        const fixed = side === 'bottom' ? height : side === 'right' ? width : 0;
+        walls.push(
+          <Line
+            key={`${side}-${index}`}
+            x1={horizontal ? start : fixed}
+            y1={horizontal ? fixed : start}
+            x2={horizontal ? end : fixed}
+            y2={horizontal ? fixed : end}
+            stroke="#5C4033"
+            strokeWidth={3.5}
+            strokeLinecap="round"
+          />
+        );
+      });
+    };
+    addWall('top', width, doors.top);
+    addWall('right', height, doors.right);
+    addWall('bottom', width, doors.bottom);
+    addWall('left', height, doors.left);
+    return walls;
+  }, [doorGap, doors, height, width]);
 
   return (
     <Pressable
       onPress={() => onPress(room)}
       accessibilityRole="button"
-      accessibilityLabel={room.name ? `Room: ${room.name}` : `Tap to name room`}
-      style={[
+      accessibilityLabel={room.isSetUp ? `Room: ${room.name}` : 'Tap to set up room'}
+      style={({ pressed }) => [
         styles.roomContainer,
-        {
-          width,
-          height,
-          left,
-          top,
-          backgroundColor: theme.bgColor,
-        },
+        { width, height, left, top, backgroundColor: theme.floorColor },
         isHovered && styles.hoveredBorder,
+        pressed && styles.pressed,
       ]}
     >
+      <View pointerEvents="none" style={[styles.depthStrip, { backgroundColor: theme.depthStripColor }]} />
       <Svg width={width} height={height} pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {/* Living room floor planks */}
-        {isLiving &&
-          Array.from({ length: Math.ceil(height / 18) }, (_, i) => (
-            <Line
-              key={i}
-              x1={0}
-              x2={width}
-              y1={i * 18}
-              y2={i * 18}
-              stroke="#80624E"
-              strokeOpacity={0.08}
-              strokeWidth={1}
-            />
-          ))}
-
-        {/* Kitchen circular drain / mat accent */}
-        {isKitchen && (
-          <Circle
-            cx={width * 0.5}
-            cy={height * 0.45}
-            r={12}
-            fill="#E2DCD1"
-            fillOpacity={0.65}
-          />
-        )}
-
-        {/* Bathroom circular drain accent */}
-        {isBathroom && (
-          <Circle
-            cx={width * 0.5}
-            cy={height * 0.55}
-            r={10}
-            fill="#C9C5BF"
-            fillOpacity={0.6}
-          />
-        )}
-
-        {/* Outer boundary lines */}
-        {/* Top wall */}
-        <Line x1={0} y1={0} x2={width} y2={0} stroke="#80624E" strokeWidth={3} />
-        {/* Left wall */}
-        {isBathroom ? (
-          <>
-            <Line x1={0} y1={0} x2={0} y2={height * 0.35} stroke="#80624E" strokeWidth={3} />
-            {/* Door opening */}
-            <Line
-              x1={0}
-              y1={height * 0.35}
-              x2={0}
-              y2={height * 0.35 + doorGapSize}
-              stroke="#80624E"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-            />
-            <Line x1={0} y1={height * 0.35 + doorGapSize} x2={0} y2={height} stroke="#80624E" strokeWidth={3} />
-          </>
-        ) : (
-          <Line x1={0} y1={0} x2={0} y2={height} stroke="#80624E" strokeWidth={3} />
-        )}
-
-        {/* Right wall */}
-        {isBedroom ? (
-          <>
-            <Line x1={width} y1={0} x2={width} y2={height * 0.35} stroke="#80624E" strokeWidth={3} />
-            {/* Door opening */}
-            <Line
-              x1={width}
-              y1={height * 0.35}
-              x2={width}
-              y2={height * 0.35 + doorGapSize}
-              stroke="#80624E"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-            />
-            <Line x1={width} y1={height * 0.35 + doorGapSize} x2={width} y2={height} stroke="#80624E" strokeWidth={3} />
-          </>
-        ) : (
-          <Line x1={width} y1={0} x2={width} y2={height} stroke="#80624E" strokeWidth={3} />
-        )}
-
-        {/* Bottom wall */}
-        {isLiving ? (
-          <>
-            <Line x1={0} y1={height} x2={width * 0.4} y2={height} stroke="#80624E" strokeWidth={3} />
-            {/* Door opening */}
-            <Line
-              x1={width * 0.4}
-              y1={height}
-              x2={width * 0.4 + doorGapSize}
-              y2={height}
-              stroke="#80624E"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-            />
-            <Line x1={width * 0.4 + doorGapSize} y1={height} x2={width} y2={height} stroke="#80624E" strokeWidth={3} />
-          </>
-        ) : isKitchen ? (
-          <>
-            <Line x1={0} y1={height} x2={width * 0.3} y2={height} stroke="#80624E" strokeWidth={3} />
-            {/* Door opening */}
-            <Line
-              x1={width * 0.3}
-              y1={height}
-              x2={width * 0.3 + doorGapSize}
-              y2={height}
-              stroke="#80624E"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-            />
-            <Line x1={width * 0.3 + doorGapSize} y1={height} x2={width} y2={height} stroke="#80624E" strokeWidth={3} />
-          </>
-        ) : (
-          <Line x1={0} y1={height} x2={width} y2={height} stroke="#80624E" strokeWidth={3} />
-        )}
+        {room.type === 'living' && Array.from({ length: Math.ceil(height / 18) }, (_, index) => (
+          <Line key={index} x1={0} x2={width} y1={index * 18} y2={index * 18} stroke="#5C4033" strokeOpacity={0.08} strokeWidth={1} />
+        ))}
+        {room.type === 'kitchen' && <Circle cx={width * 0.55} cy={height * 0.48} r={10} fill="#D6D3CD" fillOpacity={0.55} />}
+        {room.type === 'bathroom' && <Circle cx={width * 0.55} cy={height * 0.58} r={9} fill="#A8A29E" fillOpacity={0.45} />}
+        {wallLines}
       </Svg>
 
-      {/* Warm Light Glow Overlay when lights in room are ON */}
-      {isLightOn && (
-        <View pointerEvents="none" style={styles.roomLightOverlay} />
-      )}
+      {isLightOn && room.isSetUp && <View pointerEvents="none" style={styles.roomLightLayer} />}
+      <Animated.View pointerEvents="none" style={[styles.darkLayer, { opacity: darkOpacity }]} />
 
-      {/* Room Name Pill (ONLY shown if room has been named by user!) */}
-      {!!room.name && (
-        <View pointerEvents="none" style={styles.namePill}>
-          <View style={[styles.namePillDot, { backgroundColor: theme.dotColor }]} />
-          <Text style={styles.namePillText} numberOfLines={1}>
-            {room.name}
-          </Text>
-        </View>
-      )}
+      <View pointerEvents="none" style={styles.namePill}>
+        {room.isSetUp ? (
+          <View style={[styles.namePillDot, { backgroundColor: theme.accentColor }]} />
+        ) : (
+          <Plus size={14} color="#57534E" strokeWidth={1.5} />
+        )}
+        <Text style={styles.namePillText} numberOfLines={1}>
+          {room.isSetUp ? room.name : 'Tap to set up'}
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  roomContainer: {
-    position: 'absolute',
-    overflow: 'hidden',
-  },
-  hoveredBorder: {
-    borderColor: '#C89B6D',
-    borderWidth: 2,
-  },
-  roomLightOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255, 245, 205, 0.22)',
-  },
+  roomContainer: { position: 'absolute', overflow: 'hidden' },
+  depthStrip: { position: 'absolute', top: 4, left: 4, right: 4, height: 5, opacity: 0.9 },
+  hoveredBorder: { borderColor: '#D4A373', borderWidth: 3 },
+  pressed: { opacity: 0.88 },
+  roomLightLayer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(246, 232, 216, 0.34)' },
+  darkLayer: { ...StyleSheet.absoluteFill, backgroundColor: '#57534E', zIndex: 8 },
   namePill: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 9999,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    shadowColor: '#5C4033',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-    zIndex: 10,
+    position: 'absolute', top: 10, left: 8, minHeight: 28, maxWidth: '82%',
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF',
+    borderRadius: 9999, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1,
+    borderColor: '#E7E5E4', zIndex: 12,
   },
-  namePillDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
+  namePillDot: { width: 7, height: 7, borderRadius: 4 },
   namePillText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 12,
+    flexShrink: 1, fontFamily: 'SourceSans3_600SemiBold', fontSize: 12,
     color: '#292524',
   },
 });

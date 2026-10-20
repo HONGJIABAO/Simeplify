@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, PanResponder, Platform } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, Pressable, StyleSheet, Animated, PanResponder } from 'react-native';
 import { Sprite } from './Sprite';
 import { StoredPlacedItem } from '../logic/storage';
-import { RotateCw, X } from 'lucide-react-native';
+import { Power, RotateCw, X } from 'lucide-react-native';
 
 interface PlacedItemProps {
   item: StoredPlacedItem;
@@ -50,32 +50,6 @@ export function PlacedItem({
   // Pixel coordinates on floor plan
   const posX = item.posX * canvasWidth;
   const posY = item.posY * canvasHeight;
-
-  // Glow pulsing animation for ON state
-  const [pulseAnim] = useState(() => new Animated.Value(1));
-
-  useEffect(() => {
-    if (isOn) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.08,
-            duration: 900,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1.0,
-            duration: 900,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isOn, pulseAnim]);
 
   // Drag responder in edit mode
   const [pan] = useState(() => new Animated.ValueXY());
@@ -129,7 +103,6 @@ export function PlacedItem({
           transform: [
             { translateX: pan.x },
             { translateY: pan.y },
-            { scale: isOn ? pulseAnim : 1 },
           ],
         },
       ]}
@@ -141,7 +114,7 @@ export function PlacedItem({
         style={[
           styles.pressableArea,
           { width: size, height: size },
-          isOn && styles.glowActive,
+          isOn && styles.activeAppliance,
           !isOn && !isFurniture && styles.dimmedOffline,
           isSelected && isEditMode && styles.selectedHandles,
         ]}
@@ -171,6 +144,13 @@ export function PlacedItem({
         </View>
       )}
 
+      {isOn && !isFurniture && (
+        <View pointerEvents="none" style={styles.inUsePill}>
+          <Power size={12} color="#566549" strokeWidth={2} />
+          <Text style={styles.inUseText}>In use</Text>
+        </View>
+      )}
+
       {/* Quick delete button (sibling to Pressable to avoid nested button error) */}
       {isSelected && isEditMode && (
         <Pressable
@@ -181,6 +161,7 @@ export function PlacedItem({
           style={[styles.deleteBadge, { right: (labelWidth - size) / 2 - 10 }]}
           accessibilityRole="button"
           accessibilityLabel={`Delete ${item.name}`}
+          hitSlop={12}
         >
           <X size={12} color="#FFFFFF" strokeWidth={2.5} />
         </Pressable>
@@ -195,6 +176,7 @@ export function PlacedItem({
           style={[styles.rotateBadge, { left: (labelWidth - size) / 2 - 10 }]}
           accessibilityRole="button"
           accessibilityLabel={`Rotate ${item.name}`}
+          hitSlop={12}
         >
           <RotateCw size={14} color="#FFFFFF" strokeWidth={2.4} />
         </Pressable>
@@ -215,33 +197,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     position: 'relative',
   },
-  glowActive: {
-    ...Platform.select({
-      web: {
-        filter: 'brightness(1.28) saturate(1.18) drop-shadow(0px 0px 8px rgba(255, 183, 0, 1))',
-      } as any,
-      default: {
-        shadowColor: '#FFB700',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 8,
-        elevation: 7,
-      },
-    }),
+  activeAppliance: {
+    backgroundColor: 'rgba(255, 244, 181, 0.44)',
+    opacity: 1,
   },
   dimmedOffline: {
     opacity: 0.62,
   },
   selectedHandles: {
     borderWidth: 1.5,
-    borderColor: '#3B82F6',
+    borderColor: '#566549',
     borderRadius: 8,
   },
   handleDot: {
     position: 'absolute',
     width: 6,
     height: 6,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#566549',
     borderWidth: 1,
     borderColor: '#FFFFFF',
     borderRadius: 1,
@@ -257,7 +229,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#EF4444',
+    backgroundColor: '#B85C38',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -291,5 +263,24 @@ const styles = StyleSheet.create({
     color: '#292524',
     lineHeight: 16,
     textAlign: 'center',
+  },
+  inUsePill: {
+    position: 'absolute',
+    top: -8,
+    right: 2,
+    minHeight: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#B6C4A6',
+    backgroundColor: '#F2F5EE',
+  },
+  inUseText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#566549',
   },
 });

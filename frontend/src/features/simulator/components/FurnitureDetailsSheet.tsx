@@ -6,6 +6,7 @@ import { Button } from '@/components/Button';
 import { Sprite } from './Sprite';
 import { SPRITE_MAP } from '../logic/spriteMap';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
+import { getRoomDisplayName } from '../logic/roomData';
 
 interface FurnitureDetailsSheetProps {
   visible: boolean;
@@ -69,7 +70,7 @@ function FurnitureDetailsFormInner({
         <View style={styles.section}>
           <Text style={styles.label}>Room location</Text>
           <View style={styles.roomsRow}>
-            {rooms.map((r) => {
+            {rooms.filter((room) => room.isSetUp).map((r) => {
               const isSelected = r.id === selectedRoomId;
               return (
                 <Pressable
@@ -77,10 +78,10 @@ function FurnitureDetailsFormInner({
                   onPress={() => setSelectedRoomId(r.id)}
                   style={[styles.roomPill, isSelected && styles.roomPillSelected]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Place in ${r.name || 'Unnamed room'}`}
+                  accessibilityLabel={`Place in ${getRoomDisplayName(r, rooms)}`}
                 >
                   <Text style={[styles.roomPillText, isSelected && styles.roomPillTextSelected]}>
-                    {r.name || 'Unnamed room'}
+                    {getRoomDisplayName(r, rooms)}
                   </Text>
                 </Pressable>
               );

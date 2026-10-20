@@ -5,7 +5,7 @@
  * Each state can be opened directly for review.
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import {
   MOCK_APPLIANCES,
   MOCK_ROOMS,
   MOCK_MONTHLY_KWH,
+  MOCK_SIMULATOR_ITEMS,
+  MOCK_SIMULATOR_ROOMS,
   Appliance,
 } from '@/lib/mockData';
 import { calcBillFromKwh } from '@/features/simulator/logic/billCalc';
@@ -31,6 +33,11 @@ import { FastForwardPanel } from '@/features/simulator/components/FastForwardPan
 import { FastForwardPeriod } from '@/features/simulator/logic/fastForward';
 import { EditTray } from '@/features/simulator/components/EditTray';
 import { ApplianceDetailsSheet } from '@/features/simulator/components/ApplianceDetailsSheet';
+import { FloorPlan } from '@/features/simulator/components/FloorPlan';
+import { EditSheet } from '@/features/simulator/components/EditSheet';
+import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
+import { AvatarSimulationState } from '@/features/simulator/logic/SimulationEngine';
+import { FloorNumber } from '@/features/simulator/logic/roomLayout';
 import { SuggestionArea } from '@/features/simulator/components/SuggestionArea';
 import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
 import { ResidentAvatar } from '@/features/simulator/components/ResidentAvatar';
@@ -80,9 +87,28 @@ type DemoState =
   | 'avatar-poses'
   | 'home-look-day'
   | 'home-look-evening'
-  | 'home-look-away';
+  | 'home-look-away'
+  | 'two-floor-plan'
+  | 'floor-two-dark'
+  | 'resident-other-floor'
+  | 'room-setup-sheet'
+  | 'workplace-details'
+  | 'edit-tray-collapsed'
+  | 'edit-tray-dragging';
 
 const STATE_GROUPS = [
+  {
+    title: 'Stage 6/7: Two-floor plan states (SIM-05, SIM-06)',
+    items: [
+      { id: 'two-floor-plan' as DemoState, label: '1F unequal rooms + stairs' },
+      { id: 'floor-two-dark' as DemoState, label: '2F with two dark rooms' },
+      { id: 'resident-other-floor' as DemoState, label: 'Resident is on the other floor' },
+      { id: 'room-setup-sheet' as DemoState, label: 'Dark-room setup sheet' },
+      { id: 'workplace-details' as DemoState, label: 'Workplace details (no star rating)' },
+      { id: 'edit-tray-collapsed' as DemoState, label: 'Collapsed item tray' },
+      { id: 'edit-tray-dragging' as DemoState, label: 'Item tray while dragging (30%)' },
+    ],
+  },
   {
     title: 'Stage 6: Floor Plan & Bill Modal',
     items: [
@@ -147,6 +173,33 @@ const STATE_GROUPS = [
 function BillHero({ kWh }: { kWh: number }) {
   const text = useBillAnimation(Math.round(calcBillFromKwh(kWh)));
   return <Text style={galleryStyles.heroText}>{text}</Text>;
+}
+
+function TwoFloorPlanPreview({ initialFloor = 1, residentFloor = 1 }: { initialFloor?: FloorNumber; residentFloor?: FloorNumber }) {
+  const [floor, setFloor] = useState<FloorNumber>(initialFloor);
+  const floorRef = useRef<View>(null);
+  const avatarState: AvatarSimulationState = {
+    currentX: residentFloor === 1 ? 0.28 : 0.72,
+    currentY: residentFloor === 1 ? 0.35 : 0.30,
+    facingLeft: false,
+    isWalking: false,
+    isSleeping: false,
+    isSitting: false,
+    currentRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
+    targetRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
+    currentActivity: 'At home',
+    currentFloor: residentFloor,
+    targetFloor: residentFloor,
+    isFloorTransitioning: false,
+  };
+  return <View style={{ flex: 1, minHeight: 420, padding: 16 }}>
+    <FloorPlan rooms={MOCK_SIMULATOR_ROOMS} items={MOCK_SIMULATOR_ITEMS} currentFloor={floor}
+      onFloorChange={setFloor} avatarState={avatarState} avatarVariant="avatar_girl"
+      activeApplianceIds={['fridge1']} activeRoomLightIds={[]} isEditMode={false}
+      selectedItemId={null} dragGhost={null} hoveredRoomId={null} walkPath={[]}
+      onRoomPress={() => {}} onSelectItem={() => {}} onDeleteItem={() => {}}
+      onRotateItem={() => {}} onMoveItemEnd={() => {}} floorPlanRef={floorRef} onLayout={() => {}} />
+  </View>;
 }
 
 export default function SimulatorGallery() {
@@ -239,6 +292,33 @@ export default function SimulatorGallery() {
           </Text>
           <View style={{ width: 48 }} />
         </View>
+
+        {(activeState === 'two-floor-plan' || activeState === 'floor-two-dark' || activeState === 'resident-other-floor') && (
+          <TwoFloorPlanPreview
+            key={activeState}
+            initialFloor={activeState === 'floor-two-dark' ? 2 : 1}
+            residentFloor={activeState === 'resident-other-floor' ? 2 : 1}
+          />
+        )}
+
+        {activeState === 'room-setup-sheet' && (
+          <RoomNamingModal visible room={MOCK_SIMULATOR_ROOMS.find((room) => !room.isSetUp) ?? null}
+            onSave={() => {}} onClose={() => setActiveState(null)} />
+        )}
+
+        {activeState === 'workplace-details' && (
+          <ApplianceDetailsSheet visible
+            item={MOCK_SIMULATOR_ITEMS.find((item) => item.type === 'workplace')}
+            rooms={MOCK_SIMULATOR_ROOMS.filter((room) => room.isSetUp)}
+            onSave={() => {}} onCancel={() => setActiveState(null)} />
+        )}
+
+        {(activeState === 'edit-tray-collapsed' || activeState === 'edit-tray-dragging') && (
+          <View style={{ flex: 1, justifyContent: 'flex-end', maxHeight: '28%' }}>
+            <EditSheet visible initialCollapsed={activeState === 'edit-tray-collapsed'}
+              isDragging={activeState === 'edit-tray-dragging'} onItemPointerDown={() => {}} onItemTap={() => {}} />
+          </View>
+        )}
 
         {/* ── 1. Loading Skeleton ── */}
         {activeState === 'loading-skeleton' && (

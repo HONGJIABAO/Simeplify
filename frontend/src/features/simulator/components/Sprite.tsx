@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
+import { ImageOff } from 'lucide-react-native';
 import { getSpriteSource, SPRITE_MAP } from '../logic/spriteMap';
 
 interface SpriteProps {
@@ -15,7 +16,16 @@ interface SpriteProps {
 
 export function Sprite({ type, size = 44, width, height, style, containerStyle }: SpriteProps) {
   const source = getSpriteSource(type);
-  if (!source) return null;
+  if (!source) {
+    return (
+      <View
+        pointerEvents="none"
+        style={[styles.container, styles.placeholder, { width: size, height: size }, containerStyle]}
+      >
+        <ImageOff size={Math.max(18, size * 0.42)} color="#78716C" strokeWidth={1.5} />
+      </View>
+    );
+  }
 
   const itemDef = SPRITE_MAP[type];
   const longestSide = itemDef ? Math.max(itemDef.baseWidth, itemDef.baseHeight) : size;
@@ -69,5 +79,11 @@ const styles = StyleSheet.create({
         imageRendering: 'auto',
       } as any,
     }),
+  },
+  placeholder: {
+    borderRadius: 16,
+    backgroundColor: '#F5F5F4',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
   },
 });

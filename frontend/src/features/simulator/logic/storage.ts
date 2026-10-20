@@ -7,10 +7,14 @@ export interface StoredRoom {
   id: string;
   name: string;
   type: 'living' | 'kitchen' | 'bedroom' | 'bathroom';
-  gridCol: number;
-  gridRow: number;
-  gridColSpan: number;
-  gridRowSpan: number;
+  floor: 1 | 2;
+  slot: 'A' | 'B' | 'C' | 'D';
+  isSetUp: boolean;
+  /** Legacy v2 grid fields are read only during local-state migration. */
+  gridCol?: number;
+  gridRow?: number;
+  gridColSpan?: number;
+  gridRowSpan?: number;
 }
 
 export interface StoredPlacedItem {
@@ -23,6 +27,8 @@ export interface StoredPlacedItem {
   posX: number;
   posY: number;
   brand?: string;
+  model?: string;
+  quantity?: number;
   wattage?: number;
   stars?: number;
   hoursPerDay?: number;
@@ -41,9 +47,11 @@ export interface SimulationState {
   simSpeed: 1 | 2 | 4;
   simulatedMinutes: number; // 0 to 1439
   avatarVariant: 'avatar_girl' | 'avatar_boy' | 'girl' | 'boy';
+  viewedFloor?: 1 | 2;
 }
 
-const LAYOUT_KEY = 'simeplify_simulator_layout_v2';
+const LAYOUT_KEY = 'simeplify_simulator_layout_v3';
+const LEGACY_LAYOUT_KEY = 'simeplify_simulator_layout_v2';
 const SIM_KEY = 'simeplify_simulator_sim_v2';
 
 // In-memory fallback if localStorage is unavailable
@@ -73,7 +81,7 @@ function safeSetItem(key: string, value: string): void {
 
 export function loadLayoutState(): LayoutState | null {
   try {
-    const raw = safeGetItem(LAYOUT_KEY);
+    const raw = safeGetItem(LAYOUT_KEY) || safeGetItem(LEGACY_LAYOUT_KEY);
     if (raw) {
       return JSON.parse(raw) as LayoutState;
     }

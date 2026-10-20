@@ -16,11 +16,27 @@ export interface SpriteItemDef {
   source: ImageSourcePropType;
   defaultWattage: number;
   defaultHours: number;
+  inTray: boolean;
+  needsPerson?: boolean;
   alwaysOn?: boolean;
+  hasStarRating?: boolean;
+  swapEligible?: boolean;
+  showInverterNote?: boolean;
+  showModelField?: boolean;
+  showQuantityField?: boolean;
+  showHoursField?: boolean;
+  showAlwaysOnToggle?: boolean;
+  showManualToggle?: boolean;
+  subLabel?: string;
+  wattageHelper?: string;
+  activityNames?: string[];
   isSleepingSpot?: boolean;
   baseWidth: number;
   baseHeight: number;
 }
+
+// TODO(open-item): Confirm the combined laptop and phone charging wattage.
+export const WORKPLACE_DEFAULT_WATTS = 80;
 
 export const APPLIANCE_SPRITES: SpriteItemDef[] = [
   {
@@ -31,6 +47,11 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/aircon.png'),
     defaultWattage: 1200,
     defaultHours: 8,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
+    showInverterNote: true,
     baseWidth: 54,
     baseHeight: 28,
   },
@@ -42,7 +63,11 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/fridge.png'),
     defaultWattage: 120,
     defaultHours: 24,
+    inTray: true,
+    needsPerson: false,
     alwaysOn: true,
+    hasStarRating: true,
+    swapEligible: true,
     baseWidth: 42,
     baseHeight: 52,
   },
@@ -54,6 +79,10 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/light.png'),
     defaultWattage: 20,
     defaultHours: 6,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
     baseWidth: 38,
     baseHeight: 48,
   },
@@ -65,6 +94,10 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/tv.png'),
     defaultWattage: 90,
     defaultHours: 4,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
     baseWidth: 50,
     baseHeight: 42,
   },
@@ -76,6 +109,10 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/light_bulb.png'),
     defaultWattage: 10,
     defaultHours: 6,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
     baseWidth: 36,
     baseHeight: 44,
   },
@@ -87,8 +124,37 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/appliances/shower.png'),
     defaultWattage: 3500,
     defaultHours: 1,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
     baseWidth: 44,
     baseHeight: 50,
+  },
+  {
+    key: 'workplace',
+    label: 'Workplace',
+    fullName: 'Workplace',
+    category: 'Appliances',
+    source: require('../../../../assets/sprites/appliances/workplace.png'),
+    defaultWattage: WORKPLACE_DEFAULT_WATTS,
+    defaultHours: 8,
+    inTray: true,
+    needsPerson: true,
+    alwaysOn: false,
+    hasStarRating: false,
+    swapEligible: false,
+    showInverterNote: false,
+    showModelField: true,
+    showQuantityField: true,
+    showHoursField: false,
+    showAlwaysOnToggle: false,
+    showManualToggle: false,
+    subLabel: 'Laptop & phone',
+    wattageHelper: 'Laptop and phone charger together',
+    activityNames: ['working', 'studying'],
+    baseWidth: 54,
+    baseHeight: 44,
   },
 ];
 
@@ -101,6 +167,7 @@ export const FURNITURE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/furniture/bed.png'),
     defaultWattage: 0,
     defaultHours: 0,
+    inTray: true,
     isSleepingSpot: true,
     baseWidth: 62,
     baseHeight: 54,
@@ -113,6 +180,7 @@ export const FURNITURE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/furniture/sofa.png'),
     defaultWattage: 0,
     defaultHours: 0,
+    inTray: true,
     baseWidth: 60,
     baseHeight: 44,
   },
@@ -124,6 +192,7 @@ export const FURNITURE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/furniture/table.png'),
     defaultWattage: 0,
     defaultHours: 0,
+    inTray: true,
     baseWidth: 52,
     baseHeight: 44,
   },
@@ -135,8 +204,21 @@ export const FURNITURE_SPRITES: SpriteItemDef[] = [
     source: require('../../../../assets/sprites/furniture/sink.png'),
     defaultWattage: 0,
     defaultHours: 0,
+    inTray: true,
     baseWidth: 44,
     baseHeight: 46,
+  },
+  {
+    key: 'stair',
+    label: 'Stairs',
+    fullName: 'Stairs',
+    category: 'Furniture',
+    source: require('../../../../assets/sprites/furniture/stair.png'),
+    defaultWattage: 0,
+    defaultHours: 0,
+    inTray: false,
+    baseWidth: 52,
+    baseHeight: 64,
   },
 ];
 

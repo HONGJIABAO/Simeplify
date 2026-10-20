@@ -8,6 +8,7 @@ import { Switch } from '@/components/Switch';
 import { Sprite } from './Sprite';
 import { SPRITE_MAP } from '../logic/spriteMap';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
+import { getRoomDisplayName } from '../logic/roomData';
 
 export interface ApplianceDetailsSheetProps {
   visible: boolean;
@@ -42,6 +43,8 @@ function ApplianceDetailsFormInner({
     : `Add ${itemDef?.fullName || activeItem.name}`;
 
   const [brand, setBrand] = useState(activeItem.brand || '');
+  const [model, setModel] = useState(activeItem.model || '');
+  const [quantity, setQuantity] = useState(String(activeItem.quantity || 1));
   const [wattage, setWattage] = useState(
     activeItem.wattage ? String(activeItem.wattage) : String(itemDef?.defaultWattage || 100)
   );
@@ -76,17 +79,24 @@ function ApplianceDetailsFormInner({
 
     const numHours = Number(hoursPerDay);
     const validHours = Number.isFinite(numHours) && numHours >= 0 && numHours <= 24 ? numHours : 6;
+    const numQuantity = Number(quantity);
+    if (itemDef?.showQuantityField && (!Number.isInteger(numQuantity) || numQuantity < 1)) {
+      setError('Please enter a whole quantity of at least 1.');
+      return;
+    }
 
     const brandPrefix = brand.trim() ? `${brand.trim()} ` : '';
     const finalName = `${brandPrefix}${itemDef?.fullName || activeItem.name}`;
 
     onSave({
       ...activeItem,
-      id: activeItem.id.startsWith('pending_') ? `app_${activeItem.type}_${activeItem.roomId}` : activeItem.id,
+      id: activeItem.id.startsWith('pending_') ? activeItem.id.replace('pending_', 'app_') : activeItem.id,
       name: finalName,
       brand: brand.trim(),
+      model: model.trim(),
+      quantity: itemDef?.showQuantityField ? numQuantity : 1,
       wattage: numWattage,
-      stars,
+      stars: itemDef?.hasStarRating === false ? undefined : stars,
       hoursPerDay: validHours,
       alwaysOn,
       isOn,
@@ -122,7 +132,7 @@ function ApplianceDetailsFormInner({
 
         {/* Brand Input */}
         <View style={styles.section}>
-          <Text style={styles.label}>Brand</Text>
+          <Text style={styles.label}>Brand{itemDef?.showModelField ? ' (optional)' : ''}</Text>
           <Input
             value={brand}
             onChangeText={setBrand}
@@ -130,6 +140,13 @@ function ApplianceDetailsFormInner({
             maxLength={40}
           />
         </View>
+
+        {itemDef?.showModelField && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Model (optional)</Text>
+            <Input value={model} onChangeText={setModel} placeholder="e.g. laptop and phone models" maxLength={50} />
+          </View>
+        )}
 
         {/* Approximate Wattage */}
         <View style={styles.section}>
@@ -143,10 +160,18 @@ function ApplianceDetailsFormInner({
             placeholder={String(itemDef?.defaultWattage || 100)}
             keyboardType="numeric"
           />
+          {!!itemDef?.wattageHelper && <Text style={styles.subtext}>{itemDef.wattageHelper}</Text>}
         </View>
 
+        {itemDef?.showQuantityField && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Quantity</Text>
+            <Input value={quantity} onChangeText={setQuantity} placeholder="1" keyboardType="numeric" />
+          </View>
+        )}
+
         {/* Energy Star Rating */}
-        <View style={styles.section}>
+        {itemDef?.hasStarRating !== false && <View style={styles.section}>
           <View style={styles.starsHeader}>
             <Text style={styles.label}>Energy star rating</Text>
             <Pressable
@@ -182,10 +207,10 @@ function ApplianceDetailsFormInner({
               {stars} {stars === 1 ? 'Star' : 'Stars'}
             </Text>
           </View>
-        </View>
+        </View>}
 
         {/* Hours of use per day */}
-        <View style={styles.section}>
+        {itemDef?.showHoursField !== false && <View style={styles.section}>
           <Text style={styles.label}>Hours of use per day</Text>
           <Input
             value={hoursPerDay}
@@ -193,10 +218,10 @@ function ApplianceDetailsFormInner({
             placeholder="e.g. 8"
             keyboardType="numeric"
           />
-        </View>
+        </View>}
 
         {/* Always on toggle */}
-        <View style={styles.toggleRow}>
+        {itemDef?.showAlwaysOnToggle !== false && <View style={styles.toggleRow}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.label}>Always on</Text>
             <Text style={styles.subtext}>
@@ -204,10 +229,10 @@ function ApplianceDetailsFormInner({
             </Text>
           </View>
           <Switch value={alwaysOn} onValueChange={setAlwaysOn} />
-        </View>
+        </View>}
 
         {/* Keep switched on toggle */}
-        <View style={styles.toggleRow}>
+        {itemDef?.showManualToggle !== false && <View style={styles.toggleRow}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.label}>Keep switched on</Text>
             <Text style={styles.subtext}>
@@ -215,14 +240,14 @@ function ApplianceDetailsFormInner({
             </Text>
           </View>
           <Switch value={isOn} onValueChange={setIsOn} />
-        </View>
+        </View>}
 
         {/* Room selection */}
         {rooms.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.label}>Room location</Text>
             <View style={styles.roomsRow}>
-              {rooms.map((r) => {
+              {rooms.filter((room) => room.isSetUp).map((r) => {
                 const isSelected = r.id === selectedRoomId;
                 return (
                   <Pressable
@@ -230,10 +255,10 @@ function ApplianceDetailsFormInner({
                     onPress={() => setSelectedRoomId(r.id)}
                     style={[styles.roomPill, isSelected && styles.roomPillSelected]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Place in ${r.name || 'Unnamed room'}`}
+                    accessibilityLabel={`Place in ${getRoomDisplayName(r, rooms)}`}
                   >
                     <Text style={[styles.roomPillText, isSelected && styles.roomPillTextSelected]}>
-                      {r.name || 'Unnamed room'}
+                      {getRoomDisplayName(r, rooms)}
                     </Text>
                   </Pressable>
                 );

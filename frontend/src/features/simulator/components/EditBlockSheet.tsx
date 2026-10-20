@@ -28,6 +28,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
 import { StoredRoom } from '../logic/storage';
+import { getRoomDisplayName } from '../logic/roomData';
 import { RoutineBlock } from '../logic/myDayLogic';
 import { Appliance } from '@/lib/mockData';
 import { Sprite } from './Sprite';
@@ -86,10 +87,10 @@ function EditBlockInner({
   const isSleepBlock = block.iconType === 'sleep';
 
   const roomOptions = [
-    ...rooms.map((room) => ({
+    ...rooms.filter((room) => room.isSetUp).map((room) => ({
       id: room.id,
       type: room.type,
-      label: room.name?.trim() || `${room.type.charAt(0).toUpperCase()}${room.type.slice(1)}`,
+      label: getRoomDisplayName(room, rooms),
     })),
     { id: 'away', type: 'away' as const, label: 'Away' },
   ];
