@@ -4,7 +4,7 @@
  * saves appliances to `public.appliances`, and marks `profiles.onboarding_done = true`.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -100,6 +100,7 @@ export default function OnboardingAppliancesScreen() {
 
   // Selected appliances list
   const [appliancesList, setAppliancesList] = useState<SelectedAppliance[]>([]);
+  const nextTempIdRef = useRef(1);
 
   useEffect(() => {
     async function loadData() {
@@ -222,7 +223,7 @@ export default function OnboardingAppliancesScreen() {
   const handleAddAppliance = (type: ApplianceTypeCatalog) => {
     const targetRoomId = activeRooms[0]?.slotId || rooms[0]?.id || '';
     const newAppliance: SelectedAppliance = {
-      tempId: `app-${type.id}-${Date.now()}`,
+      tempId: `app-${type.id}-${nextTempIdRef.current++}`,
       typeId: type.id,
       name: type.name,
       roomId: targetRoomId,

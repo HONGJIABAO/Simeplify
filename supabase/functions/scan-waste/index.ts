@@ -210,7 +210,13 @@ Deno.serve(async (req: Request) => {
       // Deterministic fallback/mock mode when GEMINI_API_KEY is not set in local test runs
       classification = getDeterministicMockClassification(imagePath);
     } else {
-      const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+      const model = Deno.env.get("GEMINI_MODEL");
+      if (!model) {
+        return new Response(JSON.stringify({ error: "GEMINI_MODEL is not set" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
 
       const systemPrompt = `You are an expert waste sorting assistant for Malaysian household recycling systems (4-stream system).
@@ -287,7 +293,7 @@ Return only JSON with no markdown wrapping.`;
     }
 
     // 7. Database Writes (via Service Role)
-    // 7a. Insert waste_scans row
+    // 7a. Insert waste_scans row with confirmed_at = null (points only after "I threw it")
     const { data: scanRecord, error: scanInsertError } = await supabaseAdmin
       .from("waste_scans")
       .insert({
@@ -297,7 +303,7 @@ Return only JSON with no markdown wrapping.`;
         bin_type: classification.bin_type,
         is_recyclable: classification.is_recyclable,
         confidence: classification.confidence,
-        confirmed_at: new Date().toISOString(),
+        confirmed_at: null,
       })
       .select()
       .single();
@@ -310,64 +316,7 @@ Return only JSON with no markdown wrapping.`;
       });
     }
 
-    // 7b. Deeds & Points Awarding
-    let deedRecord: any = null;
-    let pointsRecord: any = null;
-    let pointsAwarded = 0;
-    let dailyLimitReached = false;
-
-    if (classification.is_recyclable) {
-      const mytDate = getMalaysiaDateString();
-
-      // Count deeds performed today in Malaysia time
-      const { count: deedsTodayCount } = await supabaseAdmin
-        .from("deeds")
-        .select("*", { count: "exact", head: true })
-        .eq("household_id", householdId)
-        .eq("deed_date", mytDate);
-
-      // Insert deed record ('recycle')
-      const { data: deed, error: deedError } = await supabaseAdmin
-        .from("deeds")
-        .insert({
-          household_id: householdId,
-          task_type: "recycle",
-          deed_date: mytDate,
-        })
-        .select()
-        .single();
-
-      if (deedError) {
-        console.error("Failed to insert deed:", deedError);
-      } else {
-        deedRecord = deed;
-      }
-
-      // First 3 deeds of the day give points
-      dailyLimitReached = (deedsTodayCount ?? 0) >= 3;
-
-      if (!dailyLimitReached) {
-        pointsAwarded = 10;
-        const { data: pt, error: ptError } = await supabaseAdmin
-          .from("points")
-          .insert({
-            household_id: householdId,
-            source: "recycling",
-            amount: pointsAwarded,
-            deed_id: deedRecord?.id || null,
-          })
-          .select()
-          .single();
-
-        if (ptError) {
-          console.error("Failed to insert points:", ptError);
-        } else {
-          pointsRecord = pt;
-        }
-      }
-    }
-
-    // 8. Return Comprehensive Response
+    // 8. Return Comprehensive Response (classify only, 0 points/deeds)
     const responsePayload = {
       success: true,
       scan: scanRecord,
@@ -382,11 +331,11 @@ Return only JSON with no markdown wrapping.`;
       confidence: classification.confidence,
       tips: classification.tips,
       tip: classification.tips,
-      points_awarded: pointsAwarded,
-      pointsAwarded: pointsAwarded,
-      deed_id: deedRecord?.id || null,
-      daily_limit_reached: dailyLimitReached,
-      dailyLimitReached: dailyLimitReached,
+      points_awarded: 0,
+      pointsAwarded: 0,
+      deed_id: null,
+      daily_limit_reached: false,
+      dailyLimitReached: false,
     };
 
     return new Response(JSON.stringify(responsePayload), {

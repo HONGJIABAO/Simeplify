@@ -55,6 +55,9 @@ export interface ConfirmDisposalResult {
   totalPoints: number;
   deedsToday: number;
   dailyLimitReached: boolean;
+  alreadyConfirmed?: boolean;
+  isRecyclable?: boolean;
+  message?: string;
 }
 
 /**
@@ -284,31 +287,39 @@ export async function fetchBinState(householdId: string): Promise<BinState> {
  */
 export async function confirmDisposal(
   scanId: string,
-  binType: BinType,
-  householdId?: string
+  _binType?: BinType,
+  _householdId?: string
 ): Promise<ConfirmDisposalResult> {
-  const isRecyclable = binType !== 'general';
-  let deedsToday = 0;
-  let totalPoints = 0;
+  const { data: funcData, error: funcError } = await supabase.functions.invoke('confirm-disposal', {
+    body: {
+      scan_id: scanId,
+    },
+  });
 
-  if (householdId) {
-    try {
-      const state = await fetchBinState(householdId);
-      deedsToday = state.deedsToday;
-      totalPoints = state.points;
-    } catch (err) {
-      console.error('Failed to get bin state in confirmDisposal:', err);
-    }
+  if (funcError) {
+    console.error('confirm-disposal Edge Function error:', funcError);
+    throw funcError;
   }
 
-  const dailyLimitReached = deedsToday >= LEAF_DAILY_DEED_CAP;
-  const pointsAwarded = isRecyclable && !dailyLimitReached ? 10 : 0;
+  if (funcData?.error) {
+    throw new Error(funcData.error);
+  }
+
+  const pointsAwarded = typeof funcData.points_awarded === 'number'
+    ? funcData.points_awarded
+    : (funcData.pointsAwarded ?? 0);
+  const dailyLimitReached = Boolean(funcData.daily_limit_reached ?? funcData.dailyLimitReached);
+  const alreadyConfirmed = Boolean(funcData.already_confirmed);
+  const isRecyclable = Boolean(funcData.is_recyclable);
 
   return {
     pointsAwarded,
-    totalPoints: totalPoints + pointsAwarded,
-    deedsToday,
+    totalPoints: pointsAwarded,
+    deedsToday: dailyLimitReached ? 3 : (pointsAwarded > 0 ? 1 : 0),
     dailyLimitReached,
+    alreadyConfirmed,
+    isRecyclable,
+    message: funcData.message,
   };
 }
 

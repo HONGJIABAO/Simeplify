@@ -1,32 +1,13 @@
 // supabase/tests/scan_waste_verification.mjs
-// Verification suite for Stage 5: scan-waste Edge Function
+// Verification suite for Stage 5 & Fix 1: scan-waste & confirm-disposal Edge Functions
 // Verifies: Auth enforcement, user-without-household rejection, cross-household path rejection,
-// classification, database writes (waste_scans, deeds, points), and daily deed cap.
+// scan returns 0 points & 0 deeds (confirmed_at = null), confirm awards +10 points & 1 deed,
+// confirm twice awards no extra, 4th confirm gives 0 points with daily_limit_reached,
+// general waste confirm gives nothing, and confirming another household's scan fails with 403.
 
-import { execSync } from 'child_process';
+import { getTestCredentials } from './testSafety.mjs';
 
-function getCredentials() {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      apiUrl: process.env.SUPABASE_URL,
-      functionsUrl: process.env.FUNCTIONS_URL || `${process.env.SUPABASE_URL}/functions/v1`,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    };
-  }
-  const out = execSync('npx supabase status -o json', { encoding: 'utf-8' });
-  const start = out.indexOf('{');
-  const end = out.lastIndexOf('}');
-  const json = JSON.parse(out.slice(start, end + 1));
-  return {
-    apiUrl: json.API_URL,
-    functionsUrl: json.FUNCTIONS_URL || `${json.API_URL}/functions/v1`,
-    anonKey: json.ANON_KEY,
-    serviceRoleKey: json.SERVICE_ROLE_KEY,
-  };
-}
-
-const { apiUrl, functionsUrl, anonKey, serviceRoleKey } = getCredentials();
+const { apiUrl, functionsUrl, anonKey, serviceRoleKey } = getTestCredentials();
 
 const results = [];
 
@@ -144,6 +125,28 @@ async function callScanWaste(body, token) {
   return { status: res.status, ok: res.ok, body: json };
 }
 
+async function callConfirmDisposal(body, token) {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${functionsUrl}/confirm-disposal`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
+  return { status: res.status, ok: res.ok, body: json };
+}
+
 async function main() {
   const runId = Date.now();
   const testPassword = 'Password_Test_123!';
@@ -152,7 +155,7 @@ async function main() {
   let tokenA, tokenB, tokenC;
   let householdAId, householdBId;
 
-  console.log('--- Setting up Stage 5 Test Fixtures ---');
+  console.log('--- Setting up Stage 5 & Fix 1 Test Fixtures ---');
   try {
     userA = await createTestUser(`user_a_waste_${runId}@example.com`, testPassword, 'User A');
     userB = await createTestUser(`user_b_waste_${runId}@example.com`, testPassword, 'User B');
@@ -182,7 +185,7 @@ async function main() {
     await uploadWastePhoto(`${householdAId}/general_food_waste.png`, dummyPng, tokenA);
     await uploadWastePhoto(`${householdBId}/b_photo.png`, dummyPng, tokenB);
 
-    console.log('--- Executing scan-waste Verification Tests ---\n');
+    console.log('--- Executing scan-waste & confirm-disposal Verification Tests ---\n');
 
     // ------------------------------------------------------------------------
     // TEST 1: Unauthenticated request -> should be rejected (401)
@@ -192,7 +195,7 @@ async function main() {
       const passed = res.status === 401;
       recordResult(
         1,
-        'Unauthenticated request rejected',
+        'Unauthenticated scan request rejected',
         'HTTP 401 Unauthorized',
         res.status,
         JSON.stringify(res.body),
@@ -249,19 +252,62 @@ async function main() {
     }
 
     // ------------------------------------------------------------------------
-    // TEST 5: Recyclable Scan 1 (Plastic Bottle) -> Success, Deed + 10 Points
+    // TEST 5: Recyclable Scan gives 0 points and 0 deeds (confirmed_at = null)
     // ------------------------------------------------------------------------
+    let test5ScanId = null;
     {
       const res = await callScanWaste({ image_path: `${householdAId}/plastic_bottle.png` }, tokenA);
       const isOk = res.ok && res.status === 200;
       const body = res.body;
+      test5ScanId = body.scan_id || body.scan?.id;
 
-      // Verify DB records
-      const scansRes = await fetch(`${apiUrl}/rest/v1/waste_scans?id=eq.${body.scan_id}`, {
+      // Verify DB record has confirmed_at = null
+      const scansRes = await fetch(`${apiUrl}/rest/v1/waste_scans?id=eq.${test5ScanId}`, {
         headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
       });
       const scansData = await scansRes.json();
 
+      // Verify no deed and no points were written by scan
+      const deedsRes = await fetch(`${apiUrl}/rest/v1/deeds?household_id=eq.${householdAId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const deedsData = await deedsRes.json();
+
+      const passed =
+        isOk &&
+        body.bin_type === 'plastic' &&
+        body.is_recyclable === true &&
+        body.points_awarded === 0 &&
+        body.deed_id === null &&
+        scansData.length === 1 &&
+        scansData[0].confirmed_at === null &&
+        deedsData.length === 0;
+
+      recordResult(
+        5,
+        'Scan gives 0 points, 0 deeds, confirmed_at=null',
+        'HTTP 200, points=0, deed=null, confirmed_at=null',
+        res.status,
+        `pts=${body.points_awarded}, deed=${body.deed_id}, confirmed_at=${scansData[0]?.confirmed_at}`,
+        passed
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // TEST 6: Confirm disposal gives +10 points and 1 deed
+    // ------------------------------------------------------------------------
+    {
+      const res = await callConfirmDisposal({ scan_id: test5ScanId }, tokenA);
+      const isOk = res.ok && res.status === 200;
+      const body = res.body;
+
+      // Verify DB record now has confirmed_at != null
+      const scansRes = await fetch(`${apiUrl}/rest/v1/waste_scans?id=eq.${test5ScanId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const scansData = await scansRes.json();
+
+      // Verify deed and points exist
       const deedsRes = await fetch(`${apiUrl}/rest/v1/deeds?id=eq.${body.deed_id}`, {
         headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
       });
@@ -274,78 +320,154 @@ async function main() {
 
       const passed =
         isOk &&
-        body.bin_type === 'plastic' &&
-        body.is_recyclable === true &&
         body.points_awarded === 10 &&
+        body.already_confirmed === false &&
         body.daily_limit_reached === false &&
-        scansData.length === 1 &&
+        scansData[0]?.confirmed_at !== null &&
         deedsData.length === 1 &&
         deedsData[0].task_type === 'recycle' &&
         pointsData.length === 1 &&
         pointsData[0].amount === 10;
 
       recordResult(
-        5,
-        'Recyclable scan: plastic bottle',
-        'HTTP 200, bin=plastic, deed=recycle, points=10',
+        6,
+        'Confirm gives +10 points and 1 deed',
+        'HTTP 200, points=10, 1 deed, confirmed_at!=null',
         res.status,
-        `bin=${body.bin_type}, pts=${body.points_awarded}, deed=${body.deed_id}`,
+        `pts=${body.points_awarded}, deed=${body.deed_id}, already_confirmed=${body.already_confirmed}`,
         passed
       );
     }
 
     // ------------------------------------------------------------------------
-    // TEST 6: Non-recyclable Scan (General Food Scraps) -> Success, 0 Points, No Deed
+    // TEST 7: Confirm twice gives no extra (already_confirmed = true)
     // ------------------------------------------------------------------------
     {
-      const res = await callScanWaste({ image_path: `${householdAId}/general_food_waste.png` }, tokenA);
+      const res = await callConfirmDisposal({ scan_id: test5ScanId }, tokenA);
       const isOk = res.ok && res.status === 200;
       const body = res.body;
 
+      // Total deeds and points for household should still be 1 each
+      const deedsRes = await fetch(`${apiUrl}/rest/v1/deeds?household_id=eq.${householdAId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const deedsData = await deedsRes.json();
+
+      const pointsRes = await fetch(`${apiUrl}/rest/v1/points?household_id=eq.${householdAId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const pointsData = await pointsRes.json();
+
       const passed =
         isOk &&
-        body.bin_type === 'general' &&
-        body.is_recyclable === false &&
+        body.already_confirmed === true &&
         body.points_awarded === 0 &&
-        body.deed_id === null;
+        body.deed_id === null &&
+        deedsData.length === 1 &&
+        pointsData.length === 1;
 
       recordResult(
-        6,
-        'Non-recyclable scan: food waste',
-        'HTTP 200, bin=general, points=0, deed=null',
+        7,
+        'Confirm twice gives no extra points or deeds',
+        'HTTP 200, already_confirmed=true, points=0, total_deeds=1',
         res.status,
-        `bin=${body.bin_type}, pts=${body.points_awarded}, deed=${body.deed_id}`,
+        `already_confirmed=${body.already_confirmed}, pts=${body.points_awarded}`,
         passed
       );
     }
 
     // ------------------------------------------------------------------------
-    // TEST 7: Daily Deed Cap Enforcement (First 3 give points, 4th capped at 0)
+    // TEST 8: General waste scan & confirm gives nothing (0 points, 0 deeds)
     // ------------------------------------------------------------------------
     {
-      // We already completed 1 deed in Test 5.
-      // Perform deed 2:
-      await callScanWaste({ image_path: `${householdAId}/paper_carton.png` }, tokenA);
-      // Perform deed 3:
-      await callScanWaste({ image_path: `${householdAId}/plastic_bottle.png` }, tokenA);
+      const scanRes = await callScanWaste({ image_path: `${householdAId}/general_food_waste.png` }, tokenA);
+      const generalScanId = scanRes.body.scan_id || scanRes.body.scan?.id;
 
-      // Perform deed 4 (Exceeds daily deed limit of 3 in Malaysia time):
-      const res4 = await callScanWaste({ image_path: `${householdAId}/paper_carton.png` }, tokenA);
+      const confirmRes = await callConfirmDisposal({ scan_id: generalScanId }, tokenA);
+      const confirmBody = confirmRes.body;
+
+      // Verify confirmed_at is set on scan row, but no new deed or points
+      const scansRes = await fetch(`${apiUrl}/rest/v1/waste_scans?id=eq.${generalScanId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const scansData = await scansRes.json();
+
+      const deedsRes = await fetch(`${apiUrl}/rest/v1/deeds?household_id=eq.${householdAId}`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      const deedsData = await deedsRes.json();
+
+      const passed =
+        confirmRes.ok &&
+        confirmBody.is_recyclable === false &&
+        confirmBody.points_awarded === 0 &&
+        confirmBody.deed_id === null &&
+        scansData[0]?.confirmed_at !== null &&
+        deedsData.length === 1; // Still just the 1 from Test 6
+
+      recordResult(
+        8,
+        'General waste confirm gives nothing',
+        'HTTP 200, is_recyclable=false, points=0, deeds unchanged',
+        confirmRes.status,
+        `pts=${confirmBody.points_awarded}, deed=${confirmBody.deed_id}`,
+        passed
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // TEST 9: Daily deed cap (4th confirm of the day gives 0 and daily_limit_reached)
+    // ------------------------------------------------------------------------
+    {
+      // Household A currently has 1 recycling deed (from Test 6).
+      // Perform deed 2:
+      const s2 = await callScanWaste({ image_path: `${householdAId}/paper_carton.png` }, tokenA);
+      await callConfirmDisposal({ scan_id: s2.body.scan_id }, tokenA);
+
+      // Perform deed 3:
+      const s3 = await callScanWaste({ image_path: `${householdAId}/plastic_bottle.png` }, tokenA);
+      await callConfirmDisposal({ scan_id: s3.body.scan_id }, tokenA);
+
+      // Deed 4 (Scan then confirm):
+      const s4 = await callScanWaste({ image_path: `${householdAId}/paper_carton.png` }, tokenA);
+      const res4 = await callConfirmDisposal({ scan_id: s4.body.scan_id }, tokenA);
       const body4 = res4.body;
 
       const passed =
         res4.ok &&
         body4.is_recyclable === true &&
-        body4.deed_id !== null &&
         body4.points_awarded === 0 &&
+        body4.deed_id === null &&
         body4.daily_limit_reached === true;
 
       recordResult(
-        7,
-        'Daily deed cap (4th scan today)',
-        'HTTP 200, deed recorded, points=0, daily_limit_reached=true',
+        9,
+        '4th confirm of the day gives 0 and daily_limit_reached',
+        'HTTP 200, points=0, daily_limit_reached=true, deed=null',
         res4.status,
-        `pts=${body4.points_awarded}, deed=${body4.deed_id}, daily_limit_reached=${body4.daily_limit_reached}`,
+        `pts=${body4.points_awarded}, daily_limit_reached=${body4.daily_limit_reached}`,
+        passed
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // TEST 10: Confirming another household's scan fails (HTTP 403)
+    // ------------------------------------------------------------------------
+    {
+      // User B scans an item for Household B
+      const scanB = await callScanWaste({ image_path: `${householdBId}/b_photo.png` }, tokenB);
+      const scanBId = scanB.body.scan_id;
+
+      // User A attempts to confirm User B's scan
+      const res = await callConfirmDisposal({ scan_id: scanBId }, tokenA);
+      const passed = res.status === 403;
+
+      recordResult(
+        10,
+        "Confirming another household's scan fails",
+        'HTTP 403 Forbidden',
+        res.status,
+        JSON.stringify(res.body),
         passed
       );
     }
@@ -401,7 +523,7 @@ async function main() {
   }
 
   console.log('\n================================================================================');
-  console.log('STAGE 5 (PART 1): scan-waste EDGE FUNCTION VERIFICATION RESULTS');
+  console.log('STAGE 5 & FIX 1: scan-waste & confirm-disposal VERIFICATION RESULTS');
   console.log('================================================================================\n');
   console.table(
     results.map((r) => ({
@@ -420,6 +542,11 @@ async function main() {
     console.log(`  Actual Status: ${r.actualStatus}`);
     console.log(`  Actual Details: ${r.actualMessage}`);
     console.log(`  Status: ${r.passed ? 'PASSED' : 'FAILED'}\n`);
+  }
+
+  const allPassed = results.length === 10 && results.every((r) => r.passed);
+  if (!allPassed) {
+    process.exit(1);
   }
 }
 

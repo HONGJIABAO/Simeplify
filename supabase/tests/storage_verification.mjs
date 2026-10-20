@@ -2,29 +2,9 @@
 // Verification tests for Supabase Storage (Task 3)
 // Household folder isolation, MIME limits, size limits, RLS policies.
 
-import { execSync } from 'child_process';
+import { getTestCredentials } from './testSafety.mjs';
 
-// Retrieve credentials dynamically from environment or npx supabase status
-function getCredentials() {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      apiUrl: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    };
-  }
-  const out = execSync('npx supabase status -o json', { encoding: 'utf-8' });
-  const start = out.indexOf('{');
-  const end = out.lastIndexOf('}');
-  const json = JSON.parse(out.slice(start, end + 1));
-  return {
-    apiUrl: json.API_URL,
-    anonKey: json.ANON_KEY,
-    serviceRoleKey: json.SERVICE_ROLE_KEY,
-  };
-}
-
-const { apiUrl, anonKey, serviceRoleKey } = getCredentials();
+const { apiUrl, anonKey, serviceRoleKey } = getTestCredentials();
 
 const results = [];
 

@@ -38,7 +38,9 @@ export default function NotificationsScreen() {
   }, [householdId]);
 
   useEffect(() => {
-    loadNotifications();
+    void Promise.resolve().then(() => {
+      loadNotifications();
+    });
   }, [loadNotifications]);
 
   const handleNotificationPress = async (item: NotificationRow) => {

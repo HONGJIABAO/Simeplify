@@ -115,7 +115,7 @@ features/
 lib/                    supabase client, theme.ts, formatters (money, dates)
 supabase/
   migrations/           tables + RLS
-  functions/            classify_waste, confirm_disposal, read_bill, analyze_bill, award_energy_points
+  functions/            scan-waste, confirm-disposal, analyze-bill
 docs/                   the four md spec files
 ```
 

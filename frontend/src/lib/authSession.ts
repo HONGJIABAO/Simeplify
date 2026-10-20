@@ -335,8 +335,6 @@ export function useAuthSession(): {
       setSession(newSession);
     };
     listeners.add(listener);
-    // Ensure state reflects current session at mount
-    setSession({ ...currentSession });
 
     return () => {
       listeners.delete(listener);

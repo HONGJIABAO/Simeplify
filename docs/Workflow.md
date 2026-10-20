@@ -43,7 +43,7 @@ Order for a new user:
 | Supabase Auth | Sign up, login, saved session. |
 | Supabase Database | Stores all user data. Row Level Security (RLS): a user can only read and write their own household data. |
 | Supabase Storage | Stores bill files (photo or PDF) and waste photos. |
-| Supabase Edge Functions | Call the Gemini API (waste sorting, bill reading). The API key is stored as a Supabase secret, never in the app. The model name is one config value, so it can change without an app update. |
+| Supabase Edge Functions | 3 functions: `scan-waste` (waste classification), `confirm-disposal` (points and deeds on "I threw it"), and `analyze-bill` (bill OCR and anomaly analysis). Call the Gemini API. The API key is stored as a Supabase secret, never in the app. The model name is one config value, so it can change without an app update. |
 | Scheduled job (pg_cron) | Month-start and month-end notifications, and month-end points settlement and reward result. |
 
 Rules:
@@ -370,7 +370,7 @@ sequenceDiagram
     User->>App: Open Bin and point camera at waste
     User->>App: Take photo
     App->>Storage: Upload photo
-    App->>EF: classify_waste (photo path)
+    App->>EF: scan-waste (photo path)
     EF->>AI: Send image
     AI-->>EF: Item name, bin type (paper, plastic, glass_metal, general), recyclable yes or no, confidence
     EF->>DB: Save waste_scans row
@@ -378,7 +378,7 @@ sequenceDiagram
     alt Confidence is high
         App-->>User: Show which bin (recyclable or general waste)
         User->>App: Tap "I threw it"
-        App->>EF: confirm_disposal (scan id)
+        App->>EF: confirm-disposal (scan id)
         EF->>DB: Add points to household monthly points
         EF-->>App: New points total
         App-->>User: Show points updated
@@ -498,7 +498,7 @@ sequenceDiagram
     participant DB
 
     User->>App: Complete a task (Bin item, lower electricity bill, or Simulator action)
-    App->>EF: The Edge Function for that task (classify, award_energy_points, or deed)
+    App->>EF: The Edge Function for that task (confirm-disposal or analyze-bill)
     EF->>DB: Count today's deeds for the household
     alt Fewer than 3 deeds today
         EF->>DB: Save the deed and add points

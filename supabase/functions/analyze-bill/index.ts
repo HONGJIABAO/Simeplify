@@ -170,7 +170,13 @@ Deno.serve(async (req: Request) => {
         const buffer = await fileBlob.arrayBuffer();
         const base64Data = uint8ArrayToBase64(new Uint8Array(buffer));
         const mimeType = fileBlob.type || "image/jpeg";
-        const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+        const model = Deno.env.get("GEMINI_MODEL");
+        if (!model) {
+          return new Response(JSON.stringify({ error: "GEMINI_MODEL is not set" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
 
         const prompt = `You are a utility bill document analysis specialist in Malaysia.

@@ -2,27 +2,9 @@
 // Verification tests for Stage 4: Database Triggers & pg_cron Monthly Jobs
 
 import { execSync } from 'child_process';
+import { getTestCredentials } from './testSafety.mjs';
 
-function getCredentials() {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      apiUrl: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    };
-  }
-  const out = execSync('npx supabase status -o json', { encoding: 'utf-8' });
-  const start = out.indexOf('{');
-  const end = out.lastIndexOf('}');
-  const json = JSON.parse(out.slice(start, end + 1));
-  return {
-    apiUrl: json.API_URL,
-    anonKey: json.ANON_KEY,
-    serviceRoleKey: json.SERVICE_ROLE_KEY,
-  };
-}
-
-const { apiUrl, serviceRoleKey } = getCredentials();
+const { apiUrl, serviceRoleKey } = getTestCredentials();
 
 async function queryRest(endpoint, options = {}) {
   const headers = {

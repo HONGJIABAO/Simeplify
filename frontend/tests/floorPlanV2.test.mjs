@@ -302,9 +302,11 @@ test('the counts match raw totals and placed counts (skipping missing images)', 
 test('every type has a picture file or an explicit skip', async () => {
   const { RAW_SPEC_APPLIANCES, RAW_SPEC_FURNITURE, SKIPPED_ITEM_TYPES } = await import('../src/features/simulator/logic/mockHomeData.ts');
   const { existsSync } = await import('node:fs');
-  const { resolve } = await import('node:path');
+  const { resolve, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
 
-  const assetBase = resolve(process.cwd(), 'assets/sprites');
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const assetBase = resolve(__dirname, '../assets/sprites');
   const knownAssets = {
     air_conditioner: resolve(assetBase, 'appliances/aircon.png'),
     refrigerator: resolve(assetBase, 'appliances/fridge.png'),

@@ -58,10 +58,13 @@ export default function OnboardingHouseholdScreen() {
 
   useEffect(() => {
     if (session.household) {
-      if (session.household.address_state) setStateName(session.household.address_state);
-      if (session.household.address_city) setCity(session.household.address_city);
-      if (session.household.address_street) setStreet(session.household.address_street);
-      if (session.household.residents_count) setResidentsCount(session.household.residents_count);
+      const h = session.household;
+      queueMicrotask(() => {
+        if (h.address_state) setStateName(h.address_state);
+        if (h.address_city) setCity(h.address_city);
+        if (h.address_street) setStreet(h.address_street);
+        if (h.residents_count) setResidentsCount(h.residents_count);
+      });
     }
   }, [session.household]);
 

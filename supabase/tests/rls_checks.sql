@@ -26,7 +26,8 @@ select
 
 -- Seed reference data: rewards & appliance_types & tariff_rates
 insert into public.appliance_types (id, name, sprite_key, always_on, needs_person)
-values ('air_conditioner', 'Air Conditioner', 'air_conditioner', false, true);
+values ('air_conditioner', 'Air Conditioner', 'air_conditioner', false, true)
+on conflict (id) do nothing;
 
 insert into public.rewards (id, voting_month, title, description, is_unlocked)
 select reward_id, test_month, 'Community Solar Canopy', '50% clean energy for park', false
@@ -40,7 +41,8 @@ insert into public.tariff_rates (
   'domestic', 'peninsular_malaysia', '2025-07-01',
   0.2703, 0.3703, 1500,
   0.0455, 0.1285, 10.00, 600, 0.00000
-);
+)
+on conflict do nothing;
 
 -- Seed Household A & Profile A
 insert into public.households (id, address_state, address_city, address_street, residents_count)
@@ -128,6 +130,8 @@ select household_b_id, 'bill_alert', 'High Usage Alert', 'Please check your wate
 -- Seed Household A initial vote
 insert into public.votes (household_id, reward_id, voting_month)
 select household_a_id, reward_id, test_month from _test_fixtures;
+
+grant select on _test_fixtures to authenticated;
 
 -- ============================================================================
 -- 2. RUN CHECKS AS USER A (role = authenticated, sub = user_a_id)

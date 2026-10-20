@@ -4,30 +4,9 @@
 // deeds, +50 energy points, duplicate avoidance), water bill anomaly detection (normal, leak_detected, major_pipe_burst),
 // and automatic notification trigger execution.
 
-import { execSync } from 'child_process';
+import { getTestCredentials } from './testSafety.mjs';
 
-function getCredentials() {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      apiUrl: process.env.SUPABASE_URL,
-      functionsUrl: process.env.FUNCTIONS_URL || `${process.env.SUPABASE_URL}/functions/v1`,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    };
-  }
-  const out = execSync('npx supabase status -o json', { encoding: 'utf-8' });
-  const start = out.indexOf('{');
-  const end = out.lastIndexOf('}');
-  const json = JSON.parse(out.slice(start, end + 1));
-  return {
-    apiUrl: json.API_URL,
-    functionsUrl: json.FUNCTIONS_URL || `${json.API_URL}/functions/v1`,
-    anonKey: json.ANON_KEY,
-    serviceRoleKey: json.SERVICE_ROLE_KEY,
-  };
-}
-
-const { apiUrl, functionsUrl, anonKey, serviceRoleKey } = getCredentials();
+const { apiUrl, functionsUrl, anonKey, serviceRoleKey } = getTestCredentials();
 
 const results = [];
 
