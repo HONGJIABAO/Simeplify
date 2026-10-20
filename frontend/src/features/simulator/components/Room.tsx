@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { Plus } from 'lucide-react-native';
@@ -13,6 +13,8 @@ interface RoomProps {
   top: number;
   isLightOn: boolean;
   isHovered?: boolean;
+  isEditMode?: boolean;
+  isOccupied?: boolean;
   onPress: (room: StoredRoom) => void;
 }
 
@@ -25,10 +27,27 @@ const ROOM_DOORS: Record<StoredRoom['slot'], Partial<Record<Side, number>>> = {
   D: { left: 0.51, right: 0.51 },
 };
 
-export function Room({ room, width, height, left, top, isLightOn, isHovered, onPress }: RoomProps) {
+export function Room({
+  room,
+  width,
+  height,
+  left,
+  top,
+  isLightOn,
+  isHovered = false,
+  isEditMode = false,
+  isOccupied = false,
+  onPress,
+}: RoomProps) {
   const theme = ROOM_TYPE_SETTINGS[room.type];
   const [darkOpacity] = useState(() => new Animated.Value(room.isSetUp ? 0 : 0.45));
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [isMouseOver, setIsMouseOver] = useState(false);
+  const [isLongPressActive, setIsLongPressActive] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isTagVisible = isEditMode || isHovered || isMouseOver || isLongPressActive;
+  const [tagOpacity] = useState(() => new Animated.Value(isTagVisible ? 1 : 0));
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -44,6 +63,38 @@ export function Room({ room, width, height, left, top, isLightOn, isHovered, onP
       useNativeDriver: true,
     }).start();
   }, [darkOpacity, reduceMotion, room.isSetUp]);
+
+  useEffect(() => {
+    Animated.timing(tagOpacity, {
+      toValue: isTagVisible ? 1 : 0,
+      duration: reduceMotion ? 0 : 150,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [isTagVisible, reduceMotion, tagOpacity]);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, []);
+
+  const handleLongPress = () => {
+    setIsLongPressActive(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setIsLongPressActive(false);
+    }, 2500);
+  };
+
+  const handlePress = () => {
+    if (isLongPressActive) {
+      setIsLongPressActive(false);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      return;
+    }
+    onPress(room);
+  };
 
   const doorGap = Math.max(24, Math.min(38, Math.min(width, height) * 0.24));
   const doors = ROOM_DOORS[room.slot];
@@ -80,7 +131,11 @@ export function Room({ room, width, height, left, top, isLightOn, isHovered, onP
 
   return (
     <Pressable
-      onPress={() => onPress(room)}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={400}
+      onHoverIn={() => setIsMouseOver(true)}
+      onHoverOut={() => setIsMouseOver(false)}
       accessibilityRole="button"
       accessibilityLabel={room.isSetUp ? `Room: ${room.name}` : 'Tap to set up room'}
       style={({ pressed }) => [
@@ -103,7 +158,15 @@ export function Room({ room, width, height, left, top, isLightOn, isHovered, onP
       {isLightOn && room.isSetUp && <View pointerEvents="none" style={styles.roomLightLayer} />}
       <Animated.View pointerEvents="none" style={[styles.darkLayer, { opacity: darkOpacity }]} />
 
-      <View pointerEvents="none" style={styles.namePill}>
+      {/* Dark rooms show a small round + button (48px) in the center */}
+      {!room.isSetUp && (
+        <View pointerEvents="none" style={styles.centerPlusButton}>
+          <Plus size={22} color="#57534E" strokeWidth={2} />
+        </View>
+      )}
+
+      {/* Room tag: hidden by default, shown on hover, long press, or edit mode */}
+      <Animated.View pointerEvents="none" style={[styles.namePill, { opacity: tagOpacity }]}>
         {room.isSetUp ? (
           <View style={[styles.namePillDot, { backgroundColor: theme.accentColor }]} />
         ) : (
@@ -112,7 +175,12 @@ export function Room({ room, width, height, left, top, isLightOn, isHovered, onP
         <Text style={styles.namePillText} numberOfLines={1}>
           {room.isSetUp ? room.name : 'Tap to set up'}
         </Text>
-      </View>
+        {isOccupied && room.isSetUp && (
+          <View style={styles.inUseBadge}>
+            <Text style={styles.inUseBadgeText}>In use</Text>
+          </View>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -124,15 +192,61 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.88 },
   roomLightLayer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(246, 232, 216, 0.34)' },
   darkLayer: { ...StyleSheet.absoluteFill, backgroundColor: '#57534E', zIndex: 8 },
+  centerPlusButton: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 48,
+    height: 48,
+    marginLeft: -24,
+    marginTop: -24,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D6D3D1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 14,
+    shadowColor: '#5C4033',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   namePill: {
-    position: 'absolute', top: 10, left: 8, minHeight: 28, maxWidth: '82%',
-    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF',
-    borderRadius: 9999, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1,
-    borderColor: '#E7E5E4', zIndex: 12,
+    position: 'absolute',
+    top: 10,
+    left: 8,
+    minHeight: 28,
+    maxWidth: '82%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    zIndex: 16,
   },
   namePillDot: { width: 7, height: 7, borderRadius: 4 },
   namePillText: {
-    flexShrink: 1, fontFamily: 'SourceSans3_600SemiBold', fontSize: 12,
+    flexShrink: 1,
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
     color: '#292524',
+  },
+  inUseBadge: {
+    backgroundColor: '#E0E6D9',
+    borderRadius: 9999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  inUseBadgeText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 11,
+    color: '#566549',
   },
 });

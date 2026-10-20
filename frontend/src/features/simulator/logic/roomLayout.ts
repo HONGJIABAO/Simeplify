@@ -35,6 +35,13 @@ const ROOM_RECTS: Record<RoomSlot, FractionRect> = {
   D: { x: 0.5, y: 0.55, width: 0.36, height: 0.45 },
 };
 
+export const STAIR_IMAGE_FIT = 'stretch' as const;
+
+export function calculateSquarePlanSide(availableWidth: number, availableHeight: number): number {
+  if (availableWidth <= 0 || availableHeight <= 0) return 0;
+  return Math.min(availableWidth, availableHeight);
+}
+
 export const STAIR_RECT: StairRect = {
   kind: 'stair',
   x: 0.86,

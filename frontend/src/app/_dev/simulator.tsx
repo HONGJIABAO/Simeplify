@@ -94,9 +94,33 @@ type DemoState =
   | 'room-setup-sheet'
   | 'workplace-details'
   | 'edit-tray-collapsed'
-  | 'edit-tray-dragging';
+  | 'edit-tray-dragging'
+  // Floor Plan V2
+  | 'stair-filled-floor-1'
+  | 'stair-filled-floor-2'
+  | 'square-plan-default'
+  | 'square-plan-shrunk'
+  | 'glow-on'
+  | 'glow-off'
+  | 'room-tags-default'
+  | 'room-tags-hovered'
+  | 'room-tags-edit-mode';
 
 const STATE_GROUPS = [
+  {
+    title: 'Floor Plan V2: Stair, Square, Glow, Room Tags',
+    items: [
+      { id: 'stair-filled-floor-1' as DemoState, label: 'stair filled, floor 1' },
+      { id: 'stair-filled-floor-2' as DemoState, label: 'stair filled, floor 2' },
+      { id: 'square-plan-default' as DemoState, label: 'Square plan — default (1:1)' },
+      { id: 'square-plan-shrunk' as DemoState, label: 'Square plan — shrunk (Edit mode)' },
+      { id: 'glow-on' as DemoState, label: 'Lit appliance — warm glow around picture' },
+      { id: 'glow-off' as DemoState, label: 'Off appliance — 40% opacity, no glow' },
+      { id: 'room-tags-default' as DemoState, label: 'Room tags — hidden by default' },
+      { id: 'room-tags-hovered' as DemoState, label: 'Room tags — hovered / long press' },
+      { id: 'room-tags-edit-mode' as DemoState, label: 'Room tags — Edit mode visible' },
+    ],
+  },
   {
     title: 'Stage 6/7: Two-floor plan states (SIM-05, SIM-06)',
     items: [
@@ -175,7 +199,21 @@ function BillHero({ kWh }: { kWh: number }) {
   return <Text style={galleryStyles.heroText}>{text}</Text>;
 }
 
-function TwoFloorPlanPreview({ initialFloor = 1, residentFloor = 1 }: { initialFloor?: FloorNumber; residentFloor?: FloorNumber }) {
+function TwoFloorPlanPreview({
+  initialFloor = 1,
+  residentFloor = 1,
+  isEditMode = false,
+  activeApplianceIds = ['fridge1'],
+  hoveredRoomId = null,
+  containerHeight,
+}: {
+  initialFloor?: FloorNumber;
+  residentFloor?: FloorNumber;
+  isEditMode?: boolean;
+  activeApplianceIds?: string[];
+  hoveredRoomId?: string | null;
+  containerHeight?: number;
+}) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const floorRef = useRef<View>(null);
   const avatarState: AvatarSimulationState = {
@@ -192,14 +230,31 @@ function TwoFloorPlanPreview({ initialFloor = 1, residentFloor = 1 }: { initialF
     targetFloor: residentFloor,
     isFloorTransitioning: false,
   };
-  return <View style={{ flex: 1, minHeight: 420, padding: 16 }}>
-    <FloorPlan rooms={MOCK_SIMULATOR_ROOMS} items={MOCK_SIMULATOR_ITEMS} currentFloor={floor}
-      onFloorChange={setFloor} avatarState={avatarState} avatarVariant="avatar_girl"
-      activeApplianceIds={['fridge1']} activeRoomLightIds={[]} isEditMode={false}
-      selectedItemId={null} dragGhost={null} hoveredRoomId={null} walkPath={[]}
-      onRoomPress={() => {}} onSelectItem={() => {}} onDeleteItem={() => {}}
-      onRotateItem={() => {}} onMoveItemEnd={() => {}} floorPlanRef={floorRef} onLayout={() => {}} />
-  </View>;
+  return (
+    <View style={{ flex: 1, minHeight: containerHeight ?? 420, padding: 16 }}>
+      <FloorPlan
+        rooms={MOCK_SIMULATOR_ROOMS}
+        items={MOCK_SIMULATOR_ITEMS}
+        currentFloor={floor}
+        onFloorChange={setFloor}
+        avatarState={avatarState}
+        avatarVariant="avatar_girl"
+        activeApplianceIds={activeApplianceIds}
+        activeRoomLightIds={[]}
+        isEditMode={isEditMode}
+        selectedItemId={null}
+        hoveredRoomId={hoveredRoomId}
+        walkPath={[]}
+        onRoomPress={() => {}}
+        onSelectItem={() => {}}
+        onDeleteItem={() => {}}
+        onRotateItem={() => {}}
+        onMoveItemEnd={() => {}}
+        floorPlanRef={floorRef}
+        onLayout={() => {}}
+      />
+    </View>
+  );
 }
 
 export default function SimulatorGallery() {
@@ -293,11 +348,19 @@ export default function SimulatorGallery() {
           <View style={{ width: 48 }} />
         </View>
 
-        {(activeState === 'two-floor-plan' || activeState === 'floor-two-dark' || activeState === 'resident-other-floor') && (
+        {(activeState === 'two-floor-plan' || activeState === 'floor-two-dark' || activeState === 'resident-other-floor' ||
+          activeState === 'stair-filled-floor-1' || activeState === 'stair-filled-floor-2' ||
+          activeState === 'square-plan-default' || activeState === 'square-plan-shrunk' ||
+          activeState === 'glow-on' || activeState === 'glow-off' ||
+          activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode') && (
           <TwoFloorPlanPreview
             key={activeState}
-            initialFloor={activeState === 'floor-two-dark' ? 2 : 1}
+            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' ? 2 : 1}
             residentFloor={activeState === 'resident-other-floor' ? 2 : 1}
+            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode'}
+            activeApplianceIds={activeState === 'glow-off' ? [] : ['fridge1', 'tv1', 'aircon1']}
+            hoveredRoomId={activeState === 'room-tags-hovered' ? 'f1-A' : null}
+            containerHeight={activeState === 'square-plan-shrunk' ? 260 : undefined}
           />
         )}
 

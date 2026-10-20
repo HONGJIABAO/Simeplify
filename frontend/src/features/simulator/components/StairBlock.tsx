@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowDown, ArrowUp } from 'lucide-react-native';
-import { Sprite } from './Sprite';
 import type { FloorNumber } from '../logic/roomLayout';
+import { STAIR_IMAGE_FIT } from '../logic/roomLayout';
+
+export { STAIR_IMAGE_FIT };
 
 interface StairBlockProps {
   floor: FloorNumber;
@@ -21,35 +22,33 @@ export function StairBlock({ floor, width, height, left, top, onChangeFloor }: S
   const accessibilityLabel = goesUp
     ? 'Go up to the second floor'
     : 'Go down to the first floor';
-  const gap = Math.min(34, Math.max(22, width * 0.55));
-  const topGapStart = width / 2 - gap / 2;
-  const topGapEnd = width / 2 + gap / 2;
-  const sideGapStart = height * 0.51 - gap / 2;
-  const sideGapEnd = height * 0.51 + gap / 2;
+
+  const horizontalSlop = Math.max(4, Math.ceil((48 - width) / 2));
+  const verticalSlop = Math.max(4, Math.ceil((48 - height) / 2));
 
   return (
     <Pressable
       onPress={() => onChangeFloor(nextFloor)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      hitSlop={4}
+      hitSlop={{
+        top: verticalSlop,
+        bottom: verticalSlop,
+        left: horizontalSlop,
+        right: horizontalSlop,
+      }}
       style={({ pressed }) => [
         styles.container,
         { width, height, left, top },
         pressed && styles.pressed,
       ]}
     >
-      <View pointerEvents="none" style={styles.depthStrip} />
-      <Svg width={width} height={height} pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Line x1={0} y1={0} x2={topGapStart} y2={0} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-        <Line x1={topGapEnd} y1={0} x2={width} y2={0} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-        <Line x1={0} y1={0} x2={0} y2={sideGapStart} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-        <Line x1={0} y1={sideGapEnd} x2={0} y2={height} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-        <Line x1={width} y1={0} x2={width} y2={height} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-        <Line x1={0} y1={height} x2={width} y2={height} stroke="#5C4033" strokeWidth={3.5} strokeLinecap="round" />
-      </Svg>
-
-      <Sprite type="stair" size={Math.max(38, Math.min(width - 8, height * 0.58))} />
+      <Image
+        testID="stair-image"
+        source={require('../../../../assets/sprites/furniture/stair.png')}
+        style={{ width, height }}
+        resizeMode={STAIR_IMAGE_FIT}
+      />
 
       <View pointerEvents="none" style={styles.directionPill}>
         {goesUp
@@ -64,21 +63,12 @@ export function StairBlock({ floor, width, height, left, top, onChangeFloor }: S
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    minWidth: 48,
-    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#EFEAD8',
   },
-  pressed: { backgroundColor: '#E0E6D9' },
-  depthStrip: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    right: 4,
-    height: 5,
-    backgroundColor: '#F8F4E9',
+  pressed: {
+    opacity: 0.85,
   },
   directionPill: {
     position: 'absolute',
@@ -99,3 +89,4 @@ const styles = StyleSheet.create({
     color: '#566549',
   },
 });
+

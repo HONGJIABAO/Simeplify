@@ -17,12 +17,13 @@ import { StoredPlacedItem, StoredRoom } from '../logic/storage';
 import { AvatarSimulationState, Point } from '../logic/SimulationEngine';
 import { SpriteItemDef } from '../logic/spriteMap';
 import {
+  calculateSquarePlanSide,
   clampPointToRect,
   FloorNumber,
   getFloorPlanLayout,
   getSlotRect,
 } from '../logic/roomLayout';
-import { getFloorSpriteSizes } from '../logic/spriteSizing';
+import { getFloorSpriteSizes, getItemDimensions } from '../logic/spriteSizing';
 
 export interface FloorViewport {
   scale: number;
@@ -42,7 +43,7 @@ interface FloorPlanProps {
   activeRoomLightIds: string[];
   isEditMode: boolean;
   selectedItemId: string | null;
-  dragGhost: { item: SpriteItemDef; x: number; y: number } | null;
+  dragGhost?: { item: SpriteItemDef; x: number; y: number } | null;
   hoveredRoomId: string | null;
   onRoomPress: (room: StoredRoom) => void;
   onSelectItem: (item: StoredPlacedItem) => void;
@@ -53,6 +54,8 @@ interface FloorPlanProps {
   floorPlanRef: React.RefObject<any>;
   onLayout: (event: LayoutChangeEvent) => void;
 }
+
+export { calculateSquarePlanSide };
 
 export function FloorPlan({
   rooms,
@@ -76,7 +79,7 @@ export function FloorPlan({
   floorPlanRef,
   onLayout,
 }: FloorPlanProps) {
-  const [containerSize, setContainerSize] = useState({ width: 350, height: 360 });
+  const [containerSize, setContainerSize] = useState({ width: 350, height: 350 });
   const [settledZoom, setSettledZoom] = useState(1);
   const [reduceMotion, setReduceMotion] = useState(false);
   const scale = useSharedValue(1);
@@ -86,8 +89,14 @@ export function FloorPlan({
   const startTranslateX = useSharedValue(0);
   const startTranslateY = useSharedValue(0);
   const floor2Opacity = useSharedValue(currentFloor === 2 ? 1 : 0);
-  const width = containerSize.width;
-  const height = containerSize.height;
+
+  const rawSide = calculateSquarePlanSide(containerSize.width, containerSize.height);
+  const targetSide = Math.max(160, rawSide || 340);
+  const sideAnim = useSharedValue(targetSide);
+
+  const canvasSide = Math.max(140, targetSide - 18);
+  const width = canvasSide;
+  const height = canvasSide;
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -167,6 +176,18 @@ export function FloorPlan({
     onLayout(event);
   };
 
+  useEffect(() => {
+    sideAnim.value = withTiming(targetSide, {
+      duration: reduceMotion ? 0 : 300,
+      easing: Easing.inOut(Easing.ease),
+    });
+  }, [targetSide, reduceMotion, sideAnim]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    width: sideAnim.value,
+    height: sideAnim.value,
+  }));
+
   const spriteSizes = getFloorSpriteSizes(width);
   const labelOverlaps = useMemo(() => {
     const perFloor = new Map<FloorNumber, Set<string>>([[1, new Set()], [2, new Set()]]);
@@ -221,6 +242,8 @@ export function FloorPlan({
               height={rect.height * height}
               isLightOn={activeRoomLightIds.includes(room.id)}
               isHovered={hoveredRoomId === room.id}
+              isEditMode={isEditMode}
+              isOccupied={avatarState.currentFloor === floor && avatarState.currentRoomId === room.id}
               onPress={onRoomPress}
             />
           );
@@ -246,15 +269,17 @@ export function FloorPlan({
         })}
 
         {floorItems.map((item) => {
-          const room = floorRooms.find((candidate) => candidate.id === item.roomId)!;
+          const room = floorRooms.find((candidate) => candidate.id === item.roomId);
+          if (!room) return null;
           const roomRect = getSlotRect(room.slot);
-          const desiredSize = item.category === 'Furniture' ? spriteSizes.furniture : spriteSizes.appliance;
-          const itemSize = Math.max(42, Math.min(desiredSize, roomRect.width * width - 12, roomRect.height * height - 32));
+          const roomPixelHeight = roomRect.height * height;
+          const roomPixelWidth = roomRect.width * width;
+          const dimensions = getItemDimensions(item.spriteKey || item.type, roomPixelHeight, roomPixelWidth);
           const clampedPoint = clampPointToRect(
             roomRect,
             { x: item.posX, y: item.posY },
-            itemSize / 2 / width,
-            (itemSize / 2 + 12) / height
+            (dimensions.visibleWidth / 2) / width,
+            (dimensions.visibleHeight / 2) / height
           );
           const isFurniture = item.category === 'Furniture';
           const isOn = !isFurniture && (activeApplianceIds.includes(item.id) || item.alwaysOn || item.isOn);
@@ -264,7 +289,8 @@ export function FloorPlan({
               item={{ ...item, posX: clampedPoint.x, posY: clampedPoint.y }}
               canvasWidth={width}
               canvasHeight={height}
-              itemSize={itemSize}
+              itemWidth={dimensions.width}
+              itemHeight={dimensions.height}
               labelFontSize={spriteSizes.labelFont}
               zoomScale={settledZoom}
               compactLabel={labelOverlaps.get(floor)?.has(item.id) ?? false}
@@ -304,55 +330,60 @@ export function FloorPlan({
   });
 
   return (
-    <View style={styles.cardContainer}>
-      <GestureDetector gesture={viewportGesture}>
-        <View ref={floorPlanRef} collapsable={false} onLayout={handleLayout} style={styles.floorCanvas}>
-          <Animated.View style={[styles.zoomLayer, zoomStyle]}>
-            <Animated.View pointerEvents={currentFloor === 1 ? 'auto' : 'none'} style={[styles.floorLayer, floor1Style]}>
-              {renderFloor(1)}
+    <View style={styles.cardOuter} onLayout={handleLayout}>
+      <Animated.View style={[styles.cardContainer, animatedCardStyle]}>
+        <GestureDetector gesture={viewportGesture}>
+          <View ref={floorPlanRef} collapsable={false} style={[styles.floorCanvas, { width, height }]}>
+            <Animated.View style={[styles.zoomLayer, zoomStyle]}>
+              <Animated.View pointerEvents={currentFloor === 1 ? 'auto' : 'none'} style={[styles.floorLayer, floor1Style]}>
+                {renderFloor(1)}
+              </Animated.View>
+              <Animated.View pointerEvents={currentFloor === 2 ? 'auto' : 'none'} style={[styles.floorLayer, floor2Style]}>
+                {renderFloor(2)}
+              </Animated.View>
             </Animated.View>
-            <Animated.View pointerEvents={currentFloor === 2 ? 'auto' : 'none'} style={[styles.floorLayer, floor2Style]}>
-              {renderFloor(2)}
-            </Animated.View>
-          </Animated.View>
 
-          <View pointerEvents="none" style={styles.floorPill}>
-            <Text style={styles.floorPillText}>{currentFloor}F</Text>
+            <View pointerEvents="none" style={styles.floorPill}>
+              <Text style={styles.floorPillText}>{currentFloor}F</Text>
+            </View>
+
+            {avatarState.currentFloor !== currentFloor && (
+              <View pointerEvents="none" style={styles.residentPill}>
+                <UserRound size={14} color="#57534E" strokeWidth={1.5} />
+                <Text style={styles.residentPillText}>Resident is on {avatarState.currentFloor}F</Text>
+              </View>
+            )}
+
+            {!currentFloorHasAppliance && (
+              <View pointerEvents="none" style={styles.emptyPill}>
+                <Hand size={15} color="#57534E" strokeWidth={1.5} />
+                <Text style={styles.emptyPillText}>{isEditMode ? 'Nothing here yet. Drag an appliance from below.' : 'Nothing here yet. Tap Edit to add appliances.'}</Text>
+              </View>
+            )}
           </View>
-
-          {avatarState.currentFloor !== currentFloor && (
-            <View pointerEvents="none" style={styles.residentPill}>
-              <UserRound size={14} color="#57534E" strokeWidth={1.5} />
-              <Text style={styles.residentPillText}>Resident is on {avatarState.currentFloor}F</Text>
-            </View>
-          )}
-
-          {!currentFloorHasAppliance && (
-            <View pointerEvents="none" style={styles.emptyPill}>
-              <Hand size={15} color="#57534E" strokeWidth={1.5} />
-              <Text style={styles.emptyPillText}>{isEditMode ? 'Nothing here yet. Drag an appliance from below.' : 'Nothing here yet. Tap Edit to add appliances.'}</Text>
-            </View>
-          )}
-        </View>
-      </GestureDetector>
+        </GestureDetector>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  cardContainer: {
+  cardOuter: {
     flex: 1,
-    minHeight: 190,
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 32,
     padding: 8,
     borderWidth: 1,
     borderColor: '#E7E5E4',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   floorCanvas: {
-    flex: 1,
-    width: '100%',
     position: 'relative',
     borderWidth: 3,
     borderColor: '#5C4033',

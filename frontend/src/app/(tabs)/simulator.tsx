@@ -1,7 +1,7 @@
 /** SIM-05, SIM-06, SIM-07 — two-floor Simulator floor plan. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, Platform, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useToast } from '@/components/Toast';
 import { BillCard, FastForwardPeriod } from '@/features/simulator/components/BillCard';
@@ -43,6 +43,8 @@ type PendingRoomAction =
 
 export default function SimulatorScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabBarClearance = 56 + Math.max(insets.bottom, 16) + 8;
   const { showToast } = useToast();
   const [initialLayout] = useState(loadLayoutState);
   const [initialSimulation] = useState(loadSimulationState);
@@ -412,7 +414,12 @@ export default function SimulatorScreen() {
             <Text style={styles.currentTaskName} numberOfLines={1}>{currentRoutine.name}</Text></View>
           <Text style={styles.currentTaskTime}>{currentRoutine.startTime}–{currentRoutine.endTime}</Text>
         </View>
-        <View style={styles.floorPlanArea}>
+        <View
+          style={[
+            styles.floorPlanArea,
+            { paddingBottom: isEditMode ? 220 : tabBarClearance },
+          ]}
+        >
           <FloorPlan rooms={rooms} items={items} currentFloor={currentFloor} onFloorChange={setCurrentFloor}
             avatarState={avatarState} walkPath={avatarWalkPath} avatarVariant={avatarVariant}
             activeApplianceIds={activeApplianceIds} activeRoomLightIds={activeRoomLightIds}
@@ -455,7 +462,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#EDF1EB' },
   mobileShell: { flex: 1, width: '100%', maxWidth: 420, alignSelf: 'center', position: 'relative', overflow: 'hidden' },
   mainContainer: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 10 },
-  floorPlanArea: { flex: 1, minHeight: 0, width: '100%', marginTop: 4, paddingBottom: 8 },
+  floorPlanArea: { flex: 1, minHeight: 0, width: '100%', marginTop: 4, alignItems: 'center', justifyContent: 'center' },
   currentTaskRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, marginTop: 2, marginBottom: 4 },
   currentTaskDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#8B9D77', marginRight: 10 },
   currentTaskCopy: { flex: 1, minWidth: 0 },

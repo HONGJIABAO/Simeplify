@@ -1,14 +1,26 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, PanResponder } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { RotateCw, X } from 'lucide-react-native';
 import { Sprite } from './Sprite';
 import { StoredPlacedItem } from '../logic/storage';
-import { Power, RotateCw, X } from 'lucide-react-native';
 
 interface PlacedItemProps {
   item: StoredPlacedItem;
   canvasWidth: number;
   canvasHeight: number;
-  itemSize: number;
+  itemWidth?: number;
+  itemHeight?: number;
+  itemSize?: number;
   labelFontSize: number;
   zoomScale: number;
   compactLabel: boolean;
@@ -25,6 +37,8 @@ export function PlacedItem({
   item,
   canvasWidth,
   canvasHeight,
+  itemWidth,
+  itemHeight,
   itemSize,
   labelFontSize,
   zoomScale,
@@ -38,7 +52,8 @@ export function PlacedItem({
   onMoveEnd,
 }: PlacedItemProps) {
   const isFurniture = item.category === 'Furniture';
-  const size = itemSize;
+  const width = itemWidth ?? itemSize ?? 48;
+  const height = itemHeight ?? itemSize ?? 48;
   const labelWidth = isSelected ? 148 : compactLabel ? 72 : 120;
   const shouldShowLabel = isEditMode || isSelected;
   const visibleLabel = !shouldShowLabel
@@ -46,6 +61,24 @@ export function PlacedItem({
     : compactLabel && !isSelected
       ? (isFurniture ? '' : `${item.wattage ?? 0} W`)
       : item.name;
+
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [glowAnim] = useState(() => new Animated.Value(isOn ? 1 : 0));
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    Animated.timing(glowAnim, {
+      toValue: isOn ? 1 : 0,
+      duration: reduceMotion ? 0 : 500,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [glowAnim, isOn, reduceMotion]);
 
   // Pixel coordinates on floor plan
   const posX = item.posX * canvasWidth;
@@ -70,10 +103,8 @@ export function PlacedItem({
           pan.setValue({ x: 0, y: 0 });
 
           if (Math.hypot(gesture.dx, gesture.dy) < 6) {
-            // Just a tap
             onSelect(item);
           } else {
-            // Dropped at new position
             const newX = Math.max(0.08, Math.min(0.92, (posX + gesture.dx / zoomScale) / canvasWidth));
             const newY = Math.max(0.08, Math.min(0.92, (posY + gesture.dy / zoomScale) / canvasHeight));
             onMoveEnd(item.id, newX, newY);
@@ -86,8 +117,24 @@ export function PlacedItem({
     [isEditMode, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
   );
 
-  // Z-order: based on vertical Y position so lower items overlap higher items
   const zIndex = Math.floor(item.posY * 100) + (isFurniture ? 2 : 5) + (isSelected ? 50 : 0);
+
+  const horizontalSlop = Math.max(0, Math.ceil((48 - width) / 2));
+  const verticalSlop = Math.max(0, Math.ceil((48 - height) / 2));
+
+  const glowRadius = Math.max(4, Math.round(height * 0.09));
+  const webGlowFilter = Platform.OS === 'web' && isOn && !isFurniture
+    ? `drop-shadow(0px 0px ${glowRadius}px rgba(243, 201, 139, 0.70)) drop-shadow(0px 0px ${Math.round(glowRadius * 1.5)}px rgba(243, 201, 139, 0.45))`
+    : undefined;
+
+  const iosGlowStyle = Platform.OS === 'ios' && isOn && !isFurniture
+    ? {
+        shadowColor: '#F3C98B',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.7,
+        shadowRadius: glowRadius,
+      }
+    : undefined;
 
   return (
     <Animated.View
@@ -95,10 +142,10 @@ export function PlacedItem({
       style={[
         styles.itemContainer,
         {
-          left: posX - labelWidth / 2,
-          top: posY - size / 2,
-          width: labelWidth,
-          height: size + 24,
+          left: posX - width / 2,
+          top: posY - height / 2,
+          width,
+          height: height + (shouldShowLabel ? 24 : 0),
           zIndex,
           transform: [
             { translateX: pan.x },
@@ -111,19 +158,67 @@ export function PlacedItem({
         onPress={() => onSelect(item)}
         accessibilityRole="button"
         accessibilityLabel={`${item.name}${isOn ? ', turned on' : ', turned off'}`}
+        hitSlop={{
+          top: verticalSlop,
+          bottom: verticalSlop,
+          left: horizontalSlop,
+          right: horizontalSlop,
+        }}
         style={[
           styles.pressableArea,
-          { width: size, height: size },
-          isOn && styles.activeAppliance,
+          { width, height },
           !isOn && !isFurniture && styles.dimmedOffline,
-          isSelected && isEditMode && styles.selectedHandles,
+          iosGlowStyle,
         ]}
       >
+        {/* Android fallback glow: scaled warm tinted copy behind sprite */}
+        {Platform.OS === 'android' && isOn && !isFurniture && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              styles.androidGlowContainer,
+              {
+                opacity: glowAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 0.5],
+                }),
+              },
+            ]}
+          >
+            <Sprite
+              type={item.spriteKey || item.type}
+              width={width * 1.12}
+              height={height * 1.12}
+              style={{ tintColor: '#F3C98B' }}
+              containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
+            />
+          </Animated.View>
+        )}
+
         <Sprite
           type={item.spriteKey || item.type}
-          size={size * 0.9}
+          width={width}
+          height={height}
+          style={
+            Platform.OS === 'web' && webGlowFilter
+              ? ({
+                  filter: webGlowFilter,
+                  transition: reduceMotion ? 'none' : 'filter 500ms ease-in-out',
+                } as any)
+              : undefined
+          }
           containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
         />
+
+        {/* Small sage on-dot on top-right of lit appliance */}
+        {isOn && !isFurniture && (
+          <View
+            accessibilityLabel="On"
+            pointerEvents="none"
+            style={styles.onDot}
+          />
+        )}
 
         {/* Selected outline handles in edit mode */}
         {isSelected && isEditMode && (
@@ -144,21 +239,14 @@ export function PlacedItem({
         </View>
       )}
 
-      {isOn && !isFurniture && (
-        <View pointerEvents="none" style={styles.inUsePill}>
-          <Power size={12} color="#566549" strokeWidth={2} />
-          <Text style={styles.inUseText}>In use</Text>
-        </View>
-      )}
-
-      {/* Quick delete button (sibling to Pressable to avoid nested button error) */}
+      {/* Quick delete button */}
       {isSelected && isEditMode && (
         <Pressable
           onPress={(e) => {
             e.stopPropagation();
             onDelete(item.id);
           }}
-          style={[styles.deleteBadge, { right: (labelWidth - size) / 2 - 10 }]}
+          style={styles.deleteBadge}
           accessibilityRole="button"
           accessibilityLabel={`Delete ${item.name}`}
           hitSlop={12}
@@ -167,13 +255,14 @@ export function PlacedItem({
         </Pressable>
       )}
 
+      {/* Quick rotate button */}
       {isSelected && isEditMode && isFurniture && (
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
             onRotate(item.id);
           }}
-          style={[styles.rotateBadge, { left: (labelWidth - size) / 2 - 10 }]}
+          style={styles.rotateBadge}
           accessibilityRole="button"
           accessibilityLabel={`Rotate ${item.name}`}
           hitSlop={12}
@@ -194,20 +283,27 @@ const styles = StyleSheet.create({
   pressableArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
     position: 'relative',
-  },
-  activeAppliance: {
-    backgroundColor: 'rgba(255, 244, 181, 0.44)',
-    opacity: 1,
+    backgroundColor: 'transparent',
   },
   dimmedOffline: {
-    opacity: 0.62,
+    opacity: 0.40,
   },
-  selectedHandles: {
-    borderWidth: 1.5,
-    borderColor: '#566549',
-    borderRadius: 8,
+  androidGlowContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#8B9D77',
+    borderWidth: 1.2,
+    borderColor: '#FAF6F1',
+    zIndex: 20,
   },
   handleDot: {
     position: 'absolute',
@@ -239,6 +335,7 @@ const styles = StyleSheet.create({
   rotateBadge: {
     position: 'absolute',
     top: -10,
+    left: -10,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -263,24 +360,5 @@ const styles = StyleSheet.create({
     color: '#292524',
     lineHeight: 16,
     textAlign: 'center',
-  },
-  inUsePill: {
-    position: 'absolute',
-    top: -8,
-    right: 2,
-    minHeight: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: '#B6C4A6',
-    backgroundColor: '#F2F5EE',
-  },
-  inUseText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 12,
-    color: '#566549',
   },
 });
