@@ -64,11 +64,11 @@ Rules:
 
 **Logic**
 
-7. The bill is calculated on the device. Presence (away time) always wins over My day. Before any My day answer, use the "max" bill. See `Workflow.md` 3a.
+7. The bill shown in the Simulator is computed on the device; analyze-bill recomputes the estimate on the server for energy points. Presence (away time) always wins over My day. Before any My day answer, use the "max" bill. See `Workflow.md` 3a.
 8. The fast-forward animation only shows a number. It never changes it, and it reads and writes no data.
 9. The avatar is only a picture of the data. It never changes the bill.
 10. Water alert level = the higher of the MoM level and the volume level. The bill amount (RM) does not decide the level. See Appendix B.
-11. The alert level is decided by app rules. The AI only explains it.
+11. The alert level is decided by analyze-bill on the server, and the AI only explains it.
 12. Max 3 green deeds per household per day give points. Day = Malaysia time (Asia/Kuala_Lumpur).
 13. One vote per household per month. Voting uses no points.
 14. Energy points (+50) once per billing month, even if the same month is uploaded again.
