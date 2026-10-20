@@ -265,6 +265,139 @@ export interface Database {
           }
         ];
       };
+      day_blocks: {
+        Row: {
+          id: string;
+          household_id: string;
+          type: 'sleep' | 'meal' | 'evening' | 'shower' | 'work' | 'other' | 'away';
+          title: string;
+          room_id: string | null;
+          start_time: string;
+          end_time: string;
+          appliances_on: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          type: 'sleep' | 'meal' | 'evening' | 'shower' | 'work' | 'other' | 'away';
+          title: string;
+          room_id?: string | null;
+          start_time: string;
+          end_time: string;
+          appliances_on?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          type?: 'sleep' | 'meal' | 'evening' | 'shower' | 'work' | 'other' | 'away';
+          title?: string;
+          room_id?: string | null;
+          start_time?: string;
+          end_time?: string;
+          appliances_on?: Json;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "fk_day_blocks_room_composite";
+            columns: ["room_id", "household_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id", "household_id"];
+          }
+        ];
+      };
+      tariff_rates: {
+        Row: {
+          id: string;
+          type: string;
+          region: string;
+          effective_from: string;
+          generation_rate_low: number;
+          generation_rate_high: number;
+          generation_threshold_kwh: number;
+          capacity_rate: number;
+          network_rate: number;
+          retail_charge: number;
+          retail_free_limit_kwh: number;
+          afa_rate: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type?: string;
+          region?: string;
+          effective_from: string;
+          generation_rate_low: number;
+          generation_rate_high: number;
+          generation_threshold_kwh?: number;
+          capacity_rate: number;
+          network_rate: number;
+          retail_charge?: number;
+          retail_free_limit_kwh?: number;
+          afa_rate?: number;
+          created_at?: string;
+        };
+        Update: {
+          type?: string;
+          region?: string;
+          effective_from?: string;
+          generation_rate_low?: number;
+          generation_rate_high?: number;
+          generation_threshold_kwh?: number;
+          capacity_rate?: number;
+          network_rate?: number;
+          retail_charge?: number;
+          retail_free_limit_kwh?: number;
+          afa_rate?: number;
+        };
+        Relationships: [];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          household_id: string;
+          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          title: string;
+          message: string;
+          is_read: boolean;
+          linked_path: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          title: string;
+          message: string;
+          is_read?: boolean;
+          linked_path?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          type?: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          title?: string;
+          message?: string;
+          is_read?: boolean;
+          linked_path?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

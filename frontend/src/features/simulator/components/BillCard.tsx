@@ -11,6 +11,7 @@ interface BillCardProps {
   simulatedDateStr: string;
   activeFastForward: FastForwardPeriod | null;
   isEditMode?: boolean;
+  hasUnreadNotifications?: boolean;
   onSelectFastForward: (period: FastForwardPeriod) => void;
   onToggleEdit?: () => void;
   onPressBillCard?: () => void;
@@ -24,6 +25,7 @@ export function BillCard({
   simulatedDateStr,
   activeFastForward,
   isEditMode = false,
+  hasUnreadNotifications = false,
   onSelectFastForward,
   onToggleEdit,
   onPressBillCard,
@@ -89,7 +91,7 @@ export function BillCard({
           accessibilityLabel="Notifications"
         >
           <Bell size={18} color="#292524" strokeWidth={1.5} />
-          <View style={styles.bellDot} />
+          {hasUnreadNotifications && <View style={styles.bellDot} />}
         </Pressable>
 
         {/* Calendar Check Button */}

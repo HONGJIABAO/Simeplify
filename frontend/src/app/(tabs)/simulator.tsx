@@ -30,6 +30,19 @@ import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms 
 import { clampPointToRect, containsPoint, FloorNumber, getFloorPlanLayout, getSlotRect, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
 import { getFloorSpriteSizes } from '@/features/simulator/logic/spriteSizing';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
+import { useAuthSession } from '@/lib/authSession';
+import {
+  fetchSimulatorState,
+  saveRoom,
+  createAppliance,
+  updateAppliance,
+  deleteAppliance,
+  saveRoutineBlocksToDb,
+  calculateLiveTnbBill,
+  type ApplianceTypeRow,
+  type ScheduleRow,
+  type TariffRateRow,
+} from '@/lib/services/simulatorService';
 
 const FAST_FORWARD_CONFIG: Record<FastForwardPeriod, { durationSeconds: number; label: string }> = {
   '1w': { durationSeconds: 5, label: '1 week' },
@@ -62,10 +75,50 @@ export default function SimulatorScreen() {
     date.setMinutes(initialSimulation?.simulatedMinutes ?? 18 * 60 + 30);
     return date;
   });
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
+
+  const [applianceTypes, setApplianceTypes] = useState<ApplianceTypeRow[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [activeTariff, setActiveTariff] = useState<TariffRateRow | null>(null);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+
   const [avatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() =>
-    initialSimulation?.avatarVariant === 'avatar_boy' || initialSimulation?.avatarVariant === 'boy'
+    session.gender === 'boy' || initialSimulation?.avatarVariant === 'avatar_boy' || initialSimulation?.avatarVariant === 'boy'
       ? 'avatar_boy' : 'avatar_girl'
   );
+
+  // Fetch real household state from Supabase
+  useEffect(() => {
+    if (!householdId) return;
+
+    let isMounted = true;
+    fetchSimulatorState(householdId)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data.rooms.length > 0) {
+          setRooms(data.rooms);
+        }
+        if (data.appliances.length > 0) {
+          setItems((prev) => {
+            const furniture = prev.filter((it) => it.category === 'Furniture');
+            return [...data.appliances, ...furniture];
+          });
+        }
+        if (data.routineBlocks.length > 0) {
+          setRoutineBlocks(data.routineBlocks);
+        }
+        setApplianceTypes(data.applianceTypes);
+        setSchedules(data.schedules);
+        setActiveTariff(data.tariff);
+        setUnreadNotificationsCount(data.unreadNotificationsCount);
+      })
+      .catch((err) => console.error('Failed to load simulator data:', err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [householdId]);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -251,7 +304,20 @@ export default function SimulatorScreen() {
     }
     return { activeApplianceIds: activeIds, activeRoomLightIds: [...new Set(lightRooms)] };
   }, [avatarState.targetRoomId, currentRoutine.activeApplianceTypes, currentRoutine.name, items]);
-  const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => computeSimulationBill(items), [items]);
+
+  const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => {
+    return calculateLiveTnbBill({
+      appliances: items,
+      applianceTypes,
+      schedules,
+      dayBlocks: routineBlocks,
+      residentsCount: session.household?.residents_count ?? 3,
+      showersPerPerson: session.household?.showers_per_person ?? 2,
+      minutesPerShower: session.household?.minutes_per_shower ?? 10,
+      tariff: activeTariff,
+    });
+  }, [items, applianceTypes, schedules, routineBlocks, session.household, activeTariff]);
+
   const simulatedDateStr = useMemo(() => simulatedDateTime.toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kuala_Lumpur',
   }), [simulatedDateTime]);
@@ -310,9 +376,23 @@ export default function SimulatorScreen() {
     const setUpRoom = { ...original, name, type, isSetUp: true };
     setRooms((previous) => previous.map((room) => room.id === roomId ? setUpRoom : room));
     if (pendingRoomAction?.kind === 'new') placeItem(pendingRoomAction.itemDef, setUpRoom, pendingRoomAction.point);
-    if (pendingRoomAction?.kind === 'move') setItems((previous) => previous.map((item) => item.id === pendingRoomAction.itemId
-      ? { ...item, ...clampItemPoint(item, setUpRoom, pendingRoomAction.point), roomId } : item));
+    if (pendingRoomAction?.kind === 'move') {
+      const movedItem = items.find((it) => it.id === pendingRoomAction.itemId);
+      const clamped = clampItemPoint(movedItem || { category: 'Appliances' }, setUpRoom, pendingRoomAction.point);
+      setItems((previous) => previous.map((item) => item.id === pendingRoomAction.itemId
+        ? { ...item, ...clamped, roomId } : item));
+      if (movedItem?.category === 'Appliances' && !pendingRoomAction.itemId.startsWith('pending_') && !pendingRoomAction.itemId.startsWith('mock_')) {
+        updateAppliance(pendingRoomAction.itemId, {
+          roomId,
+          posX: clamped.x,
+          posY: clamped.y,
+        }).catch((err) => console.error('Failed to update moved appliance in Supabase:', err));
+      }
+    }
     setPendingRoomAction(null);
+
+    // Persist room changes to Supabase
+    saveRoom(roomId, name, type, true, householdId).catch((err) => console.error('Failed to save room in Supabase:', err));
     showToast(`Saved room “${name}”`, 'success');
   };
 
@@ -367,9 +447,19 @@ export default function SimulatorScreen() {
     if (item.category === 'Appliances') { setEditingAppliance(item); setApplianceSheetVisible(true); }
     else { setEditingFurniture(item); setFurnitureSheetVisible(true); }
   };
-  const handleDeleteItem = (itemId: string) => { setItems((value) => value.filter((item) => item.id !== itemId)); setSelectedItemId(null); showToast('Item removed', 'info'); };
+  const handleDeleteItem = (itemId: string) => {
+    const itemToDelete = items.find((it) => it.id === itemId);
+    if (itemToDelete?.category === 'Appliances' && !itemId.startsWith('pending_') && !itemId.startsWith('mock_')) {
+      deleteAppliance(itemId).catch((err) => console.error('Failed to delete appliance from Supabase:', err));
+    }
+    setItems((value) => value.filter((item) => item.id !== itemId));
+    setSelectedItemId(null);
+    showToast('Item removed', 'info');
+  };
+
   const handleRotateItem = (itemId: string) => setItems((value) => value.map((item) =>
     item.id === itemId && item.category === 'Furniture' ? { ...item, rotation: ((item.rotation ?? 0) + 90) % 360 } : item));
+
   const handleMoveItemEnd = (itemId: string, x: number, y: number) => {
     const point = { x, y };
     const target = getPlanTarget(point);
@@ -378,10 +468,51 @@ export default function SimulatorScreen() {
     if (!target.room.isSetUp) {
       setPendingRoomAction({ kind: 'move', itemId, point }); setNamingRoom(target.room); setNamingModalVisible(true); return;
     }
+    const clamped = clampItemPoint({ category: 'Appliances' }, target.room, point);
     setItems((value) => value.map((item) => item.id === itemId
       ? { ...item, ...clampItemPoint(item, target.room, point), roomId: target.room.id } : item));
+
+    const item = items.find((it) => it.id === itemId);
+    if (item?.category === 'Appliances' && !itemId.startsWith('pending_') && !itemId.startsWith('mock_')) {
+      updateAppliance(itemId, {
+        roomId: target.room.id,
+        posX: clamped.x,
+        posY: clamped.y,
+      }).catch((err) => console.error('Failed to update appliance position in Supabase:', err));
+    }
   };
+
   const handleSaveAppliance = (saved: StoredPlacedItem) => {
+    const isNew = !saved.id || editingAppliance?.id.startsWith('pending_') || editingAppliance?.id.startsWith('mock_');
+    if (isNew && householdId && saved.category === 'Appliances') {
+      createAppliance(householdId, {
+        roomId: saved.roomId,
+        type: saved.type,
+        brand: saved.brand,
+        model: saved.model,
+        wattage: saved.wattage || 100,
+        starRating: saved.stars ?? 3,
+        quantity: saved.quantity || 1,
+        posX: saved.posX,
+        posY: saved.posY,
+      })
+        .then((dbId) => {
+          setItems((value) => value.map((item) => (item.id === editingAppliance?.id ? { ...saved, id: dbId } : item)));
+        })
+        .catch((err) => console.error('Failed to create appliance in Supabase:', err));
+    } else if (!isNew && saved.category === 'Appliances') {
+      updateAppliance(saved.id, {
+        roomId: saved.roomId,
+        brand: saved.brand,
+        model: saved.model,
+        wattage: saved.wattage,
+        starRating: saved.stars,
+        quantity: saved.quantity,
+        posX: saved.posX,
+        posY: saved.posY,
+      }).catch((err) => console.error('Failed to update appliance in Supabase:', err));
+    }
+
     setItems((value) => value.map((item) => item.id === editingAppliance?.id ? saved : item));
     setApplianceSheetVisible(false); setEditingAppliance(null); showToast(`Saved ${saved.name}`, 'success');
   };
@@ -405,6 +536,7 @@ export default function SimulatorScreen() {
       <View style={styles.mainContainer}>
         <BillCard monthlyBillRm={monthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
           activeFastForward={activeFastForward} isEditMode={isEditMode}
+          hasUnreadNotifications={unreadNotificationsCount > 0}
           onToggleEdit={() => { setIsEditMode((value) => !value); setSelectedItemId(null); setSelectedPendingItem(null); }}
           onSelectFastForward={handleFastForward} onPressBillCard={() => setBillModalVisible(true)}
           onPressBell={() => router.push('/notifications')} onPressCalendar={() => setTimelineVisible(true)} />
@@ -446,14 +578,50 @@ export default function SimulatorScreen() {
       <MyDayTimelineSheet visible={timelineVisible} onClose={() => setTimelineVisible(false)} blocks={routineBlocks}
         rooms={setupRooms} appliances={appliancesForBillModal} onAddBlockPress={() => { setTimelineVisible(false); setAddBlockVisible(true); }}
         onEditBlockPress={(block) => { setTimelineVisible(false); setSelectedBlockForEdit(block); setEditBlockVisible(true); }}
-        onSaveSchedule={() => { saveRoutineBlocks(routineBlocks); showToast('Schedule saved', 'success'); }} />
+        onSaveSchedule={() => {
+          saveRoutineBlocks(routineBlocks);
+          if (householdId) {
+            saveRoutineBlocksToDb(householdId, routineBlocks)
+              .then(() => showToast('Schedule saved', 'success'))
+              .catch((err) => console.error('Failed to save day_blocks to Supabase:', err));
+          } else {
+            showToast('Schedule saved', 'success');
+          }
+        }} />
       <AddBlockSheet visible={addBlockVisible} onClose={() => { setAddBlockVisible(false); setTimelineVisible(true); }}
         rooms={setupRooms} appliances={appliancesForBillModal} existingBlocks={routineBlocks}
-        onSaveBlock={(block) => { setRoutineBlocks((value) => [...value, { ...block, id: `block_${Date.now()}` }]); showToast(`Added ${block.name}`, 'success'); }} />
+        onSaveBlock={(block) => {
+          const newBlocks = [...routineBlocks, { ...block, id: `block_${Date.now()}` }];
+          setRoutineBlocks(newBlocks);
+          if (householdId) {
+            saveRoutineBlocksToDb(householdId, newBlocks).catch((err) =>
+              console.error('Failed to save day_blocks to Supabase:', err)
+            );
+          }
+          showToast(`Added ${block.name}`, 'success');
+        }} />
       <EditBlockSheet visible={editBlockVisible} onClose={() => { setEditBlockVisible(false); setSelectedBlockForEdit(null); setTimelineVisible(true); }}
         block={selectedBlockForEdit} rooms={setupRooms} appliances={appliancesForBillModal} existingBlocks={routineBlocks}
-        onUpdateBlock={(updated) => { setRoutineBlocks((value) => value.map((block) => block.id === updated.id ? updated : block)); showToast(`Updated ${updated.name}`, 'success'); }}
-        onRemoveBlock={(id) => { setRoutineBlocks((value) => value.filter((block) => block.id !== id)); showToast('Time block removed', 'info'); }} />
+        onUpdateBlock={(updated) => {
+          const updatedBlocks = routineBlocks.map((block) => (block.id === updated.id ? updated : block));
+          setRoutineBlocks(updatedBlocks);
+          if (householdId) {
+            saveRoutineBlocksToDb(householdId, updatedBlocks).catch((err) =>
+              console.error('Failed to update day_blocks in Supabase:', err)
+            );
+          }
+          showToast(`Updated ${updated.name}`, 'success');
+        }}
+        onRemoveBlock={(id) => {
+          const remainingBlocks = routineBlocks.filter((block) => block.id !== id);
+          setRoutineBlocks(remainingBlocks);
+          if (householdId) {
+            saveRoutineBlocksToDb(householdId, remainingBlocks).catch((err) =>
+              console.error('Failed to remove day_block in Supabase:', err)
+            );
+          }
+          showToast('Time block removed', 'info');
+        }} />
     </View>
   </SafeAreaView>;
 }
