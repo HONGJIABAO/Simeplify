@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { House, Bell, Mail, Sprout, Check } from 'lucide-react-native';
+import { House, Bell, Mail, Sprout, Check, ChevronDown } from 'lucide-react-native';
 import { CommunityViewMode, VotingPhase } from '../types';
 
 interface CommunityHeaderProps {
@@ -8,6 +8,7 @@ interface CommunityHeaderProps {
   viewMode: CommunityViewMode;
   onToggleViewMode: (mode: CommunityViewMode) => void;
   onPressNotifications?: () => void;
+  onPressOakridge?: () => void;
 }
 
 export function CommunityHeader({
@@ -15,15 +16,25 @@ export function CommunityHeader({
   viewMode,
   onToggleViewMode,
   onPressNotifications,
+  onPressOakridge,
 }: CommunityHeaderProps) {
   return (
     <View style={styles.headerWrapper}>
       {/* Top Sector & Edition Bar */}
       <View style={styles.topRow}>
-        <View style={styles.sectorRow}>
+        <Pressable
+          onPress={onPressOakridge}
+          accessibilityRole="button"
+          accessibilityLabel="Oakridge Commons participation breakdown"
+          style={({ pressed }) => [
+            styles.sectorRow,
+            pressed && { opacity: 0.75 },
+          ]}
+        >
           <House size={16} color="#57534E" strokeWidth={1.5} />
           <Text style={styles.sectorText}>Oakridge Commons • Sector 4B</Text>
-        </View>
+          <ChevronDown size={14} color="#78716C" strokeWidth={1.8} />
+        </Pressable>
 
         <View style={styles.rightGroup}>
           <Text style={styles.editionText}>October Edition</Text>
@@ -65,63 +76,17 @@ export function CommunityHeader({
         </View>
       )}
 
-      {/* Phase 3: Result Announced & Interacted (After clicking "Got it") */}
-      {/* Instantly updates to "Living Task" with small distinct date indicator badge "Day 1" */}
+      {/* Phase 3: Challenge Started (Living Task) */}
+      {/* "Ballot Sealed" is COMPLETELY UNMOUNTED AND REMOVED. Only "Living Task (Day 1)" is visible */}
       {votingPhase === 'tasks' && (
-        <View style={styles.tabSwitcherContainer}>
-          <Pressable
-            onPress={() => onToggleViewMode('letter')}
-            accessibilityRole="button"
-            accessibilityLabel="Ballot Sealed"
-            style={({ pressed }) => [
-              styles.tabButton,
-              viewMode === 'letter' && styles.tabButtonActive,
-              pressed && { opacity: 0.8 },
-            ]}
-          >
-            <Check
-              size={13}
-              color={viewMode === 'letter' ? '#566549' : '#78716C'}
-              strokeWidth={2.2}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                viewMode === 'letter' ? styles.tabTextActive : styles.tabTextInactive,
-              ]}
-            >
-              Ballot Sealed
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => onToggleViewMode('living_leaf')}
-            accessibilityRole="button"
-            accessibilityLabel="Living Task Day 1"
-            style={({ pressed }) => [
-              styles.tabButton,
-              viewMode === 'living_leaf' && styles.tabButtonActive,
-              pressed && { opacity: 0.8 },
-            ]}
-          >
-            <Sprout
-              size={14}
-              color={viewMode === 'living_leaf' ? '#566549' : '#78716C'}
-              strokeWidth={2}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                viewMode === 'living_leaf' ? styles.tabTextActive : styles.tabTextInactive,
-              ]}
-            >
-              Living Task
-            </Text>
-            {/* Small distinct date indicator badge */}
+        <View style={styles.singlePillWrapper}>
+          <View style={styles.activeLivingTaskPill}>
+            <Sprout size={14} color="#566549" strokeWidth={2} />
+            <Text style={styles.activeLivingTaskText}>Living Task</Text>
             <View style={styles.dayBadge}>
               <Text style={styles.dayBadgeText}>Day 1</Text>
             </View>
-          </Pressable>
+          </View>
         </View>
       )}
     </View>
@@ -145,9 +110,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flex: 1,
+    paddingVertical: 4,
   },
   sectorText: {
-    fontFamily: 'SourceSans3_400Regular',
+    fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 13,
     color: '#57534E',
   },
@@ -223,48 +189,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#566549',
     marginLeft: 2,
   },
-  tabSwitcherContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#EFECE6',
-    borderRadius: 9999,
-    padding: 3,
-    marginTop: 12,
-  },
-  tabButton: {
-    flex: 1,
+  activeLivingTaskPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    borderRadius: 9999,
-  },
-  tabButtonActive: {
+    gap: 7,
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 18,
+    paddingVertical: 7.5,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: '#8B9D77',
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
     elevation: 2,
   },
-  tabText: {
-    fontSize: 13,
-  },
-  tabTextActive: {
-    fontFamily: 'SourceSans3_600SemiBold',
+  activeLivingTaskText: {
+    fontFamily: 'SourceSans3_700Bold',
+    fontSize: 13.5,
     color: '#292524',
-  },
-  tabTextInactive: {
-    fontFamily: 'SourceSans3_400Regular',
-    color: '#78716C',
   },
   dayBadge: {
     backgroundColor: '#E5ECE0',
-    paddingHorizontal: 7,
+    paddingHorizontal: 7.5,
     paddingVertical: 1.5,
     borderRadius: 9999,
-    marginLeft: 2,
+    marginLeft: 3,
   },
   dayBadgeText: {
     fontFamily: 'SourceSans3_700Bold',

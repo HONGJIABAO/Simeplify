@@ -23,3 +23,23 @@ export interface TaskItem {
   route: string;
   completed: boolean;
 }
+
+export interface OakridgeParticipationStats {
+  sector: string;
+  totalHouseholds: number;
+  activeToday: number;
+  participationRate: number;
+  watering: {
+    count: number;
+    percent: number;
+  };
+  fertilizing: {
+    count: number;
+    percent: number;
+  };
+  pending: {
+    count: number;
+    percent: number;
+  };
+  updatedAt: string;
+}
