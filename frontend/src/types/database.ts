@@ -513,6 +513,84 @@ export interface Database {
           }
         ];
       };
+      bills: {
+        Row: {
+          id: string;
+          household_id: string;
+          file_path: string;
+          type: 'electricity' | 'water';
+          billing_month: string;
+          usage: number;
+          amount: number;
+          analysis: any | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          file_path: string;
+          type: 'electricity' | 'water';
+          billing_month: string;
+          usage: number;
+          amount: number;
+          analysis?: any | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          file_path?: string;
+          type?: 'electricity' | 'water';
+          billing_month?: string;
+          usage?: number;
+          amount?: number;
+          analysis?: any | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bills_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      alerts: {
+        Row: {
+          id: string;
+          household_id: string;
+          bill_id: string;
+          level: 'normal' | 'minor_drip' | 'leak_detected' | 'major_pipe_burst';
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          bill_id: string;
+          level: 'normal' | 'minor_drip' | 'leak_detected' | 'major_pipe_burst';
+          message: string;
+          created_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          bill_id?: string;
+          level?: 'normal' | 'minor_drip' | 'leak_detected' | 'major_pipe_burst';
+          message?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "alerts_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

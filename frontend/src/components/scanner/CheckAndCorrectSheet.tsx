@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { FileText, AlertCircle, Camera, Check } from 'lucide-react-native';
+import { FileText, AlertCircle, AlertTriangle, Check } from 'lucide-react-native';
 import { BottomSheet } from '../BottomSheet';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Skeleton } from '../Skeleton';
 import { SegmentedControl } from '../SegmentedControl';
+
+export interface CheckAndCorrectInitialValues {
+  billType?: 'electricity' | 'water';
+  provider?: string;
+  billingMonth?: string;
+  usage?: number;
+  amount?: number;
+}
 
 export interface CheckAndCorrectProps {
   visible: boolean;
@@ -18,6 +26,9 @@ export interface CheckAndCorrectProps {
   }) => void;
   isReading?: boolean;
   readingFailed?: boolean;
+  readingFailedMessage?: string;
+  initialValues?: CheckAndCorrectInitialValues | null;
+  fileName?: string;
   alreadySavedMonth?: boolean;
 }
 
@@ -27,13 +38,38 @@ export function CheckAndCorrectSheet({
   onConfirm,
   isReading = false,
   readingFailed = false,
+  readingFailedMessage = 'We could not read this bill. Please type the numbers.',
+  initialValues,
+  fileName = 'statement.pdf',
   alreadySavedMonth = false,
 }: CheckAndCorrectProps) {
-  const [billType, setBillType] = useState<'electricity' | 'water'>('water');
-  const [billingMonth, setBillingMonth] = useState('October 2026');
-  const [usage, setUsage] = useState('18');
-  const [amount, setAmount] = useState('80.00');
+  const [billType, setBillType] = useState<'electricity' | 'water'>('electricity');
+  const [billingMonth, setBillingMonth] = useState('');
+  const [usage, setUsage] = useState('');
+  const [amount, setAmount] = useState('');
+  const [provider, setProvider] = useState<string | undefined>(undefined);
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const [prevInitialValues, setPrevInitialValues] = useState<CheckAndCorrectInitialValues | undefined>(undefined);
+  const [prevReadingFailed, setPrevReadingFailed] = useState<boolean>(false);
+
+  // Sync initial values when sheet opens or read finishes
+  if (initialValues !== prevInitialValues || readingFailed !== prevReadingFailed) {
+    setPrevInitialValues(initialValues);
+    setPrevReadingFailed(readingFailed);
+    if (initialValues) {
+      setBillType(initialValues.billType || 'electricity');
+      setBillingMonth(initialValues.billingMonth || '');
+      setUsage(initialValues.usage != null && initialValues.usage > 0 ? String(initialValues.usage) : '');
+      setAmount(initialValues.amount != null && initialValues.amount > 0 ? String(initialValues.amount) : '');
+      setProvider(initialValues.provider);
+    } else if (readingFailed) {
+      setBillType('electricity');
+      setBillingMonth('');
+      setUsage('');
+      setAmount('');
+      setProvider(undefined);
+    }
+  }
 
   const handleSave = () => {
     if (alreadySavedMonth && !confirmReplace) {
@@ -42,78 +78,82 @@ export function CheckAndCorrectSheet({
     }
     onConfirm({
       billType,
-      billingMonth,
+      billingMonth: billingMonth.trim(),
       usageValue: parseFloat(usage) || 0,
       amount: parseFloat(amount) || 0,
     });
+    setConfirmReplace(false);
   };
 
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
-      title="Check and Correct"
+      onClose={() => {
+        setConfirmReplace(false);
+        onClose();
+      }}
+      title="Check and correct"
       height="88%"
     >
       <ScrollView contentContainerStyle={styles.container}>
         {isReading ? (
           <View style={styles.loadingContainer}>
-            <Skeleton height={140} style={{ width: '100%', borderRadius: 16, marginBottom: 16 }} />
-            <Text style={styles.loadingText}>Reading your bill with EcoTwin OCR...</Text>
+            <Skeleton height={120} style={{ width: '100%', borderRadius: 16, marginBottom: 16 }} />
+            <Text style={styles.loadingText}>Reading your bill...</Text>
             <View style={{ gap: 12, width: '100%', marginTop: 12 }}>
               <Skeleton height={48} style={{ borderRadius: 9999 }} />
               <Skeleton height={48} style={{ borderRadius: 9999 }} />
               <Skeleton height={48} style={{ borderRadius: 9999 }} />
             </View>
           </View>
-        ) : readingFailed ? (
-          <View style={styles.errorContainer}>
-            <View style={styles.errorIconCircle}>
-              <AlertCircle size={32} color="#a8442f" strokeWidth={1.5} />
-            </View>
-            <Text style={styles.errorTitle}>We could not read this bill</Text>
-            <Text style={styles.errorBody}>
-              The image was too blurry or the numbers were obscured. Please take a clearer photo or upload a PDF.
-            </Text>
-            <Button
-              variant="primary"
-              leftIcon={<Camera size={18} color="#fafaf9" strokeWidth={1.5} />}
-              onPress={onClose}
-              style={{ width: '100%', marginTop: 16 }}
-            >
-              Retake photo
-            </Button>
-          </View>
         ) : (
           <View style={styles.content}>
-            {/* Bill Thumbnail Preview Box */}
+            {/* Scanned file box */}
             <View style={styles.previewBox}>
-              <FileText size={36} color="#566549" strokeWidth={1.5} />
+              <FileText size={32} color="#566549" strokeWidth={1.5} />
               <View style={styles.previewMeta}>
-                <Text style={styles.previewTitle}>Scanned statement preview</Text>
-                <Text style={styles.previewHint}>Air_Selangor_Oct2026.pdf · 2.4 MB</Text>
+                <Text style={styles.previewTitle}>
+                  {billType === 'electricity' ? 'Electricity bill' : 'Water bill'}
+                  {provider ? ` · ${provider}` : ''}
+                </Text>
+                <Text style={styles.previewHint}>{fileName}</Text>
               </View>
             </View>
 
-            {confirmReplace ? (
+            {/* Reading failed note: fields empty, user types values */}
+            {readingFailed && (
+              <View style={styles.failedNoteBox}>
+                <AlertCircle size={18} color="#a8442f" strokeWidth={1.5} />
+                <Text style={styles.failedNoteText}>{readingFailedMessage}</Text>
+              </View>
+            )}
+
+            {/* Small helper line: changing numbers can mean no energy points */}
+            <View style={styles.helperRow}>
+              <AlertTriangle size={14} color="#8c857b" strokeWidth={1.5} />
+              <Text style={styles.helperText}>Changing the numbers can mean no energy points</Text>
+            </View>
+
+            {/* Replace confirmation banner */}
+            {alreadySavedMonth && (
               <View style={styles.replaceWarningBox}>
                 <AlertCircle size={20} color="#92600e" strokeWidth={1.5} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.replaceWarningTitle}>Replace saved bill?</Text>
+                  <Text style={styles.replaceWarningTitle}>Replace the bill for this month?</Text>
                   <Text style={styles.replaceWarningText}>
-                    A statement for {billingMonth} is already recorded. Do you want to update it with these new values?
+                    A statement for {billingMonth || 'this month'} is already saved. Saving will update the existing bill and its analysis.
                   </Text>
                 </View>
               </View>
-            ) : null}
+            )}
 
             {/* Editable Form Fields */}
             <View style={styles.formSection}>
               <Text style={styles.fieldLabel}>Bill Type</Text>
               <SegmentedControl
                 options={[
-                  { label: 'Water (Air Selangor)', value: 'water' },
-                  { label: 'Electricity (TNB)', value: 'electricity' },
+                  { label: provider && billType === 'electricity' ? `Electricity (${provider})` : 'Electricity', value: 'electricity' },
+                  { label: provider && billType === 'water' ? `Water (${provider})` : 'Water', value: 'water' },
                 ]}
                 selectedValue={billType}
                 onChange={setBillType}
@@ -124,7 +164,7 @@ export function CheckAndCorrectSheet({
                 label="Billing Month"
                 value={billingMonth}
                 onChangeText={setBillingMonth}
-                placeholder="e.g. October 2026"
+                placeholder="e.g. October 2026 or 2026-10"
               />
 
               <Input
@@ -152,14 +192,14 @@ export function CheckAndCorrectSheet({
                 onPress={handleSave}
                 style={{ flex: 1 }}
               >
-                {confirmReplace ? 'Confirm Replace' : 'Confirm'}
+                {alreadySavedMonth ? 'Replace bill' : 'Confirm'}
               </Button>
               <Button
                 variant="secondary"
                 onPress={onClose}
                 style={{ flex: 1 }}
               >
-                Retake
+                Cancel
               </Button>
             </View>
           </View>
@@ -184,36 +224,8 @@ const styles = StyleSheet.create({
     color: '#292524',
     marginBottom: 16,
   },
-  errorContainer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
-  },
-  errorIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#fbece8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontFamily: 'Lora_600SemiBold',
-    fontSize: 20,
-    color: '#292524',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  errorBody: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 14,
-    color: '#57534e',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   content: {
-    gap: 16,
+    gap: 14,
   },
   previewBox: {
     flexDirection: 'row',
@@ -236,6 +248,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#78716c',
     marginTop: 2,
+  },
+  failedNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fbece8',
+    borderColor: '#f2c8be',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+  },
+  failedNoteText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 13,
+    color: '#a8442f',
+    flex: 1,
+    lineHeight: 18,
+  },
+  helperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  helperText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#78716c',
+    fontStyle: 'italic',
   },
   replaceWarningBox: {
     flexDirection: 'row',
@@ -270,6 +311,6 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    marginTop: 8,
   },
 });

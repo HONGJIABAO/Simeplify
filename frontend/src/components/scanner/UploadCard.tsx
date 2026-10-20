@@ -21,7 +21,7 @@ export function UploadCard({ onTakePhoto, onUploadPdf, isReading = false }: Uplo
 
         <Text style={styles.title}>Upload utility bill</Text>
         <Text style={styles.subtitle}>
-          Supports TNB electric bills, Air Selangor water statements (PDF or Photo)
+          TNB electricity and Air Selangor water bills (PDF or photo)
         </Text>
       </View>
 

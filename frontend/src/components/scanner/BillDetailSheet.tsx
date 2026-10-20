@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { FileText, AlertTriangle, Trash2, RefreshCw } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Linking } from 'react-native';
+import { FileText, AlertTriangle, Trash2, RefreshCw, ExternalLink } from 'lucide-react-native';
 import { BottomSheet } from '../BottomSheet';
 import { Button } from '../Button';
 import { MiniCard } from '../MiniCard';
 import { Badge } from '../Badge';
-import { type BillRecord } from '@/lib/mockData';
+import { type Bill, getBillFileUrl, formatBillingMonthDisplay } from '@/lib/services/scannerService';
 import { formatMoney, formatUsage } from '@/lib/formatters';
 
 export interface BillDetailProps {
-  bill: BillRecord | null;
+  bill: Bill | null;
   visible: boolean;
   onClose: () => void;
-  onDelete: (billId: string) => void;
+  onDelete: (billId: string, filePath?: string) => void;
   onAnalyzeAgain?: (billId: string) => void;
+  isReanalyzing?: boolean;
 }
 
 export function BillDetailSheet({
@@ -22,8 +23,22 @@ export function BillDetailSheet({
   onClose,
   onDelete,
   onAnalyzeAgain,
+  isReanalyzing = false,
 }: BillDetailProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (bill && visible) {
+      getBillFileUrl(bill.file_path).then((url) => {
+        if (isMounted) setFileUrl(url);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [bill, visible]);
 
   if (!bill) return null;
 
@@ -32,10 +47,23 @@ export function BillDetailSheet({
       setConfirmDelete(true);
       return;
     }
-    onDelete(bill.id);
+    onDelete(bill.id, bill.file_path);
     setConfirmDelete(false);
     onClose();
   };
+
+  const handleOpenFile = () => {
+    if (fileUrl) {
+      Linking.openURL(fileUrl).catch(() => {
+        // ignore
+      });
+    }
+  };
+
+  const comparison = bill.analysis?.comparison;
+  const isAnomaly = bill.alertLevel && bill.alertLevel !== 'normal';
+  const displayTitle = bill.type === 'electricity' ? 'Electricity' : 'Water';
+  const displayMonth = formatBillingMonthDisplay(bill.billing_month);
 
   return (
     <BottomSheet
@@ -44,7 +72,7 @@ export function BillDetailSheet({
         setConfirmDelete(false);
         onClose();
       }}
-      title={`${bill.provider} Statement`}
+      title={`${displayTitle} Statement`}
       height="88%"
     >
       <ScrollView contentContainerStyle={styles.container}>
@@ -54,48 +82,82 @@ export function BillDetailSheet({
             <FileText size={28} color="#422A1D" strokeWidth={1.5} />
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.providerTitle}>{bill.provider} Bill</Text>
-            <Text style={styles.monthText}>{bill.month}</Text>
+            <Text style={styles.providerTitle}>
+              {displayTitle}
+              {bill.provider ? ` · ${bill.provider}` : ''}
+            </Text>
+            <Text style={styles.monthText}>{displayMonth}</Text>
           </View>
-          <Badge tone={bill.status === 'anomaly' ? 'amber' : 'sage'}>
-            {bill.status === 'anomaly' ? 'Anomaly' : 'Normal'}
+          <Badge tone={isAnomaly ? 'amber' : 'sage'}>
+            {isAnomaly ? 'Anomaly' : 'Normal'}
           </Badge>
         </View>
+
+        {/* View Original Document Button (signed URL, 1hr expiry) */}
+        {fileUrl && (
+          <Button
+            variant="secondary"
+            leftIcon={<ExternalLink size={16} color="#292524" strokeWidth={1.5} />}
+            onPress={handleOpenFile}
+            style={styles.fileButton}
+          >
+            View original document
+          </Button>
+        )}
 
         {/* Key Values */}
         <View style={styles.valuesGrid}>
           <MiniCard tone="subtle" style={styles.valueCard}>
-            <Text style={styles.valueLabel}>Total Amount</Text>
+            <Text style={styles.valueLabel}>Total amount</Text>
             <Text style={styles.valueBig}>{formatMoney(bill.amount, true)}</Text>
           </MiniCard>
           <MiniCard tone="subtle" style={styles.valueCard}>
-            <Text style={styles.valueLabel}>Usage Volume</Text>
-            <Text style={styles.valueBig}>{formatUsage(bill.usageValue, bill.type)}</Text>
+            <Text style={styles.valueLabel}>Usage volume</Text>
+            <Text style={styles.valueBig}>{formatUsage(bill.usage, bill.type)}</Text>
           </MiniCard>
         </View>
 
-        {/* History Comparison */}
-        <MiniCard tone="default" style={styles.historyCard}>
-          <Text style={styles.sectionTitle}>History Comparison</Text>
-          <View style={styles.historyRow}>
-            <Text style={styles.historyLabel}>vs Previous Month</Text>
-            <Text style={[styles.historyVal, bill.status === 'anomaly' && styles.historyAnomaly]}>
-              {bill.status === 'anomaly' ? '+48% spike' : '+3.0% normal'}
-            </Text>
-          </View>
-          <View style={styles.historyRow}>
-            <Text style={styles.historyLabel}>3-Month Average</Text>
-            <Text style={styles.historyVal}>
-              {bill.type === 'electricity' ? '535 kWh' : '16.2 m³'}
-            </Text>
-          </View>
-        </MiniCard>
+        {/* History Comparison (from server analysis only) */}
+        {comparison && (
+          <MiniCard tone="default" style={styles.historyCard}>
+            <Text style={styles.sectionTitle}>History comparison</Text>
+            {comparison.mom_change_pct != null && (
+              <View style={styles.historyRow}>
+                <Text style={styles.historyLabel}>vs Previous month</Text>
+                <Text style={[styles.historyVal, (comparison.mom_change_pct || 0) > 20 && styles.historyAnomaly]}>
+                  {comparison.mom_change_pct > 0 ? `+${comparison.mom_change_pct}%` : `${comparison.mom_change_pct}%`}
+                </Text>
+              </View>
+            )}
+            {comparison.avg_3m_diff != null && (
+              <View style={styles.historyRow}>
+                <Text style={styles.historyLabel}>vs 3-month average</Text>
+                <Text style={styles.historyVal}>
+                  {comparison.avg_3m_diff > 0 ? `+${comparison.avg_3m_diff}` : String(comparison.avg_3m_diff)}
+                </Text>
+              </View>
+            )}
+            {comparison.streak && (
+              <View style={styles.historyRow}>
+                <Text style={styles.historyLabel}>Trend</Text>
+                <Text style={styles.historyVal}>{comparison.streak}</Text>
+              </View>
+            )}
+          </MiniCard>
+        )}
 
-        {/* Saved AI Analysis */}
-        {bill.aiAnalysis && (
+        {/* Saved AI Analysis (read from bills.analysis, no direct AI calls) */}
+        {bill.analysis?.summary && (
           <MiniCard tone="warm" style={styles.analysisCard}>
-            <Text style={styles.analysisTitle}>Saved AI Analysis</Text>
-            <Text style={styles.analysisBody}>{bill.aiAnalysis}</Text>
+            <Text style={styles.analysisTitle}>Saved AI analysis</Text>
+            <Text style={styles.analysisBody}>{bill.analysis.summary}</Text>
+            {bill.analysis.tips && bill.analysis.tips.length > 0 && (
+              <View style={styles.tipsList}>
+                {bill.analysis.tips.map((t, idx) => (
+                  <Text key={idx} style={styles.tipItemText}>• {t}</Text>
+                ))}
+              </View>
+            )}
           </MiniCard>
         )}
 
@@ -116,6 +178,7 @@ export function BillDetailSheet({
               variant="secondary"
               leftIcon={<RefreshCw size={16} color="#292524" strokeWidth={1.5} />}
               onPress={() => onAnalyzeAgain(bill.id)}
+              loading={isReanalyzing}
             >
               Analyze again
             </Button>
@@ -128,7 +191,7 @@ export function BillDetailSheet({
             style={confirmDelete ? styles.confirmDeleteButton : undefined}
             textStyle={confirmDelete ? styles.confirmDeleteText : styles.deleteText}
           >
-            {confirmDelete ? 'Confirm Delete' : 'Delete bill'}
+            {confirmDelete ? 'Confirm delete' : 'Delete bill'}
           </Button>
         </View>
       </ScrollView>
@@ -139,7 +202,7 @@ export function BillDetailSheet({
 const styles = StyleSheet.create({
   container: {
     padding: 20,
-    gap: 16,
+    gap: 14,
     paddingBottom: 40,
   },
   headerBox: {
@@ -171,6 +234,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#78716c',
     marginTop: 2,
+  },
+  fileButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   valuesGrid: {
     flexDirection: 'row',
@@ -217,7 +285,7 @@ const styles = StyleSheet.create({
     color: '#292524',
   },
   historyAnomaly: {
-    color: '#b91c1c',
+    color: '#8F5B14',
   },
   analysisCard: {
     padding: 16,
@@ -233,6 +301,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#44403c',
     lineHeight: 18,
+  },
+  tipsList: {
+    marginTop: 8,
+    gap: 4,
+  },
+  tipItemText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#57534e',
+    lineHeight: 16,
   },
   deleteWarning: {
     flexDirection: 'row',

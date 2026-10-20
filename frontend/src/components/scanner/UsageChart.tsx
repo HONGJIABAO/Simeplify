@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { TrendingDown } from 'lucide-react-native';
+import Svg, { Rect, Line, Polyline, Circle, G } from 'react-native-svg';
 import { Card } from '../Card';
 import { SegmentedControl, type SegmentOption } from '../SegmentedControl';
-import { MONTHLY_USAGE_DATA, type MonthlyUsageItem } from '@/lib/mockData';
+import { type MonthlyChartDataPoint } from '@/lib/services/scannerService';
 import { formatMoney } from '@/lib/formatters';
 
 export type ChartFilter = 'All' | 'Electricity' | 'Water';
@@ -15,33 +15,66 @@ const FILTER_OPTIONS: SegmentOption<ChartFilter>[] = [
 ];
 
 export interface UsageChartProps {
-  data?: MonthlyUsageItem[];
-  onSelectMonth?: (item: MonthlyUsageItem) => void;
+  data?: MonthlyChartDataPoint[];
+  onSelectMonth?: (item: MonthlyChartDataPoint) => void;
+  selectedMonthKey?: string | null;
 }
 
-export function UsageChart({ data = MONTHLY_USAGE_DATA, onSelectMonth }: UsageChartProps) {
+export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: UsageChartProps) {
   const [filter, setFilter] = useState<ChartFilter>('All');
-  const [selectedMonth, setSelectedMonth] = useState<MonthlyUsageItem | null>(
-    data[data.length - 1] ?? null
+  const [activeMonthKey, setActiveMonthKey] = useState<string | null>(
+    selectedMonthKey ?? (data.length > 0 ? data[data.length - 1].month : null)
   );
 
-  const maxVal = Math.max(...data.map((d) => Math.max(d.electricityRm, d.waterRm, d.totalRm / 2)));
-  const CHART_HEIGHT = 140;
+  const selectedItem = data.find((d) => d.month === (selectedMonthKey ?? activeMonthKey)) ?? data[data.length - 1] ?? null;
 
-  const handleMonthPress = (item: MonthlyUsageItem) => {
-    setSelectedMonth(item);
+  const handleMonthPress = (item: MonthlyChartDataPoint) => {
+    setActiveMonthKey(item.month);
     onSelectMonth?.(item);
   };
 
-  return (
-    <Card style={styles.card}>
-      {/* Top Header Row with Title & Segmented Filter */}
-      <View style={styles.topRow}>
-        <View style={styles.titleColumn}>
-          <Text style={styles.title}>Monthly Usage</Text>
+  if (!data || data.length === 0) {
+    return (
+      <Card style={styles.card}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Monthly usage</Text>
           <Text style={styles.subtitle}>Past 5 billing cycles</Text>
         </View>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Upload your bills to visualize 5-month consumption trends.</Text>
+        </View>
+      </Card>
+    );
+  }
 
+  // Calculate scaling
+  const maxElec = Math.max(...data.map((d) => d.electricityRm), 10);
+  const maxWater = Math.max(...data.map((d) => d.waterRm), 10);
+  const maxSpend = filter === 'All'
+    ? Math.max(...data.map((d) => Math.max(d.electricityRm, d.waterRm * 2, d.totalRm * 0.7)), 50)
+    : filter === 'Electricity'
+    ? maxElec
+    : maxWater;
+
+  const CHART_WIDTH = 320;
+  const CHART_HEIGHT = 130;
+  const BASELINE_Y = 110;
+  const colWidth = CHART_WIDTH / data.length;
+  const barWidth = 12;
+
+  // Build trend points
+  const trendPoints: { x: number; y: number }[] = [];
+
+  return (
+    <Card style={styles.card}>
+      {/* Title block */}
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Monthly usage</Text>
+        <Text style={styles.subtitle}>Past 5 billing cycles</Text>
+      </View>
+
+      {/* Filter row placed on its own row under title (page_refined.md S7.1) */}
+      <View style={styles.filterRow}>
         <SegmentedControl
           options={FILTER_OPTIONS}
           selectedValue={filter}
@@ -50,78 +83,112 @@ export function UsageChart({ data = MONTHLY_USAGE_DATA, onSelectMonth }: UsageCh
         />
       </View>
 
-      {/* Chart Section */}
-      <View style={styles.chartWrapper}>
-        {/* Horizontal subtle gridline */}
-        <View style={styles.gridLine} />
+      {/* SVG Chart */}
+      <View style={styles.svgWrapper}>
+        <Svg width="100%" height={CHART_HEIGHT + 24} viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT + 24}`}>
+          {/* Subtle Gridlines */}
+          <Line x1="0" y1="35" x2={CHART_WIDTH} y2="35" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="3,3" />
+          <Line x1="0" y1="75" x2={CHART_WIDTH} y2="75" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="3,3" />
+          <Line x1="0" y1={BASELINE_Y} x2={CHART_WIDTH} y2={BASELINE_Y} stroke="#d6d3d1" strokeWidth="1" />
 
-        <View style={styles.barsContainer}>
-          {data.map((item, index) => {
-            const isOctAnomaly = item.waterAlertLevel === 'leak_detected';
-            const isSelected = selectedMonth?.month === item.month;
+          {/* Render Bars for each month */}
+          {data.map((item, idx) => {
+            const centerX = idx * colWidth + colWidth / 2;
+            const isSelected = selectedItem?.month === item.month;
 
-            // Height scaling
-            const elecHeight = Math.max(16, (item.electricityRm / (maxVal * 1.25)) * CHART_HEIGHT);
-            const waterHeight = Math.max(12, (item.waterRm / (maxVal * 1.25)) * CHART_HEIGHT * 2.2);
+            const elecHeight = Math.max(6, (item.electricityRm / (maxSpend * 1.15)) * (BASELINE_Y - 20));
+            const waterHeight = Math.max(6, (item.waterRm / (maxSpend * 0.5 || 25)) * (BASELINE_Y - 20));
 
             const showElec = filter === 'All' || filter === 'Electricity';
             const showWater = filter === 'All' || filter === 'Water';
 
+            // Trend point for this month
+            let trendVal = item.totalRm;
+            if (filter === 'Electricity') trendVal = item.electricityRm;
+            if (filter === 'Water') trendVal = item.waterRm;
+            const trendHeight = Math.max(8, (trendVal / (maxSpend * 1.15)) * (BASELINE_Y - 20));
+            const trendY = Math.max(16, BASELINE_Y - trendHeight);
+            trendPoints.push({ x: centerX, y: trendY });
+
+            return (
+              <G key={item.month}>
+                {/* Column highlight area when selected */}
+                {isSelected && (
+                  <Rect
+                    x={centerX - colWidth / 2 + 4}
+                    y={10}
+                    width={colWidth - 8}
+                    height={BASELINE_Y + 16}
+                    rx={12}
+                    fill="#f5f5f4"
+                  />
+                )}
+
+                {/* Electricity Bar (tan-400 / #d4a373) */}
+                {showElec && (
+                  <Rect
+                    x={showWater ? centerX - barWidth - 2 : centerX - barWidth / 2}
+                    y={BASELINE_Y - elecHeight}
+                    width={barWidth}
+                    height={elecHeight}
+                    rx={4}
+                    fill="#d4a373"
+                    opacity={isSelected ? 1 : 0.88}
+                  />
+                )}
+
+                {/* Water Bar (sage-500 / #6f8260) */}
+                {showWater && (
+                  <Rect
+                    x={showElec ? centerX + 2 : centerX - barWidth / 2}
+                    y={BASELINE_Y - waterHeight}
+                    width={barWidth}
+                    height={waterHeight}
+                    rx={4}
+                    fill={item.waterAlertLevel && item.waterAlertLevel !== 'normal' ? '#8F5B14' : '#6f8260'}
+                    opacity={isSelected ? 1 : 0.88}
+                  />
+                )}
+              </G>
+            );
+          })}
+
+          {/* Trend Line (react-native-svg Polyline) */}
+          {trendPoints.length > 1 && (
+            <Polyline
+              points={trendPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke="#8c857b"
+              strokeWidth="2"
+              strokeDasharray="4,3"
+            />
+          )}
+
+          {/* Trend dots */}
+          {trendPoints.map((p, i) => (
+            <Circle
+              key={`dot-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={selectedItem?.month === data[i].month ? 4.5 : 3}
+              fill={selectedItem?.month === data[i].month ? '#292524' : '#78716c'}
+            />
+          ))}
+        </Svg>
+
+        {/* Month labels and touch hit areas under SVG */}
+        <View style={styles.labelsRow}>
+          {data.map((item) => {
+            const isSelected = selectedItem?.month === item.month;
             return (
               <Pressable
                 key={item.month}
                 onPress={() => handleMonthPress(item)}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.label} bill total ${formatMoney(item.totalRm)}`}
-                style={[styles.monthColumn, isSelected && styles.monthColumnSelected]}
+                accessibilityLabel={`${item.label} bill statement`}
+                style={[styles.monthLabelBtn, isSelected && styles.monthLabelBtnSelected]}
               >
-                {/* Spend amount label above bars */}
-                <View style={styles.amountLabelContainer}>
-                  <Text
-                    style={[
-                      styles.amountLabel,
-                      isOctAnomaly && styles.anomalyAmountLabel,
-                      isSelected && styles.selectedAmountLabel,
-                    ]}
-                  >
-                    {formatMoney(item.totalRm)}
-                  </Text>
-                  {isOctAnomaly && <Text style={styles.spikeTriangle}>▲</Text>}
-                </View>
-
-                {/* Bars Pair */}
-                <View style={styles.barsGroup}>
-                  {showElec && (
-                    <View
-                      style={[
-                        styles.bar,
-                        styles.elecBar,
-                        { height: elecHeight },
-                        isSelected && styles.barHighlight,
-                      ]}
-                    />
-                  )}
-                  {showWater && (
-                    <View
-                      style={[
-                        styles.bar,
-                        styles.waterBar,
-                        { height: waterHeight },
-                        isOctAnomaly && styles.anomalyWaterBar,
-                        isSelected && styles.barHighlight,
-                      ]}
-                    />
-                  )}
-                </View>
-
-                {/* Month Label */}
-                <Text
-                  style={[
-                    styles.monthText,
-                    isSelected && styles.monthTextSelected,
-                    isOctAnomaly && styles.anomalyMonthText,
-                  ]}
-                >
+                <Text style={[styles.monthLabelText, isSelected && styles.monthLabelTextSelected]}>
                   {item.label}
                 </Text>
               </Pressable>
@@ -130,14 +197,14 @@ export function UsageChart({ data = MONTHLY_USAGE_DATA, onSelectMonth }: UsageCh
         </View>
       </View>
 
-      {/* Interactive Detail Box when month tapped */}
-      {selectedMonth && (
+      {/* Selected Month Detail Strip (page_refined.md S7.1 proposal) */}
+      {selectedItem && (
         <View style={styles.detailRow}>
           <Text style={styles.detailText}>
-            <Text style={styles.detailBold}>{selectedMonth.label}: </Text>
-            Electricity {formatMoney(selectedMonth.electricityRm)} ({selectedMonth.electricityKwh} kWh)
+            <Text style={styles.detailBold}>{selectedItem.label}: </Text>
+            Electricity {formatMoney(selectedItem.electricityRm)} ({selectedItem.electricityKwh} kWh)
             {' · '}
-            Water {formatMoney(selectedMonth.waterRm)} ({selectedMonth.waterM3} m³)
+            Water {formatMoney(selectedItem.waterRm)} ({selectedItem.waterM3} m³)
           </Text>
         </View>
       )}
@@ -146,22 +213,16 @@ export function UsageChart({ data = MONTHLY_USAGE_DATA, onSelectMonth }: UsageCh
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.elecDot]} />
-          <Text style={styles.legendLabel}>Electricity (TNB)</Text>
+          <Text style={styles.legendLabel}>Electricity</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.waterDot]} />
-          <Text style={styles.legendLabel}>Water (Air Selangor)</Text>
+          <Text style={styles.legendLabel}>Water</Text>
         </View>
-      </View>
-
-      {/* Benchmark Nested Callout Box */}
-      <View style={styles.calloutBox}>
-        <View style={styles.calloutIconCircle}>
-          <TrendingDown size={16} color="#566549" strokeWidth={2} />
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDash, styles.trendDash]} />
+          <Text style={styles.legendLabel}>Trend</Text>
         </View>
-        <Text style={styles.calloutText}>
-          Usage is 12% lower than similar 3-bedroom terrace homes in your district.
-        </Text>
       </View>
     </Card>
   );
@@ -172,16 +233,8 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
   },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  titleColumn: {
-    flexShrink: 1,
+  titleRow: {
+    marginBottom: 12,
   },
   title: {
     fontFamily: 'Lora_600SemiBold',
@@ -194,98 +247,37 @@ const styles = StyleSheet.create({
     color: '#57534e',
     marginTop: 2,
   },
+  filterRow: {
+    marginBottom: 16,
+  },
   segmentedControl: {
-    minWidth: 180,
+    width: '100%',
   },
-  chartWrapper: {
+  svgWrapper: {
+    width: '100%',
     position: 'relative',
-    height: 190,
-    justifyContent: 'flex-end',
-    marginBottom: 8,
-    paddingTop: 20,
   },
-  gridLine: {
-    position: 'absolute',
-    top: 60,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#e7e5e4',
-  },
-  barsContainer: {
+  labelsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: 8,
+    marginTop: 4,
   },
-  monthColumn: {
+  monthLabelBtn: {
+    flex: 1,
     alignItems: 'center',
     paddingVertical: 4,
-    paddingHorizontal: 6,
-    borderRadius: 12,
+    borderRadius: 8,
   },
-  monthColumnSelected: {
-    backgroundColor: '#f5f5f4',
+  monthLabelBtnSelected: {
+    backgroundColor: '#eae5dc',
   },
-  amountLabelContainer: {
-    alignItems: 'center',
-    height: 24,
-    justifyContent: 'center',
-  },
-  amountLabel: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11,
-    color: '#57534e',
-  },
-  selectedAmountLabel: {
-    color: '#292524',
-    fontFamily: 'SourceSans3_700Bold',
-  },
-  anomalyAmountLabel: {
-    color: '#b91c1c',
-    fontFamily: 'SourceSans3_700Bold',
-  },
-  spikeTriangle: {
-    fontSize: 7,
-    color: '#b91c1c',
-    marginTop: -2,
-  },
-  barsGroup: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 4,
-    marginVertical: 6,
-    height: 120,
-    justifyContent: 'center',
-  },
-  bar: {
-    width: 14,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-  },
-  barHighlight: {
-    opacity: 1,
-  },
-  elecBar: {
-    backgroundColor: '#d4a373', // tan-400 / #D49B6A
-  },
-  waterBar: {
-    backgroundColor: '#6f8260', // sage-500 / #697D58
-  },
-  anomalyWaterBar: {
-    backgroundColor: '#566549',
-  },
-  monthText: {
+  monthLabelText: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 12,
     color: '#78716c',
-    marginTop: 2,
   },
-  monthTextSelected: {
-    color: '#292524',
+  monthLabelTextSelected: {
     fontFamily: 'SourceSans3_600SemiBold',
-  },
-  anomalyMonthText: {
     color: '#292524',
   },
   detailRow: {
@@ -293,7 +285,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    marginVertical: 8,
+    marginTop: 12,
     alignItems: 'center',
   },
   detailText: {
@@ -308,9 +300,8 @@ const styles = StyleSheet.create({
   legendRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
-    marginTop: 10,
-    marginBottom: 16,
+    gap: 18,
+    marginTop: 14,
   },
   legendItem: {
     flexDirection: 'row',
@@ -322,38 +313,33 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  legendDash: {
+    width: 14,
+    height: 2,
+    borderRadius: 1,
+  },
   elecDot: {
     backgroundColor: '#d4a373',
   },
   waterDot: {
     backgroundColor: '#6f8260',
   },
+  trendDash: {
+    backgroundColor: '#8c857b',
+  },
   legendLabel: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 12,
     color: '#57534e',
   },
-  calloutBox: {
-    flexDirection: 'row',
+  emptyContainer: {
+    paddingVertical: 32,
     alignItems: 'center',
-    backgroundColor: '#f4f1ea',
-    borderRadius: 16,
-    padding: 12,
-    gap: 10,
   },
-  calloutIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#d6e5c8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calloutText: {
+  emptyText: {
     fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12,
-    color: '#44403c',
-    flex: 1,
-    lineHeight: 16,
+    fontSize: 13,
+    color: '#78716c',
+    textAlign: 'center',
   },
 });
