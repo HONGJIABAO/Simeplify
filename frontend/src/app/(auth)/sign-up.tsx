@@ -568,10 +568,13 @@ export default function SignUpScreen() {
         animationType="fade"
         onRequestClose={() => setStatePickerVisible(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setStatePickerVisible(false)}
-        >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setStatePickerVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close state picker backdrop"
+          />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Choose your state</Text>
             <ScrollView style={styles.modalList}>
@@ -599,7 +602,7 @@ export default function SignUpScreen() {
               ))}
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </SafeAreaView>
   );

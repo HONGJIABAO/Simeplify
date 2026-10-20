@@ -1,5 +1,7 @@
 import React from 'react';
-import { Image, View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
+import { Asset } from 'expo-asset';
 import { getSpriteSource, SPRITE_MAP } from '../logic/spriteMap';
 
 interface SpriteProps {
@@ -16,8 +18,16 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle }
   if (!source) return null;
 
   const itemDef = SPRITE_MAP[type];
-  const targetW = width ?? (itemDef ? (itemDef.baseWidth / Math.max(itemDef.baseWidth, itemDef.baseHeight)) * size * 1.1 : size);
-  const targetH = height ?? (itemDef ? (itemDef.baseHeight / Math.max(itemDef.baseWidth, itemDef.baseHeight)) * size * 1.1 : size);
+  const longestSide = itemDef ? Math.max(itemDef.baseWidth, itemDef.baseHeight) : size;
+  const targetW = width ?? (itemDef ? (itemDef.baseWidth / longestSide) * size : size);
+  const targetH = height ?? (itemDef ? (itemDef.baseHeight / longestSide) * size : size);
+  // Metro returns a module value for a static require. On web, resolving that
+  // value first avoids expo-image receiving an opaque module and drawing an
+  // empty box while avatar sprites happen to be served from cache.
+  const resolvedWebUri = Platform.OS === 'web'
+    ? Asset.fromModule(source as Parameters<typeof Asset.fromModule>[0]).uri
+    : undefined;
+  const imageSource = resolvedWebUri ? { uri: resolvedWebUri } : source;
 
   return (
     <View
@@ -29,8 +39,10 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle }
       ]}
     >
       <Image
-        source={source}
-        resizeMode="contain"
+        source={imageSource as any}
+        contentFit="contain"
+        transition={0}
+        cachePolicy="memory-disk"
         style={[
           styles.image,
           {

@@ -35,6 +35,7 @@ export interface RoutineBlock {
   temperature?: number;
   timerHours?: number;
   fanSpeed?: 'Low' | 'Med' | 'High';
+  repeatDays?: string[];
 }
 
 export const AWAY_RANGE_WEEKDAY = { start: '08:30', end: '17:30' };

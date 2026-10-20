@@ -46,14 +46,13 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [mounted, setMounted] = useState(visible);
-  const [prevVisible, setPrevVisible] = useState(visible);
+  const [scrimEnabled, setScrimEnabled] = useState(false);
 
-  if (visible !== prevVisible) {
-    setPrevVisible(visible);
-    if (visible) {
-      setMounted(true);
-    }
-  }
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, [visible]);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -63,6 +62,16 @@ export function BottomSheet({
     );
     return () => sub?.remove();
   }, []);
+
+  useEffect(() => {
+    // On web, the pointer event that opens a modal can otherwise reach the
+    // newly mounted scrim and close it immediately.
+    const timer = setTimeout(
+      () => setScrimEnabled(visible),
+      visible ? 350 : 0
+    );
+    return () => clearTimeout(timer);
+  }, [visible]);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
@@ -162,7 +171,10 @@ export function BottomSheet({
       <View style={styles.overlay}>
         {/* Scrim (none if docked) */}
         {!isDocked ? (
-          <Animated.View style={[styles.scrim, animatedScrimStyle]}>
+          <Animated.View
+            pointerEvents={scrimEnabled ? 'auto' : 'none'}
+            style={[styles.scrim, animatedScrimStyle]}
+          >
             <Pressable
               style={StyleSheet.absoluteFill}
               onPress={onClose}
@@ -290,6 +302,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f4',
   },
   content: {
+    flex: 1,
+    minHeight: 0,
     paddingHorizontal: 24,
   },
 });

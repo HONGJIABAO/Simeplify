@@ -19,10 +19,6 @@ import {
   Bed,
   ShowerHead,
   Lock,
-  Snowflake,
-  Tv,
-  Fan,
-  Lightbulb,
   Minus,
   Plus,
   TrendingDown,
@@ -33,38 +29,40 @@ import { Button } from '@/components/Button';
 import { Switch } from '@/components/Switch';
 import { StoredRoom } from '../logic/storage';
 import { RoutineBlock } from '../logic/myDayLogic';
+import { Appliance } from '@/lib/mockData';
+import { Sprite } from './Sprite';
 
 interface EditBlockSheetProps {
   visible: boolean;
   onClose: () => void;
   block: RoutineBlock | null;
   rooms?: StoredRoom[];
-  appliances?: any[];
+  appliances?: Appliance[];
   existingBlocks?: RoutineBlock[];
   onUpdateBlock: (updated: RoutineBlock) => void;
   onRemoveBlock: (id: string) => void;
 }
 
-const ROOM_OPTIONS = [
-  { id: 'living', label: 'Living room', icon: <Armchair size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'kitchen', label: 'Kitchen', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bedroom', label: 'Bedroom 1', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bedroom_2', label: 'Bedroom 2', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bathroom', label: 'Bathroom', icon: <ShowerHead size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'away', label: 'Away', icon: <Lock size={16} color="#57534E" strokeWidth={1.5} /> },
-];
+function roomIcon(type: StoredRoom['type'] | 'away') {
+  const props = { size: 16, color: '#57534E', strokeWidth: 1.5 };
+  if (type === 'kitchen') return <Utensils {...props} />;
+  if (type === 'bedroom') return <Bed {...props} />;
+  if (type === 'bathroom') return <ShowerHead {...props} />;
+  if (type === 'away') return <Lock {...props} />;
+  return <Armchair {...props} />;
+}
 
 function EditBlockInner({
   block,
   rooms = [],
-  existingBlocks = [],
+  appliances = [],
   onUpdateBlock,
   onRemoveBlock,
   onClose,
 }: {
   block: RoutineBlock;
   rooms?: StoredRoom[];
-  existingBlocks?: RoutineBlock[];
+  appliances?: Appliance[];
   onUpdateBlock: (updated: RoutineBlock) => void;
   onRemoveBlock: (id: string) => void;
   onClose: () => void;
@@ -73,11 +71,12 @@ function EditBlockInner({
   const [endTime, setEndTime] = useState(block.endTime || '23:00');
   const [selectedRoom, setSelectedRoom] = useState(block.roomId || 'living');
 
-  // Appliance states
-  const [acOn, setAcOn] = useState(true);
-  const [tvOn, setTvOn] = useState(true);
-  const [fanOn, setFanOn] = useState(true);
-  const [lightOn, setLightOn] = useState(true);
+  const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(appliances.map((appliance) => [
+      appliance.id,
+      block.applianceIds.includes(appliance.id),
+    ]))
+  );
 
   // Steppers & Controls
   const [temperature, setTemperature] = useState(block.temperature ?? 23);
@@ -86,13 +85,24 @@ function EditBlockInner({
 
   const isSleepBlock = block.iconType === 'sleep';
 
+  const roomOptions = [
+    ...rooms.map((room) => ({
+      id: room.id,
+      type: room.type,
+      label: room.name?.trim() || `${room.type.charAt(0).toUpperCase()}${room.type.slice(1)}`,
+    })),
+    { id: 'away', type: 'away' as const, label: 'Away' },
+  ];
+
+  const availableAppliances = appliances;
+
   const getRoomLabel = () => {
-    const found = ROOM_OPTIONS.find((r) => r.id === selectedRoom);
+    const found = roomOptions.find((r) => r.id === selectedRoom);
     if (found) return found.label;
     return selectedRoom.charAt(0).toUpperCase() + selectedRoom.slice(1);
   };
 
-  const activeCount = Number(acOn) + Number(tvOn) + Number(fanOn) + Number(lightOn);
+  const activeCount = availableAppliances.filter((appliance) => applianceSwitches[appliance.id]).length;
 
   const handleApply = () => {
     onUpdateBlock({
@@ -100,6 +110,9 @@ function EditBlockInner({
       startTime,
       endTime,
       roomId: selectedRoom,
+      applianceIds: availableAppliances
+        .filter((appliance) => applianceSwitches[appliance.id])
+        .map((appliance) => appliance.id),
       temperature,
       timerHours,
       fanSpeed,
@@ -156,7 +169,7 @@ function EditBlockInner({
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Where?</Text>
         <View style={styles.roomGrid}>
-          {ROOM_OPTIONS.map((rm) => {
+          {roomOptions.map((rm) => {
             const isSelected = selectedRoom === rm.id;
             return (
               <Pressable
@@ -167,7 +180,7 @@ function EditBlockInner({
                 accessibilityLabel={`Choose ${rm.label}`}
               >
                 <View style={styles.roomBtnLeft}>
-                  {rm.icon}
+                  {roomIcon(rm.type)}
                   <Text
                     style={[
                       styles.roomGridText,
@@ -186,161 +199,92 @@ function EditBlockInner({
       {/* ── Room Appliances In Use ── */}
       <View style={styles.section}>
         <View style={styles.appliancesHeaderRow}>
-          <Text style={styles.sectionLabel}>ROOM APPLIANCES IN USE</Text>
+          <Text style={styles.sectionLabel}>APPLIANCES FOR THIS BLOCK</Text>
           <Text style={styles.appliancesCountText}>
-            {activeCount} Active · {4 - activeCount} Standby
+            {activeCount} Active · {availableAppliances.length - activeCount} Standby
           </Text>
         </View>
 
-        {/* 1. AC Card with Steppers */}
-        <View style={styles.applianceDetailCard}>
-          <View style={styles.applianceDetailTop}>
-            <View style={styles.applianceDetailLeft}>
-              <View style={[styles.applianceIconBox, { backgroundColor: '#E0E8D7' }]}>
-                <Snowflake size={18} color="#4A633F" strokeWidth={1.5} />
-              </View>
-              <View>
-                <Text style={styles.applianceTitle}>Living Room Inverter AC</Text>
-                <Text style={styles.applianceSubtitle}>Eco Inverter Mode · ~0.80 kWh</Text>
-              </View>
-            </View>
-            <Switch value={acOn} onValueChange={setAcOn} />
+        {availableAppliances.length === 0 ? (
+          <View style={styles.emptyAppliancesCard}>
+            <Text style={styles.emptyAppliancesText}>No appliances in this room yet.</Text>
           </View>
+        ) : availableAppliances.map((appliance) => {
+          const isActive = Boolean(applianceSwitches[appliance.id]);
+          const isAirConditioner = appliance.type === 'air_conditioner';
+          const isFan = appliance.type === 'fan';
+          const applianceRoom = rooms.find((room) => room.id === appliance.roomId);
 
-          {acOn && (
-            <View style={styles.stepperSubSection}>
-              {/* Temperature Stepper */}
-              <View style={styles.stepperRow}>
-                <Text style={styles.stepperLabel}>Temperature</Text>
-                <View style={styles.stepperPill}>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => setTemperature((t) => Math.max(16, t - 1))}
-                    accessibilityRole="button"
-                    accessibilityLabel="Decrease temperature"
-                  >
-                    <Minus size={15} color="#292524" strokeWidth={1.8} />
-                  </Pressable>
-                  <Text style={styles.stepperValue}>{temperature}°C</Text>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => setTemperature((t) => Math.min(30, t + 1))}
-                    accessibilityRole="button"
-                    accessibilityLabel="Increase temperature"
-                  >
-                    <Plus size={15} color="#292524" strokeWidth={1.8} />
-                  </Pressable>
+          return (
+            <View key={appliance.id} style={styles.applianceDetailCard}>
+              <View style={styles.applianceDetailTop}>
+                <View style={styles.applianceDetailLeft}>
+                  <View style={styles.applianceIconBox}>
+                    <Sprite type={appliance.spriteKey || appliance.type} size={34} />
+                  </View>
+                  <View style={styles.applianceTextGroup}>
+                    <Text style={styles.applianceTitle} numberOfLines={1}>{appliance.name}</Text>
+                    <Text style={styles.applianceSubtitle}>
+                      {appliance.wattage} W · {applianceRoom?.name || applianceRoom?.type || 'Room'}
+                    </Text>
+                  </View>
                 </View>
+                <Switch
+                  value={isActive}
+                  onValueChange={(value) => setApplianceSwitches((current) => ({
+                    ...current,
+                    [appliance.id]: value,
+                  }))}
+                />
               </View>
 
-              {/* Timer Stepper */}
-              <View style={styles.stepperRow}>
-                <Text style={styles.stepperLabel}>Timer</Text>
-                <View style={styles.stepperPill}>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => setTimerHours((h) => Math.max(0, h - 1))}
-                    accessibilityRole="button"
-                    accessibilityLabel="Decrease timer"
-                  >
-                    <Minus size={15} color="#292524" strokeWidth={1.8} />
-                  </Pressable>
-                  <Text style={styles.stepperValue}>{timerHours}h</Text>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => setTimerHours((h) => Math.min(12, h + 1))}
-                    accessibilityRole="button"
-                    accessibilityLabel="Increase timer"
-                  >
-                    <Plus size={15} color="#292524" strokeWidth={1.8} />
-                  </Pressable>
+              {isAirConditioner && isActive && (
+                <View style={styles.stepperSubSection}>
+                  <View style={styles.stepperRow}>
+                    <Text style={styles.stepperLabel}>Temperature</Text>
+                    <View style={styles.stepperPill}>
+                      <Pressable style={styles.stepperBtn} onPress={() => setTemperature((value) => Math.max(16, value - 1))} accessibilityRole="button" accessibilityLabel="Decrease temperature">
+                        <Minus size={15} color="#292524" strokeWidth={1.8} />
+                      </Pressable>
+                      <Text style={styles.stepperValue}>{temperature}°C</Text>
+                      <Pressable style={styles.stepperBtn} onPress={() => setTemperature((value) => Math.min(30, value + 1))} accessibilityRole="button" accessibilityLabel="Increase temperature">
+                        <Plus size={15} color="#292524" strokeWidth={1.8} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.stepperRow}>
+                    <Text style={styles.stepperLabel}>Running time</Text>
+                    <View style={styles.stepperPill}>
+                      <Pressable style={styles.stepperBtn} onPress={() => setTimerHours((value) => Math.max(1, value - 1))} accessibilityRole="button" accessibilityLabel="Decrease air conditioner running time">
+                        <Minus size={15} color="#292524" strokeWidth={1.8} />
+                      </Pressable>
+                      <Text style={styles.stepperValue}>{timerHours}h</Text>
+                      <Pressable style={styles.stepperBtn} onPress={() => setTimerHours((value) => Math.min(24, value + 1))} accessibilityRole="button" accessibilityLabel="Increase air conditioner running time">
+                        <Plus size={15} color="#292524" strokeWidth={1.8} />
+                      </Pressable>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-          )}
-        </View>
+              )}
 
-        {/* 2. TV Card */}
-        <View style={styles.applianceDetailCard}>
-          <View style={styles.applianceDetailTop}>
-            <View style={styles.applianceDetailLeft}>
-              <View style={[styles.applianceIconBox, { backgroundColor: '#F5EBE1' }]}>
-                <Tv size={18} color="#8C6541" strokeWidth={1.5} />
-              </View>
-              <View>
-                <Text style={styles.applianceTitle}>4K TV & Soundbar System</Text>
-                <Text style={styles.applianceSubtitle}>Cinema Preset · ~0.15 kWh</Text>
-              </View>
+              {isFan && isActive && (
+                <View style={styles.fanSpeedRow}>
+                  <Text style={styles.stepperLabel}>Fan Speed</Text>
+                  <View style={styles.fanSpeedSegmented}>
+                    {(['Low', 'Med', 'High'] as const).map((speed) => {
+                      const isCurrent = fanSpeed === speed;
+                      return (
+                        <Pressable key={speed} style={[styles.fanSpeedBtn, isCurrent && styles.fanSpeedBtnActive]} onPress={() => setFanSpeed(speed)} accessibilityRole="button" accessibilityLabel={`Set fan speed ${speed}`}>
+                          <Text style={[styles.fanSpeedText, isCurrent && styles.fanSpeedTextActive]}>{speed === 'Med' ? 'Medium' : speed}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
             </View>
-            <Switch value={tvOn} onValueChange={setTvOn} />
-          </View>
-        </View>
-
-        {/* 3. Ceiling Fan Card with Speed Controls */}
-        <View style={styles.applianceDetailCard}>
-          <View style={styles.applianceDetailTop}>
-            <View style={styles.applianceDetailLeft}>
-              <View style={[styles.applianceIconBox, { backgroundColor: '#E0E8D7' }]}>
-                <Fan size={18} color="#4A633F" strokeWidth={1.5} />
-              </View>
-              <View>
-                <Text style={styles.applianceTitle}>Ceiling Fan</Text>
-                <Text style={styles.applianceSubtitle}>Circulation · ~0.04 kWh</Text>
-              </View>
-            </View>
-            <Switch value={fanOn} onValueChange={setFanOn} />
-          </View>
-
-          {fanOn && (
-            <View style={styles.fanSpeedRow}>
-              <Text style={styles.stepperLabel}>Fan Speed</Text>
-              <View style={styles.fanSpeedSegmented}>
-                {(['Low', 'Med', 'High'] as const).map((speed) => {
-                  const isCurrent = fanSpeed === speed;
-                  return (
-                    <Pressable
-                      key={speed}
-                      style={[
-                        styles.fanSpeedBtn,
-                        isCurrent && styles.fanSpeedBtnActive,
-                      ]}
-                      onPress={() => setFanSpeed(speed)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Set fan speed ${speed}`}
-                    >
-                      <Text
-                        style={[
-                          styles.fanSpeedText,
-                          isCurrent && styles.fanSpeedTextActive,
-                        ]}
-                      >
-                        {speed}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* 4. Ambient Light Card */}
-        <View style={styles.applianceDetailCard}>
-          <View style={styles.applianceDetailTop}>
-            <View style={styles.applianceDetailLeft}>
-              <View style={[styles.applianceIconBox, { backgroundColor: '#FCEEE5' }]}>
-                <Lightbulb size={18} color="#D97706" strokeWidth={1.5} />
-              </View>
-              <View>
-                <Text style={styles.applianceTitle}>Ambient Warm Accent Light</Text>
-                <Text style={styles.applianceSubtitle}>
-                  Warm LED Strip (40% dim) · ~0.01 kWh
-                </Text>
-              </View>
-            </View>
-            <Switch value={lightOn} onValueChange={setLightOn} />
-          </View>
-        </View>
+          );
+        })}
       </View>
 
       {/* ── Est. Cost Card ── */}
@@ -397,7 +341,7 @@ export function EditBlockSheet({
   onClose,
   block,
   rooms = [],
-  existingBlocks = [],
+  appliances = [],
   onUpdateBlock,
   onRemoveBlock,
 }: EditBlockSheetProps) {
@@ -413,7 +357,7 @@ export function EditBlockSheet({
       <EditBlockInner
         block={block}
         rooms={rooms}
-        existingBlocks={existingBlocks}
+        appliances={appliances}
         onUpdateBlock={onUpdateBlock}
         onRemoveBlock={onRemoveBlock}
         onClose={onClose}
@@ -556,9 +500,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   applianceDetailLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  applianceTextGroup: {
+    flex: 1,
+    minWidth: 0,
   },
   applianceIconBox: {
     width: 38,
@@ -577,6 +527,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#78716C',
     marginTop: 1,
+  },
+  emptyAppliancesCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    padding: 18,
+  },
+  emptyAppliancesText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
   },
   stepperSubSection: {
     gap: 10,

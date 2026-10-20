@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Bell, CalendarCheck, FastForward, Gauge, Clock } from 'lucide-react-native';
-import { SimSpeed } from '../logic/routineConfig';
+import { Bell, CalendarCheck, CalendarDays, FastForward, Gauge } from 'lucide-react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+export type FastForwardPeriod = '1w' | '1m' | '1y';
 
 interface BillCardProps {
   monthlyBillRm: number;
   usageBadge: 'Low Usage' | 'Normal Usage' | 'High Usage';
-  simulatedTimeStr: string;
-  simSpeed: SimSpeed;
+  simulatedDateStr: string;
+  activeFastForward: FastForwardPeriod | null;
   isEditMode?: boolean;
-  onCycleSpeed: () => void;
+  onSelectFastForward: (period: FastForwardPeriod) => void;
   onToggleEdit?: () => void;
   onPressBillCard?: () => void;
   onPressBell?: () => void;
@@ -19,15 +21,30 @@ interface BillCardProps {
 export function BillCard({
   monthlyBillRm,
   usageBadge,
-  simulatedTimeStr,
-  simSpeed,
+  simulatedDateStr,
+  activeFastForward,
   isEditMode = false,
-  onCycleSpeed,
+  onSelectFastForward,
   onToggleEdit,
   onPressBillCard,
   onPressBell,
   onPressCalendar,
 }: BillCardProps) {
+  const [fastForwardOpen, setFastForwardOpen] = useState(false);
+  const menuProgress = useSharedValue(0);
+
+  useEffect(() => {
+    menuProgress.value = withTiming(fastForwardOpen ? 1 : 0, {
+      duration: 450,
+      easing: Easing.inOut(Easing.ease),
+    });
+  }, [fastForwardOpen, menuProgress]);
+
+  const fastForwardMenuStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+    transform: [{ translateX: (1 - menuProgress.value) * 20 }],
+  }));
+
   const badgeColors = {
     'High Usage': { bg: '#F5DCC8', text: '#8C6541' },
     'Normal Usage': { bg: '#EAE5D9', text: '#6B604B' },
@@ -36,13 +53,14 @@ export function BillCard({
 
   return (
     <View style={styles.topContainer}>
-      {/* ── Left: Compact Estimated Bill Card (p-4, 28px Lora RM 0) ─────── */}
-      <Pressable
-        style={styles.billCard}
-        onPress={onPressBillCard}
-        accessibilityRole="button"
-        accessibilityLabel={`Estimated monthly bill RM ${monthlyBillRm}, ${usageBadge}`}
-      >
+      <View style={styles.topRow}>
+        {/* ── Left: Compact Estimated Bill Card (p-4, 28px Lora RM 0) ─────── */}
+        <Pressable
+          style={styles.billCard}
+          onPress={onPressBillCard}
+          accessibilityRole="button"
+          accessibilityLabel={`Estimated monthly bill RM ${monthlyBillRm}, ${usageBadge}`}
+        >
         {/* Header row with badge */}
         <View style={styles.cardHeaderRow}>
           <View style={styles.titleRow}>
@@ -65,15 +83,15 @@ export function BillCard({
         {/* Subtle Divider */}
         <View style={styles.divider} />
 
-        {/* Simulated Time */}
+        {/* Simulated Date */}
         <View style={styles.timeRow}>
-          <Clock size={12} color="#78716C" strokeWidth={1.5} />
-          <Text style={styles.timeText}>Today • {simulatedTimeStr}</Text>
+          <CalendarDays size={12} color="#78716C" strokeWidth={1.5} />
+          <Text style={styles.timeText}>{simulatedDateStr}</Text>
         </View>
-      </Pressable>
+        </Pressable>
 
-      {/* ── Right: Button Stack + Edit/Done Button ──────────────────────── */}
-      <View style={styles.buttonStack}>
+        {/* ── Right: notification and schedule buttons ─────────────────── */}
+        <View style={styles.buttonStack}>
         {/* Bell Button */}
         <Pressable
           style={styles.roundButton}
@@ -90,26 +108,18 @@ export function BillCard({
           style={styles.roundButton}
           onPress={onPressCalendar}
           accessibilityRole="button"
-          accessibilityLabel="View Routine Schedule"
+          accessibilityLabel="Set My Day schedule"
+          accessibilityHint="Opens your daily routine and time blocks"
         >
           <CalendarCheck size={18} color="#292524" strokeWidth={1.5} />
         </Pressable>
 
-        {/* Fast-forward Button */}
-        <Pressable
-          style={[styles.roundButton, styles.fastForwardButton]}
-          onPress={onCycleSpeed}
-          accessibilityRole="button"
-          accessibilityLabel={`Simulation speed ${simSpeed}x. Tap to cycle speed.`}
-        >
-          <FastForward size={17} color="#FFFFFF" strokeWidth={1.5} />
-          <View style={styles.speedBadge}>
-            <Text style={styles.speedBadgeText}>{simSpeed}x</Text>
-          </View>
-        </Pressable>
+        </View>
+      </View>
 
-        {/* Edit / Done Button matching screenshot position */}
-        {onToggleEdit && (
+      {/* A full-width control row keeps Edit under the bill and FF at the far right. */}
+      <View style={styles.controlRow}>
+        {onToggleEdit ? (
           <Pressable
             style={styles.editButton}
             onPress={onToggleEdit}
@@ -120,7 +130,54 @@ export function BillCard({
               {isEditMode ? 'Done' : 'Edit'}
             </Text>
           </Pressable>
-        )}
+        ) : <View style={styles.editButtonPlaceholder} />}
+
+        {/* Fast-forward Button + period menu that grows to the left */}
+        <View style={styles.fastForwardRow}>
+          <Animated.View
+            pointerEvents={fastForwardOpen ? 'auto' : 'none'}
+            style={[styles.fastForwardTray, fastForwardMenuStyle]}
+          >
+            {(['1w', '1m', '1y'] as FastForwardPeriod[]).map((period) => (
+              <Pressable
+                key={period}
+                onPress={() => {
+                  onSelectFastForward(period);
+                  setFastForwardOpen(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Fast forward ${period === '1w' ? 'one week' : period === '1m' ? 'one month' : 'one year'}`}
+                style={({ pressed }) => [
+                  styles.periodButton,
+                  activeFastForward === period && styles.periodButtonActive,
+                  pressed && styles.periodButtonPressed,
+                ]}
+              >
+                <Text style={[
+                  styles.periodButtonText,
+                  activeFastForward === period && styles.periodButtonTextActive,
+                ]}>
+                  {period}
+                </Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+
+          <Pressable
+            style={[styles.roundButton, styles.fastForwardButton]}
+            onPress={() => setFastForwardOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="Choose fast-forward period"
+            accessibilityState={{ expanded: fastForwardOpen }}
+          >
+            <FastForward size={17} color="#FFFFFF" strokeWidth={1.5} />
+            {!!activeFastForward && (
+              <View style={styles.speedBadge}>
+                <Text style={styles.speedBadgeText}>{activeFastForward}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -128,11 +185,14 @@ export function BillCard({
 
 const styles = StyleSheet.create({
   topContainer: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  topRow: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    width: '100%',
-    marginBottom: 8,
   },
   billCard: {
     width: '58%',
@@ -208,7 +268,7 @@ const styles = StyleSheet.create({
     color: '#57534E',
   },
   buttonStack: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 8,
   },
   roundButton: {
@@ -240,6 +300,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1E1E',
     borderColor: '#1E1E1E',
   },
+  fastForwardRow: {
+    width: 44,
+    height: 44,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  fastForwardTray: {
+    position: 'absolute',
+    right: 52,
+    width: 164,
+    height: 56,
+    borderRadius: 28,
+    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAF6F1',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    shadowColor: '#5C4033',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  periodButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D6D3D1',
+  },
+  periodButtonActive: {
+    backgroundColor: '#E0E6D9',
+    borderColor: '#8B9D77',
+  },
+  periodButtonPressed: {
+    backgroundColor: '#F5F5F4',
+    transform: [{ translateY: 2 }],
+  },
+  periodButtonText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 13,
+    color: '#292524',
+  },
+  periodButtonTextActive: {
+    color: '#566549',
+  },
   speedBadge: {
     position: 'absolute',
     bottom: -2,
@@ -255,16 +368,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   editButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    minHeight: 28,
+    minWidth: 52,
+    height: 44,
+    paddingHorizontal: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 2,
+    borderRadius: 22,
+    backgroundColor: '#F1F4EE',
+    borderWidth: 1,
+    borderColor: '#C5D0B9',
   },
   editButtonText: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 15,
     color: '#3D5236',
+  },
+  editButtonPlaceholder: {
+    width: 52,
+    height: 44,
+  },
+  controlRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 44,
+    marginTop: 8,
   },
 });

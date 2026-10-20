@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   },
   namePillText: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11.5,
+    fontSize: 12,
     color: '#292524',
   },
 });

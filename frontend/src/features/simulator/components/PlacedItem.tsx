@@ -2,17 +2,22 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated, PanResponder, Platform } from 'react-native';
 import { Sprite } from './Sprite';
 import { StoredPlacedItem } from '../logic/storage';
-import { X } from 'lucide-react-native';
+import { RotateCw, X } from 'lucide-react-native';
 
 interface PlacedItemProps {
   item: StoredPlacedItem;
   canvasWidth: number;
   canvasHeight: number;
+  itemSize: number;
+  labelFontSize: number;
+  zoomScale: number;
+  compactLabel: boolean;
   isEditMode: boolean;
   isSelected: boolean;
   isOn: boolean;
   onSelect: (item: StoredPlacedItem) => void;
   onDelete: (itemId: string) => void;
+  onRotate: (itemId: string) => void;
   onMoveEnd: (itemId: string, newNormX: number, newNormY: number) => void;
 }
 
@@ -20,15 +25,27 @@ export function PlacedItem({
   item,
   canvasWidth,
   canvasHeight,
+  itemSize,
+  labelFontSize,
+  zoomScale,
+  compactLabel,
   isEditMode,
   isSelected,
   isOn,
   onSelect,
   onDelete,
+  onRotate,
   onMoveEnd,
 }: PlacedItemProps) {
   const isFurniture = item.category === 'Furniture';
-  const size = isFurniture ? 50 : 42;
+  const size = itemSize;
+  const labelWidth = isSelected ? 148 : compactLabel ? 72 : 120;
+  const shouldShowLabel = isEditMode || isSelected;
+  const visibleLabel = !shouldShowLabel
+    ? ''
+    : compactLabel && !isSelected
+      ? (isFurniture ? '' : `${item.wattage ?? 0} W`)
+      : item.name;
 
   // Pixel coordinates on floor plan
   const posX = item.posX * canvasWidth;
@@ -83,8 +100,8 @@ export function PlacedItem({
             onSelect(item);
           } else {
             // Dropped at new position
-            const newX = Math.max(0.08, Math.min(0.92, (posX + gesture.dx) / canvasWidth));
-            const newY = Math.max(0.08, Math.min(0.92, (posY + gesture.dy) / canvasHeight));
+            const newX = Math.max(0.08, Math.min(0.92, (posX + gesture.dx / zoomScale) / canvasWidth));
+            const newY = Math.max(0.08, Math.min(0.92, (posY + gesture.dy / zoomScale) / canvasHeight));
             onMoveEnd(item.id, newX, newY);
           }
         },
@@ -92,7 +109,7 @@ export function PlacedItem({
           pan.setValue({ x: 0, y: 0 });
         },
       }),
-    [isEditMode, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight]
+    [isEditMode, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
   );
 
   // Z-order: based on vertical Y position so lower items overlap higher items
@@ -104,10 +121,10 @@ export function PlacedItem({
       style={[
         styles.itemContainer,
         {
-          left: posX - size / 2,
+          left: posX - labelWidth / 2,
           top: posY - size / 2,
-          width: size,
-          height: size,
+          width: labelWidth,
+          height: size + 24,
           zIndex,
           transform: [
             { translateX: pan.x },
@@ -123,19 +140,17 @@ export function PlacedItem({
         accessibilityLabel={`${item.name}${isOn ? ', turned on' : ', turned off'}`}
         style={[
           styles.pressableArea,
+          { width: size, height: size },
           isOn && styles.glowActive,
           !isOn && !isFurniture && styles.dimmedOffline,
           isSelected && isEditMode && styles.selectedHandles,
         ]}
       >
-        <Sprite type={item.spriteKey || item.type} size={size * 0.9} />
-
-        {/* ON indicator badge */}
-        {isOn && !isFurniture && (
-          <View pointerEvents="none" style={styles.onPill}>
-            <Text style={styles.onPillText}>ON</Text>
-          </View>
-        )}
+        <Sprite
+          type={item.spriteKey || item.type}
+          size={size * 0.9}
+          containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
+        />
 
         {/* Selected outline handles in edit mode */}
         {isSelected && isEditMode && (
@@ -148,6 +163,14 @@ export function PlacedItem({
         )}
       </Pressable>
 
+      {!!visibleLabel && (
+        <View pointerEvents="none" style={[styles.itemLabelPill, { maxWidth: labelWidth }]}>
+          <Text style={[styles.itemLabel, { fontSize: labelFontSize }]} numberOfLines={1}>
+            {visibleLabel}
+          </Text>
+        </View>
+      )}
+
       {/* Quick delete button (sibling to Pressable to avoid nested button error) */}
       {isSelected && isEditMode && (
         <Pressable
@@ -155,11 +178,25 @@ export function PlacedItem({
             e.stopPropagation();
             onDelete(item.id);
           }}
-          style={styles.deleteBadge}
+          style={[styles.deleteBadge, { right: (labelWidth - size) / 2 - 10 }]}
           accessibilityRole="button"
           accessibilityLabel={`Delete ${item.name}`}
         >
           <X size={12} color="#FFFFFF" strokeWidth={2.5} />
+        </Pressable>
+      )}
+
+      {isSelected && isEditMode && isFurniture && (
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            onRotate(item.id);
+          }}
+          style={[styles.rotateBadge, { left: (labelWidth - size) / 2 - 10 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Rotate ${item.name}`}
+        >
+          <RotateCw size={14} color="#FFFFFF" strokeWidth={2.4} />
         </Pressable>
       )}
     </Animated.View>
@@ -173,8 +210,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressableArea: {
-    width: '100%',
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
@@ -183,35 +218,19 @@ const styles = StyleSheet.create({
   glowActive: {
     ...Platform.select({
       web: {
-        filter: 'drop-shadow(0px 0px 8px rgba(245, 158, 11, 0.75))',
+        filter: 'brightness(1.28) saturate(1.18) drop-shadow(0px 0px 8px rgba(255, 183, 0, 1))',
       } as any,
       default: {
-        shadowColor: '#F59E0B',
+        shadowColor: '#FFB700',
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 10,
-        elevation: 6,
+        shadowOpacity: 1,
+        shadowRadius: 8,
+        elevation: 7,
       },
     }),
   },
   dimmedOffline: {
-    opacity: 0.78,
-  },
-  onPill: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 6,
-    zIndex: 10,
-  },
-  onPillText: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 8.5,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    opacity: 0.62,
   },
   selectedHandles: {
     borderWidth: 1.5,
@@ -244,5 +263,33 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
     zIndex: 30,
+  },
+  rotateBadge: {
+    position: 'absolute',
+    top: -10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#566549',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    zIndex: 30,
+  },
+  itemLabelPill: {
+    marginTop: 2,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minHeight: 18,
+    justifyContent: 'center',
+  },
+  itemLabel: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    color: '#292524',
+    lineHeight: 16,
+    textAlign: 'center',
   },
 });

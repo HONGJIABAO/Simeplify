@@ -11,6 +11,7 @@ interface AvatarProps {
   facingLeft: boolean;
   isWalking: boolean;
   isSleeping: boolean;
+  sleepRotation?: number;
   size?: number;
 }
 
@@ -23,6 +24,7 @@ export function Avatar({
   facingLeft,
   isWalking,
   isSleeping,
+  sleepRotation = 0,
   size = 44,
 }: AvatarProps) {
   // Pixel coordinates
@@ -94,7 +96,7 @@ export function Avatar({
     }
   }, [isSleeping, zzAnim]);
 
-  const zIndex = isSleeping ? 45 : Math.floor(normY * 100) + 20;
+  const zIndex = isSleeping ? 250 : Math.floor(normY * 100) + 20;
 
   return (
     <Animated.View
@@ -106,6 +108,8 @@ export function Avatar({
           top: 0,
           width: size,
           height: size,
+          marginLeft: -size / 2,
+          marginTop: isSleeping ? -size / 2 : -size * 0.64,
           zIndex,
           transform: [
             { translateX: posAnim.x },
@@ -120,7 +124,7 @@ export function Avatar({
           {
             transform: [
               { scaleX: facingLeft ? -1 : 1 },
-              { rotate: isSleeping ? '-90deg' : '0deg' },
+              { rotate: isSleeping ? `${sleepRotation}deg` : '0deg' },
             ],
           },
         ]}
@@ -156,8 +160,6 @@ export function Avatar({
 const styles = StyleSheet.create({
   avatarWrapper: {
     position: 'absolute',
-    marginLeft: -22,
-    marginTop: -28,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -183,7 +185,7 @@ const styles = StyleSheet.create({
   },
   sleepText: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 10,
+    fontSize: 12,
     color: '#566549',
   },
 });

@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   Platform,
   LayoutChangeEvent,
@@ -17,8 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useToast } from '@/components/Toast';
 
-import { BillCard } from '@/features/simulator/components/BillCard';
-import { FloorPlan } from '@/features/simulator/components/FloorPlan';
+import { BillCard, FastForwardPeriod } from '@/features/simulator/components/BillCard';
+import { FloorPlan, FloorViewport } from '@/features/simulator/components/FloorPlan';
 import { EditSheet } from '@/features/simulator/components/EditSheet';
 import { Sprite } from '@/features/simulator/components/Sprite';
 import { ApplianceDetailsSheet } from '@/features/simulator/components/ApplianceDetailsSheet';
@@ -68,6 +69,18 @@ const INITIAL_ROOMS: StoredRoom[] = [
   { id: 'bathroom', name: '', type: 'bathroom', gridCol: 2, gridRow: 2, gridColSpan: 2, gridRowSpan: 2 },
 ];
 
+const FAST_FORWARD_CONFIG: Record<FastForwardPeriod, { durationSeconds: number; label: string }> = {
+  '1w': { durationSeconds: 5, label: '1 week' },
+  '1m': { durationSeconds: 10, label: '1 month' },
+  '1y': { durationSeconds: 15, label: '1 year' },
+};
+
+interface FastForwardRun {
+  period: FastForwardPeriod;
+  durationSeconds: number;
+  elapsedSeconds: number;
+}
+
 export default function SimulatorScreen() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -84,7 +97,7 @@ export default function SimulatorScreen() {
   });
 
   // ── Simulation State (persisted separately) ───────────────────────────────
-  const [simSpeed, setSimSpeed] = useState<SimSpeed>(() => {
+  const [simSpeed] = useState<SimSpeed>(() => {
     const saved = loadSimulationState();
     return saved?.simSpeed ?? 1;
   });
@@ -93,6 +106,12 @@ export default function SimulatorScreen() {
     const saved = loadSimulationState();
     // Default 18:30 (1110 minutes) matching screenshot
     return saved?.simulatedMinutes ?? 18 * 60 + 30;
+  });
+
+  const [simulatedDateTime, setSimulatedDateTime] = useState<Date>(() => {
+    const date = new Date(2026, 9, 20, 0, 0, 0, 0);
+    date.setMinutes(simulatedMinutes);
+    return date;
   });
 
   const [avatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() => {
@@ -148,6 +167,7 @@ export default function SimulatorScreen() {
   // Drag and Drop State
   const floorPlanRef = useRef<View>(null);
   const floorRectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const floorViewportRef = useRef<FloorViewport>({ scale: 1, translateX: 0, translateY: 0 });
   const [dragGhost, setDragGhost] = useState<{ item: SpriteItemDef; x: number; y: number } | null>(null);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
 
@@ -177,7 +197,10 @@ export default function SimulatorScreen() {
   });
 
   const waypointQueue = useRef<Point[]>([]);
+  const [avatarWalkPath, setAvatarWalkPath] = useState<Point[]>([]);
   const currentTargetPos = useRef<Point>({ x: 0.25, y: 0.25 });
+  const fastForwardRunRef = useRef<FastForwardRun | null>(null);
+  const [activeFastForward, setActiveFastForward] = useState<FastForwardPeriod | null>(null);
 
   // Main simulation tick timer (60fps animation / interval)
   useEffect(() => {
@@ -188,14 +211,36 @@ export default function SimulatorScreen() {
       const deltaSec = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Advance simulated clock
-      const realSecPerHour = SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour;
-      const simMinutesDelta = (deltaSec / realSecPerHour) * 60;
+      // Fast-forward always plays the user's seven-day routine. The selected
+      // horizon controls how long that playback takes, not how many tasks exist.
+      const fastForwardRun = fastForwardRunRef.current;
+      const isFastForwardingThisFrame = fastForwardRun !== null;
+      let simMinutesDelta: number;
+
+      if (fastForwardRun) {
+        const remainingSeconds = Math.max(
+          0,
+          fastForwardRun.durationSeconds - fastForwardRun.elapsedSeconds
+        );
+        const frameSeconds = Math.min(deltaSec, remainingSeconds);
+        simMinutesDelta =
+          (frameSeconds / fastForwardRun.durationSeconds) * (7 * 24 * 60);
+        fastForwardRun.elapsedSeconds += frameSeconds;
+
+        if (fastForwardRun.elapsedSeconds >= fastForwardRun.durationSeconds) {
+          fastForwardRunRef.current = null;
+          setActiveFastForward(null);
+        }
+      } else {
+        const realSecPerHour = SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour;
+        simMinutesDelta = (deltaSec / realSecPerHour) * 60;
+      }
 
       setSimulatedMinutes((prev) => {
         const nextMin = (prev + simMinutesDelta) % 1440;
         return nextMin;
       });
+      setSimulatedDateTime((prev) => new Date(prev.getTime() + simMinutesDelta * 60_000));
 
       // Advance avatar movement along waypoints if any
       if (waypointQueue.current.length > 0) {
@@ -205,7 +250,7 @@ export default function SimulatorScreen() {
           const dy = nextTarget.y - prev.currentY;
           const distance = Math.hypot(dx, dy);
 
-          const step = 0.28 * deltaSec; // Walking speed
+          const step = (isFastForwardingThisFrame ? 12 : 0.28) * deltaSec;
 
           if (distance <= step) {
             // Reached this waypoint
@@ -231,6 +276,7 @@ export default function SimulatorScreen() {
             };
           }
         });
+        setAvatarWalkPath([...waypointQueue.current]);
       }
     }, 50);
 
@@ -294,6 +340,7 @@ export default function SimulatorScreen() {
         targetRoom.id
       );
       waypointQueue.current = waypoints;
+      setAvatarWalkPath(waypoints);
 
       setAvatarState((prev) => ({
         ...prev,
@@ -359,15 +406,20 @@ export default function SimulatorScreen() {
     return computeSimulationBill(items);
   }, [items]);
 
-  const simulatedTimeStr = useMemo(() => {
-    return formatTimeMinutes(simulatedMinutes);
-  }, [simulatedMinutes]);
+  const simulatedDateStr = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${String(simulatedDateTime.getDate()).padStart(2, '0')} ${months[simulatedDateTime.getMonth()]} ${simulatedDateTime.getFullYear()}`;
+  }, [simulatedDateTime]);
 
-  // ── Speed Cycling (1x -> 2x -> 4x -> 1x) ──────────────────────────────────
-  const handleCycleSpeed = () => {
-    const nextSpeed: SimSpeed = simSpeed === 1 ? 2 : simSpeed === 2 ? 4 : 1;
-    setSimSpeed(nextSpeed);
-    showToast(`Simulation speed: ${nextSpeed}x`, 'info');
+  const handleFastForward = (period: FastForwardPeriod) => {
+    const config = FAST_FORWARD_CONFIG[period];
+    fastForwardRunRef.current = {
+      period,
+      durationSeconds: config.durationSeconds,
+      elapsedSeconds: 0,
+    };
+    setActiveFastForward(period);
+    showToast(`${config.label} preview: completing 7 days in ${config.durationSeconds} seconds`, 'info');
   };
 
   // ── Room Naming Interactions ───────────────────────────────────────────────
@@ -393,38 +445,43 @@ export default function SimulatorScreen() {
   // ── Drag & Drop Logic ─────────────────────────────────────────────────────
   const getRoomAtNormalizedPos = (rx: number, ry: number): { room: StoredRoom; localX: number; localY: number } | null => {
     if (rx < 0 || rx > 1 || ry < 0 || ry > 1) return null;
-
-    let targetType: StoredRoom['type'] | null = null;
-    let localX = 0.5;
-    let localY = 0.5;
-
-    if (rx <= 0.49 && ry <= 0.49) {
-      targetType = 'living';
-      localX = rx / 0.49;
-      localY = ry / 0.49;
-    } else if (rx >= 0.51 && ry <= 0.49) {
-      targetType = 'kitchen';
-      localX = (rx - 0.51) / 0.49;
-      localY = ry / 0.49;
-    } else if (rx <= 0.49 && ry >= 0.51) {
-      targetType = 'bedroom';
-      localX = rx / 0.49;
-      localY = (ry - 0.51) / 0.49;
-    } else if (rx >= 0.51 && ry >= 0.51) {
-      targetType = 'bathroom';
-      localX = (rx - 0.51) / 0.49;
-      localY = (ry - 0.51) / 0.49;
-    }
-
-    if (!targetType) return null;
-
-    const matchedRoom = rooms.find((r) => r.type === targetType);
+    const columns = Math.max(1, ...rooms.map((room) => room.gridCol + room.gridColSpan));
+    const rows = Math.max(1, ...rooms.map((room) => room.gridRow + room.gridRowSpan));
+    const matchedRoom = rooms.find((room) => {
+      const left = room.gridCol / columns;
+      const right = (room.gridCol + room.gridColSpan) / columns;
+      const top = room.gridRow / rows;
+      const bottom = (room.gridRow + room.gridRowSpan) / rows;
+      const insetX = 0.012;
+      const insetY = 0.012;
+      return rx >= left + (room.gridCol > 0 ? insetX : 0)
+        && rx <= right - (room.gridCol + room.gridColSpan < columns ? insetX : 0)
+        && ry >= top + (room.gridRow > 0 ? insetY : 0)
+        && ry <= bottom - (room.gridRow + room.gridRowSpan < rows ? insetY : 0);
+    });
     if (!matchedRoom) return null;
+
+    const roomLeft = matchedRoom.gridCol / columns;
+    const roomTop = matchedRoom.gridRow / rows;
+    const roomWidth = matchedRoom.gridColSpan / columns;
+    const roomHeight = matchedRoom.gridRowSpan / rows;
 
     return {
       room: matchedRoom,
-      localX: Math.max(0.15, Math.min(0.85, localX)),
-      localY: Math.max(0.18, Math.min(0.82, localY)),
+      localX: Math.max(0.15, Math.min(0.85, (rx - roomLeft) / roomWidth)),
+      localY: Math.max(0.18, Math.min(0.82, (ry - roomTop) / roomHeight)),
+    };
+  };
+
+  const pointerToPlanPosition = (clientX: number, clientY: number) => {
+    const rect = floorRectRef.current;
+    if (!rect) return null;
+    const viewport = floorViewportRef.current;
+    const screenX = (clientX - rect.left) / rect.width;
+    const screenY = (clientY - rect.top) / rect.height;
+    return {
+      x: 0.5 + (screenX - 0.5 - viewport.translateX / rect.width) / viewport.scale,
+      y: 0.5 + (screenY - 0.5 - viewport.translateY / rect.height) / viewport.scale,
     };
   };
 
@@ -434,25 +491,10 @@ export default function SimulatorScreen() {
     normX: number,
     normY: number
   ) => {
-    // Calculate global position on floor plan
-    const halfW = 0.48;
-    const halfH = 0.48;
-    let globalX = 0.25;
-    let globalY = 0.25;
-
-    if (targetRoom.type === 'living') {
-      globalX = normX * halfW;
-      globalY = normY * halfH;
-    } else if (targetRoom.type === 'kitchen') {
-      globalX = 0.52 + normX * halfW;
-      globalY = normY * halfH;
-    } else if (targetRoom.type === 'bedroom') {
-      globalX = normX * halfW;
-      globalY = 0.52 + normY * halfH;
-    } else if (targetRoom.type === 'bathroom') {
-      globalX = 0.52 + normX * halfW;
-      globalY = 0.52 + normY * halfH;
-    }
+    const columns = Math.max(1, ...rooms.map((room) => room.gridCol + room.gridColSpan));
+    const rows = Math.max(1, ...rooms.map((room) => room.gridRow + room.gridRowSpan));
+    const globalX = (targetRoom.gridCol + normX * targetRoom.gridColSpan) / columns;
+    const globalY = (targetRoom.gridRow + normY * targetRoom.gridRowSpan) / rows;
 
     if (itemDef.category === 'Furniture') {
       // Place furniture immediately
@@ -503,10 +545,8 @@ export default function SimulatorScreen() {
         setDragGhost({ item: itemDef, x: e.clientX, y: e.clientY });
 
         if (floorRectRef.current) {
-          const { left, top, width, height } = floorRectRef.current;
-          const rx = (e.clientX - left) / width;
-          const ry = (e.clientY - top) / height;
-          const match = getRoomAtNormalizedPos(rx, ry);
+          const position = pointerToPlanPosition(e.clientX, e.clientY);
+          const match = position ? getRoomAtNormalizedPos(position.x, position.y) : null;
           setHoveredRoomId(match ? match.room.id : null);
         }
       };
@@ -518,10 +558,8 @@ export default function SimulatorScreen() {
         setHoveredRoomId(null);
 
         if (floorRectRef.current) {
-          const { left, top, width, height } = floorRectRef.current;
-          const rx = (e.clientX - left) / width;
-          const ry = (e.clientY - top) / height;
-          const match = getRoomAtNormalizedPos(rx, ry);
+          const position = pointerToPlanPosition(e.clientX, e.clientY);
+          const match = position ? getRoomAtNormalizedPos(position.x, position.y) : null;
 
           if (match) {
             handleDropItemAtRoom(itemDef, match.room, match.localX, match.localY);
@@ -555,6 +593,14 @@ export default function SimulatorScreen() {
     setItems((prev) => prev.filter((i) => i.id !== itemId));
     setSelectedItemId(null);
     showToast('Item removed', 'info');
+  };
+
+  const handleRotateItem = (itemId: string) => {
+    setItems((prev) => prev.map((item) =>
+      item.id === itemId && item.category === 'Furniture'
+        ? { ...item, rotation: ((item.rotation ?? 0) + 90) % 360 }
+        : item
+    ));
   };
 
   const handleMoveItemEnd = (itemId: string, newNormX: number, newNormY: number) => {
@@ -631,19 +677,32 @@ export default function SimulatorScreen() {
           <BillCard
             monthlyBillRm={monthlyBillRm}
             usageBadge={usageBadge}
-            simulatedTimeStr={simulatedTimeStr}
-            simSpeed={simSpeed}
+            simulatedDateStr={simulatedDateStr}
+            activeFastForward={activeFastForward}
             isEditMode={isEditMode}
             onToggleEdit={() => {
               setIsEditMode((prev) => !prev);
               setSelectedItemId(null);
               setSelectedPendingItem(null);
             }}
-            onCycleSpeed={handleCycleSpeed}
+            onSelectFastForward={handleFastForward}
             onPressBillCard={() => setBillModalVisible(true)}
             onPressBell={() => router.push('/notifications')}
             onPressCalendar={() => setTimelineVisible(true)}
           />
+
+          <View style={styles.currentTaskRow} accessibilityRole="text">
+            <View style={styles.currentTaskDot} />
+            <View style={styles.currentTaskCopy}>
+              <Text style={styles.currentTaskLabel}>Current task</Text>
+              <Text style={styles.currentTaskName} numberOfLines={1}>
+                {currentRoutine.name}
+              </Text>
+            </View>
+            <Text style={styles.currentTaskTime}>
+              {currentRoutine.startTime}–{currentRoutine.endTime}
+            </Text>
+          </View>
 
           {/* ── Middle Section: Strictly FIXED Floor Plan Card (No Shrinking) ── */}
           <View style={styles.floorPlanArea}>
@@ -651,6 +710,7 @@ export default function SimulatorScreen() {
               rooms={rooms}
               items={items}
               avatarState={avatarState}
+              walkPath={avatarWalkPath}
               avatarVariant={avatarVariant}
               activeApplianceIds={activeApplianceIds}
               activeRoomLightIds={activeRoomLightIds}
@@ -661,7 +721,9 @@ export default function SimulatorScreen() {
               onRoomPress={handleRoomPress}
               onSelectItem={handleSelectItem}
               onDeleteItem={handleDeleteItem}
+              onRotateItem={handleRotateItem}
               onMoveItemEnd={handleMoveItemEnd}
+              onViewportChange={(viewport) => { floorViewportRef.current = viewport; }}
               floorPlanRef={floorPlanRef}
               onLayout={onFloorLayout}
             />
@@ -752,10 +814,13 @@ export default function SimulatorScreen() {
           onClose={() => setTimelineVisible(false)}
           blocks={routineBlocks}
           rooms={rooms}
+          appliances={appliancesForBillModal}
           onAddBlockPress={() => {
+            setTimelineVisible(false);
             setAddBlockVisible(true);
           }}
           onEditBlockPress={(block) => {
+            setTimelineVisible(false);
             setSelectedBlockForEdit(block);
             setEditBlockVisible(true);
           }}
@@ -768,7 +833,10 @@ export default function SimulatorScreen() {
         {/* ── Add Routine Block Sheet ─────────────────────────────────────── */}
         <AddBlockSheet
           visible={addBlockVisible}
-          onClose={() => setAddBlockVisible(false)}
+          onClose={() => {
+            setAddBlockVisible(false);
+            setTimelineVisible(true);
+          }}
           rooms={rooms}
           appliances={appliancesForBillModal}
           existingBlocks={routineBlocks}
@@ -788,6 +856,7 @@ export default function SimulatorScreen() {
           onClose={() => {
             setEditBlockVisible(false);
             setSelectedBlockForEdit(null);
+            setTimelineVisible(true);
           }}
           block={selectedBlockForEdit}
           rooms={rooms}
@@ -830,6 +899,44 @@ const styles = StyleSheet.create({
   floorPlanArea: {
     width: '100%',
     marginTop: 4,
+  },
+  currentTaskRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  currentTaskDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#8B9D77',
+    marginRight: 10,
+  },
+  currentTaskCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  currentTaskLabel: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#57534E',
+  },
+  currentTaskName: {
+    fontFamily: 'Lora_500Medium',
+    fontSize: 18,
+    lineHeight: 23,
+    color: '#292524',
+    letterSpacing: -0.2,
+  },
+  currentTaskTime: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#566549',
+    marginLeft: 10,
   },
   editTrayOverlay: {
     position: 'absolute',

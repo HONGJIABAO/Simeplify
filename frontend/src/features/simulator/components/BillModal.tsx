@@ -98,13 +98,16 @@ export function BillModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      {/* Scrim */}
-      <Pressable style={styles.scrim} onPress={onClose}>
-        {/* Card — stop propagation so tapping inside doesn't close */}
+      {/* Scrim container */}
+      <View style={styles.scrim}>
         <Pressable
-          style={[styles.card, { width: modalWidth }]}
-          onPress={(e) => e.stopPropagation()}
-        >
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss estimated bill modal"
+        />
+        {/* Card */}
+        <View style={[styles.card, { width: modalWidth }]}>
           {/* Header row */}
           <View style={styles.headerRow}>
             <Text style={styles.headerLabel}>Estimated monthly bill</Text>
@@ -238,8 +241,8 @@ export function BillModal({
             Estimate from your appliances and your day. Your real bill may be
             different.
           </Text>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

@@ -29,6 +29,7 @@ export interface StoredPlacedItem {
   alwaysOn?: boolean;
   isOn?: boolean;
   color?: string;
+  rotation?: number;
 }
 
 export interface LayoutState {

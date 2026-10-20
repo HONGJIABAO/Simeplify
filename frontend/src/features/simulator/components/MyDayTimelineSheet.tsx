@@ -25,17 +25,20 @@ import {
   MoreVertical,
   Plus,
   Info,
+  Pencil,
 } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { StoredRoom } from '../logic/storage';
 import { RoutineBlock, ApplianceInUse } from '../logic/myDayLogic';
+import { Appliance } from '@/lib/mockData';
 
 interface MyDayTimelineSheetProps {
   visible: boolean;
   onClose: () => void;
   blocks: RoutineBlock[];
   rooms?: StoredRoom[];
+  appliances?: Appliance[];
   onAddBlockPress: () => void;
   onEditBlockPress: (block: RoutineBlock) => void;
   onSaveSchedule: () => void;
@@ -97,11 +100,14 @@ export function MyDayTimelineSheet({
   onClose,
   blocks,
   rooms = [],
+  appliances = [],
   onAddBlockPress,
   onEditBlockPress,
   onSaveSchedule,
 }: MyDayTimelineSheetProps) {
   const [activeDay, setActiveDay] = useState('Mon');
+  const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
+  const [menuBlockId, setMenuBlockId] = useState<string | null>(null);
 
   const getRoomName = (roomId: string) => {
     const found = rooms.find((r) => r.id === roomId || r.type === roomId);
@@ -174,7 +180,11 @@ export function MyDayTimelineSheet({
         <View style={styles.blocksList}>
           {blocks.map((block) => {
             const isAway = block.isAway;
-            const hasAppliancesInUse =
+            const isExpanded = expandedBlockId === block.id;
+            const actualAppliances = appliances.filter((appliance) =>
+              block.applianceIds.includes(appliance.id)
+            );
+            const hasAppliancesInUse = actualAppliances.length > 0 ||
               Boolean(block.appliancesInUse && block.appliancesInUse.length > 0);
 
             return (
@@ -185,54 +195,78 @@ export function MyDayTimelineSheet({
                   isAway && styles.blockCardAway,
                 ]}
               >
-                <Pressable
-                  style={styles.blockHeader}
-                  onPress={() => !isAway && onEditBlockPress(block)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit ${block.name}`}
-                  disabled={isAway}
-                >
-                  <View
-                    style={[
-                      styles.blockIconCircle,
-                      { backgroundColor: getBlockIconBg(block.iconType) },
-                    ]}
+                <View style={styles.blockHeader}>
+                  <Pressable
+                    style={styles.blockMainPressable}
+                    onPress={() => {
+                      if (isAway) return;
+                      setMenuBlockId(null);
+                      setExpandedBlockId((current) => current === block.id ? null : block.id);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isExpanded ? 'Hide' : 'Show'} appliances for ${block.name}`}
+                    accessibilityState={{ expanded: isExpanded }}
+                    disabled={isAway}
                   >
-                    {getBlockIcon(block.iconType)}
-                  </View>
-
-                  <View style={styles.blockMeta}>
-                    <Text style={styles.blockTimeTitle}>
-                      {block.startTime} – {block.endTime} · {block.name}
-                    </Text>
-                    {block.description && (
-                      <Text style={styles.blockDesc}>{block.description}</Text>
-                    )}
-                    <View style={styles.roomTagRow}>
-                      <View style={styles.roomTag}>
-                        <Text style={styles.roomTagText}>
-                          {getRoomName(block.roomId)}
-                        </Text>
-                      </View>
-                      {!isAway && (
-                        <Text style={styles.activeAppCount}>
-                          {block.applianceIds.length || 3} active appliances
-                        </Text>
-                      )}
+                    <View
+                      style={[
+                        styles.blockIconCircle,
+                        { backgroundColor: getBlockIconBg(block.iconType) },
+                      ]}
+                    >
+                      {getBlockIcon(block.iconType)}
                     </View>
-                  </View>
+
+                    <View style={styles.blockMeta}>
+                      <Text style={styles.blockTimeTitle}>
+                        {block.startTime} – {block.endTime} · {block.name}
+                      </Text>
+                      {block.description && (
+                        <Text style={styles.blockDesc}>{block.description}</Text>
+                      )}
+                      <View style={styles.roomTagRow}>
+                        <View style={styles.roomTag}>
+                          <Text style={styles.roomTagText}>
+                            {getRoomName(block.roomId)}
+                          </Text>
+                        </View>
+                        {!isAway && (
+                          <Text style={styles.activeAppCount}>
+                            {actualAppliances.length || block.appliancesInUse?.length || 0} active appliances
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </Pressable>
 
                   {!isAway && (
                     <Pressable
                       style={styles.moreBtn}
-                      onPress={() => onEditBlockPress(block)}
+                      onPress={() => setMenuBlockId((current) => current === block.id ? null : block.id)}
                       accessibilityRole="button"
                       accessibilityLabel={`Options for ${block.name}`}
                     >
                       <MoreVertical size={18} color="#78716C" strokeWidth={1.5} />
                     </Pressable>
                   )}
-                </Pressable>
+                </View>
+
+                {menuBlockId === block.id && (
+                  <View style={styles.optionsMenu}>
+                    <Pressable
+                      style={styles.optionsMenuItem}
+                      onPress={() => {
+                        setMenuBlockId(null);
+                        onEditBlockPress(block);
+                      }}
+                      accessibilityRole="menuitem"
+                      accessibilityLabel={`Edit ${block.name}`}
+                    >
+                      <Pencil size={15} color="#3D5236" strokeWidth={1.7} />
+                      <Text style={styles.optionsMenuText}>Edit</Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 {/* Away notice banner */}
                 {isAway && (
@@ -245,13 +279,33 @@ export function MyDayTimelineSheet({
                 )}
 
                 {/* Room Appliances in Use (matching screenshot 5th block) */}
-                {hasAppliancesInUse && (
+                {isExpanded && (
                   <View style={styles.appliancesInUseSection}>
                     <Text style={styles.appliancesInUseHeading}>
                       ROOM APPLIANCES IN USE
                     </Text>
                     <View style={styles.appliancesInUseList}>
-                      {block.appliancesInUse?.map((app) => (
+                      {actualAppliances.length > 0 ? actualAppliances.map((app) => (
+                        <View key={app.id} style={styles.applianceInUseRow}>
+                          <View style={styles.applianceInUseLeft}>
+                            <View style={styles.applianceInUseIconBox}>
+                              {getApplianceIcon(
+                                app.type === 'air_conditioner' ? 'ac' :
+                                app.type === 'fan' ? 'fan' :
+                                app.type === 'lights' ? 'light' :
+                                app.type === 'tv' ? 'tv' : undefined
+                              )}
+                            </View>
+                            <View>
+                              <Text style={styles.applianceInUseName}>{app.name}</Text>
+                              <Text style={styles.applianceInUseTime}>
+                                {block.startTime}-{block.endTime}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.applianceInUseWatts}>{app.wattage} W</Text>
+                        </View>
+                      )) : hasAppliancesInUse ? block.appliancesInUse?.map((app) => (
                         <View key={app.id} style={styles.applianceInUseRow}>
                           <View style={styles.applianceInUseLeft}>
                             <View style={styles.applianceInUseIconBox}>
@@ -270,7 +324,11 @@ export function MyDayTimelineSheet({
                             {app.wattage} W
                           </Text>
                         </View>
-                      ))}
+                      )) : (
+                        <Text style={styles.noAppliancesText}>
+                          No appliances selected for this routine.
+                        </Text>
+                      )}
                     </View>
                   </View>
                 )}
@@ -390,6 +448,12 @@ const styles = StyleSheet.create({
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 8,
+  },
+  blockMainPressable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
   },
   blockIconCircle: {
@@ -440,8 +504,39 @@ const styles = StyleSheet.create({
     color: '#78716C',
   },
   moreBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: -2,
+  },
+  optionsMenu: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    padding: 4,
+    marginTop: 6,
+    minWidth: 112,
+    shadowColor: '#292524',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  optionsMenuItem: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  optionsMenuText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 14,
+    color: '#3D5236',
   },
   awayBanner: {
     flexDirection: 'row',
@@ -477,6 +572,13 @@ const styles = StyleSheet.create({
   },
   appliancesInUseList: {
     gap: 8,
+  },
+  noAppliancesText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12.5,
+    color: '#78716C',
+    textAlign: 'center',
+    paddingVertical: 10,
   },
   applianceInUseRow: {
     flexDirection: 'row',

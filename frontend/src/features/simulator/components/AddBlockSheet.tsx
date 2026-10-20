@@ -5,13 +5,14 @@
  *         docs/screenshot/simulator/simulator_add_routine_error.png
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import {
   AlertCircle,
@@ -27,6 +28,8 @@ import {
   ShowerHead,
   Bed,
   X,
+  Minus,
+  Plus,
 } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
@@ -34,14 +37,16 @@ import { Switch } from '@/components/Switch';
 import { Sprite } from './Sprite';
 import { StoredRoom } from '../logic/storage';
 import { RoutineBlock, validateBlock } from '../logic/myDayLogic';
+import { Appliance } from '@/lib/mockData';
 
 interface AddBlockSheetProps {
   visible: boolean;
   onClose: () => void;
   existingBlocks: RoutineBlock[];
   rooms?: StoredRoom[];
-  appliances?: any[];
+  appliances?: Appliance[];
   onSaveBlock: (block: Omit<RoutineBlock, 'id'>) => void;
+  initialSimulateError?: boolean;
 }
 
 const QUICK_ROUTINES = [
@@ -51,16 +56,16 @@ const QUICK_ROUTINES = [
   { name: 'Cooking', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} />, room: 'kitchen' },
 ];
 
-const ROOM_OPTIONS = [
-  { id: 'living', label: 'Living room', icon: <Armchair size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'kitchen', label: 'Kitchen', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bedroom', label: 'Bedroom 1', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bedroom_2', label: 'Bedroom 2', icon: <Bed size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'bathroom', label: 'Bathroom', icon: <ShowerHead size={16} color="#57534E" strokeWidth={1.5} /> },
-  { id: 'away', label: 'Away', icon: <Lock size={16} color="#57534E" strokeWidth={1.5} /> },
-];
-
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function roomIcon(type: StoredRoom['type'] | 'away') {
+  const props = { size: 16, color: '#57534E', strokeWidth: 1.5 };
+  if (type === 'kitchen') return <Utensils {...props} />;
+  if (type === 'bedroom') return <Bed {...props} />;
+  if (type === 'bathroom') return <ShowerHead {...props} />;
+  if (type === 'away') return <Lock {...props} />;
+  return <Armchair {...props} />;
+}
 
 export function AddBlockSheet({
   visible,
@@ -69,21 +74,59 @@ export function AddBlockSheet({
   rooms = [],
   appliances = [],
   onSaveBlock,
+  initialSimulateError = false,
 }: AddBlockSheetProps) {
-  const [name, setName] = useState('Watching TV');
+  const [name, setName] = useState(initialSimulateError ? '' : 'Watching TV');
   const [selectedRoom, setSelectedRoom] = useState('living');
-  const [startTime, setStartTime] = useState('20:00');
-  const [endTime, setEndTime] = useState('23:00');
+  const [startTime, setStartTime] = useState('17:30');
+  const [endTime, setEndTime] = useState('20:00');
   const [activeDays, setActiveDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
   const [repeatMode, setRepeatMode] = useState<'weekdays' | 'weekends' | 'all'>('weekdays');
 
   // Room appliances switch state
-  const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({
-    tv_sample: true,
-    lights_sample: true,
-    ac_sample: false,
-    fan_sample: false,
-  });
+  const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({});
+
+  const roomOptions = useMemo(
+    () => [
+      ...rooms.map((room, index) => {
+        const typeLabel = `${room.type.charAt(0).toUpperCase()}${room.type.slice(1)}`;
+        const sameTypeCount = rooms.filter((candidate) => candidate.type === room.type).length;
+        const typeIndex = rooms
+          .slice(0, index + 1)
+          .filter((candidate) => candidate.type === room.type).length;
+        return {
+          id: room.id,
+          type: room.type,
+          label: room.name?.trim() || (sameTypeCount > 1 ? `${typeLabel} ${typeIndex}` : typeLabel),
+        };
+      }),
+      { id: 'away', type: 'away' as const, label: 'Away' },
+    ],
+    [rooms]
+  );
+
+  const allAppliances = useMemo(() => appliances, [appliances]);
+  const [temperature, setTemperature] = useState(23);
+  const [timerHours, setTimerHours] = useState(1);
+  const [fanSpeed, setFanSpeed] = useState<'Low' | 'Med' | 'High'>('Med');
+
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => {
+      const initialRoom = rooms.find((room) => room.type === 'living') || rooms[0];
+      setName(initialSimulateError ? '' : 'Watching TV');
+      setSelectedRoom(initialRoom?.id || 'away');
+      setStartTime(initialSimulateError ? '19:15' : '17:30');
+      setEndTime(initialSimulateError ? '20:30' : '20:00');
+      setActiveDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+      setRepeatMode('weekdays');
+      setApplianceSwitches({});
+      setTemperature(23);
+      setTimerHours(1);
+      setFanSpeed('Med');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [visible, rooms, initialSimulateError]);
 
   const isAwaySelected = selectedRoom === 'away';
 
@@ -111,7 +154,7 @@ export function AddBlockSheet({
 
   const handleSelectQuickRoutine = (q: (typeof QUICK_ROUTINES)[0]) => {
     setName(q.name);
-    setSelectedRoom(q.room);
+    setSelectedRoom(rooms.find((room) => room.type === q.room)?.id || selectedRoom);
   };
 
   const handleToggleDay = (day: string) => {
@@ -142,6 +185,10 @@ export function AddBlockSheet({
         ? 'away'
         : 'custom',
       isAway: isAwaySelected,
+      repeatDays: activeDays,
+      temperature,
+      timerHours,
+      fanSpeed,
       description: `${name} in ${selectedRoom}`,
     });
     onClose();
@@ -160,7 +207,7 @@ export function AddBlockSheet({
       >
         {/* Top Error Summary Banner (when invalid) */}
         {isFormInvalid && (
-          <View style={styles.errorSummaryBanner}>
+          <View style={styles.errorSummaryBanner} accessibilityRole="alert">
             <AlertCircle size={20} color="#C53030" strokeWidth={1.5} />
             <View style={{ flex: 1 }}>
               <Text style={styles.errorSummaryTitle}>
@@ -186,19 +233,19 @@ export function AddBlockSheet({
 
           <View style={[styles.inputPill, hasNameError && styles.inputPillError]}>
             <Tv size={18} color={hasNameError ? '#C53030' : '#57534E'} strokeWidth={1.5} />
-            <Text
+            <TextInput
               style={[
                 styles.inputText,
                 !name && styles.inputPlaceholder,
                 hasNameError && styles.inputTextError,
               ]}
-              onPress={() => {
-                // Allows clearing or resetting for demo
-                if (!name) setName('Watching TV');
-              }}
-            >
-              {name || 'e.g. Watching TV'}
-            </Text>
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Watching TV"
+              placeholderTextColor="#A8A29E"
+              accessibilityLabel="Routine name"
+              returnKeyType="done"
+            />
             {name ? (
               <Pressable
                 onPress={() => setName('')}
@@ -252,7 +299,7 @@ export function AddBlockSheet({
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Where?</Text>
           <View style={styles.roomGrid}>
-            {ROOM_OPTIONS.map((rm) => {
+            {roomOptions.map((rm) => {
               const isSelected = selectedRoom === rm.id;
               return (
                 <Pressable
@@ -263,7 +310,7 @@ export function AddBlockSheet({
                   accessibilityLabel={`Choose ${rm.label}`}
                 >
                   <View style={styles.roomBtnLeft}>
-                    {rm.icon}
+                    {roomIcon(rm.type)}
                     <Text
                       style={[
                         styles.roomGridText,
@@ -288,14 +335,8 @@ export function AddBlockSheet({
 
           <View style={styles.timeCardsRow}>
             {/* Starts Card */}
-            <Pressable
+            <View
               style={[styles.timeCard, hasTimeError && styles.timeCardError]}
-              onPress={() => {
-                // Cycle start time for demo
-                setStartTime(startTime === '20:00' ? '19:15' : '20:00');
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Starts at ${startTime}`}
             >
               <Text style={styles.timeCardLabel}>STARTS</Text>
               <View style={styles.timeCardValueRow}>
@@ -304,25 +345,24 @@ export function AddBlockSheet({
                   color={hasTimeError ? '#C53030' : '#292524'}
                   strokeWidth={1.5}
                 />
-                <Text
+                <TextInput
                   style={[
                     styles.timeCardValue,
                     hasTimeError && styles.timeCardValueError,
                   ]}
-                >
-                  {startTime}
-                </Text>
+                  value={startTime}
+                  onChangeText={setStartTime}
+                  placeholder="HH:MM"
+                  maxLength={5}
+                  keyboardType="numbers-and-punctuation"
+                  accessibilityLabel="Start time in 24 hour format"
+                />
               </View>
-            </Pressable>
+            </View>
 
             {/* Ends Card */}
-            <Pressable
+            <View
               style={[styles.timeCard, hasTimeError && styles.timeCardError]}
-              onPress={() => {
-                setEndTime(endTime === '23:00' ? '20:30' : '23:00');
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Ends at ${endTime}`}
             >
               <Text style={styles.timeCardLabel}>ENDS</Text>
               <View style={styles.timeCardValueRow}>
@@ -331,16 +371,20 @@ export function AddBlockSheet({
                   color={hasTimeError ? '#C53030' : '#292524'}
                   strokeWidth={1.5}
                 />
-                <Text
+                <TextInput
                   style={[
                     styles.timeCardValue,
                     hasTimeError && styles.timeCardValueError,
                   ]}
-                >
-                  {endTime}
-                </Text>
+                  value={endTime}
+                  onChangeText={setEndTime}
+                  placeholder="HH:MM"
+                  maxLength={5}
+                  keyboardType="numbers-and-punctuation"
+                  accessibilityLabel="End time in 24 hour format"
+                />
               </View>
-            </Pressable>
+            </View>
           </View>
 
           {/* Schedule overlap banner (when conflict) */}
@@ -428,80 +472,92 @@ export function AddBlockSheet({
         {/* ── Appliances on during this ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Appliances on during this</Text>
-          <View style={styles.applianceCardList}>
-            {/* Sample appliances matching screenshot */}
-            <View style={styles.applianceSwitchRow}>
-              <View style={styles.applianceLeft}>
-                <View style={styles.applianceIconBox}>
-                  <Sprite type="tv" size={32} />
-                </View>
-                <View>
-                  <Text style={styles.applianceName}>Samsung TV</Text>
-                  <Text style={styles.applianceWatts}>90 W · Living room</Text>
-                </View>
-              </View>
-              <Switch
-                value={Boolean(applianceSwitches.tv_sample)}
-                onValueChange={(val) =>
-                  setApplianceSwitches((p) => ({ ...p, tv_sample: val }))
-                }
-              />
-            </View>
+          <ScrollView
+            style={styles.applianceScroller}
+            contentContainerStyle={styles.applianceCardList}
+            showsVerticalScrollIndicator
+            nestedScrollEnabled
+          >
+            {allAppliances.length === 0 ? (
+              <Text style={styles.emptyAppliancesText}>
+                No appliances have been placed yet.
+              </Text>
+            ) : allAppliances.map((appliance) => {
+              const isActive = Boolean(applianceSwitches[appliance.id]);
+              const isAirConditioner = appliance.type === 'air_conditioner';
+              const isFan = appliance.type === 'fan';
+              const applianceRoom = rooms.find((room) => room.id === appliance.roomId);
 
-            <View style={styles.applianceSwitchRow}>
-              <View style={styles.applianceLeft}>
-                <View style={styles.applianceIconBox}>
-                  <Sprite type="light_bulb" size={32} />
-                </View>
-                <View>
-                  <Text style={styles.applianceName}>Philips LED Lights</Text>
-                  <Text style={styles.applianceWatts}>18 W · Warm ambient</Text>
-                </View>
-              </View>
-              <Switch
-                value={Boolean(applianceSwitches.lights_sample)}
-                onValueChange={(val) =>
-                  setApplianceSwitches((p) => ({ ...p, lights_sample: val }))
-                }
-              />
-            </View>
+              return (
+                <View key={appliance.id} style={styles.applianceSwitchRow}>
+                  <View style={styles.applianceSwitchTop}>
+                    <View style={styles.applianceLeft}>
+                      <View style={styles.applianceIconBox}>
+                        <Sprite type={appliance.spriteKey || appliance.type} size={32} />
+                      </View>
+                      <View style={styles.applianceTextGroup}>
+                        <Text style={styles.applianceName} numberOfLines={1}>{appliance.name}</Text>
+                        <Text style={styles.applianceWatts}>
+                          {appliance.wattage || 0} W · {applianceRoom?.name || applianceRoom?.type || 'Room'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Switch
+                      value={isActive}
+                      onValueChange={(value) =>
+                        setApplianceSwitches((previous) => ({ ...previous, [appliance.id]: value }))
+                      }
+                    />
+                  </View>
 
-            <View style={styles.applianceSwitchRow}>
-              <View style={styles.applianceLeft}>
-                <View style={styles.applianceIconBox}>
-                  <Sprite type="aircon" size={32} />
-                </View>
-                <View>
-                  <Text style={styles.applianceName}>Panasonic Air Conditioner</Text>
-                  <Text style={styles.applianceWatts}>1200 W · Eco mode ready</Text>
-                </View>
-              </View>
-              <Switch
-                value={Boolean(applianceSwitches.ac_sample)}
-                onValueChange={(val) =>
-                  setApplianceSwitches((p) => ({ ...p, ac_sample: val }))
-                }
-              />
-            </View>
+                  {isAirConditioner && isActive && (
+                    <View style={styles.applianceControls}>
+                      <View style={styles.controlRow}>
+                        <Text style={styles.controlLabel}>Temperature</Text>
+                        <View style={styles.stepperPill}>
+                          <Pressable style={styles.stepperButton} onPress={() => setTemperature((value) => Math.max(16, value - 1))} accessibilityRole="button" accessibilityLabel="Decrease temperature">
+                            <Minus size={15} color="#292524" strokeWidth={1.8} />
+                          </Pressable>
+                          <Text style={styles.stepperValue}>{temperature}°C</Text>
+                          <Pressable style={styles.stepperButton} onPress={() => setTemperature((value) => Math.min(30, value + 1))} accessibilityRole="button" accessibilityLabel="Increase temperature">
+                            <Plus size={15} color="#292524" strokeWidth={1.8} />
+                          </Pressable>
+                        </View>
+                      </View>
+                      <View style={styles.controlRow}>
+                        <Text style={styles.controlLabel}>Running time</Text>
+                        <View style={styles.stepperPill}>
+                          <Pressable style={styles.stepperButton} onPress={() => setTimerHours((value) => Math.max(1, value - 1))} accessibilityRole="button" accessibilityLabel="Decrease air conditioner running time">
+                            <Minus size={15} color="#292524" strokeWidth={1.8} />
+                          </Pressable>
+                          <Text style={styles.stepperValue}>{timerHours}h</Text>
+                          <Pressable style={styles.stepperButton} onPress={() => setTimerHours((value) => Math.min(24, value + 1))} accessibilityRole="button" accessibilityLabel="Increase air conditioner running time">
+                            <Plus size={15} color="#292524" strokeWidth={1.8} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  )}
 
-            <View style={styles.applianceSwitchRow}>
-              <View style={styles.applianceLeft}>
-                <View style={styles.applianceIconBox}>
-                  <Sprite type="fan" size={32} />
+                  {isFan && isActive && (
+                    <View style={styles.fanControlRow}>
+                      <Text style={styles.controlLabel}>Fan speed</Text>
+                      <View style={styles.fanSpeedControl}>
+                        {(['Low', 'Med', 'High'] as const).map((speed) => {
+                          const isSelected = fanSpeed === speed;
+                          return (
+                            <Pressable key={speed} style={[styles.fanSpeedButton, isSelected && styles.fanSpeedButtonActive]} onPress={() => setFanSpeed(speed)} accessibilityRole="button" accessibilityLabel={`Set fan speed ${speed}`}>
+                              <Text style={[styles.fanSpeedText, isSelected && styles.fanSpeedTextActive]}>{speed === 'Med' ? 'Medium' : speed}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                 </View>
-                <View>
-                  <Text style={styles.applianceName}>Table Fan</Text>
-                  <Text style={styles.applianceWatts}>55 W · Standby</Text>
-                </View>
-              </View>
-              <Switch
-                value={Boolean(applianceSwitches.fan_sample)}
-                onValueChange={(val) =>
-                  setApplianceSwitches((p) => ({ ...p, fan_sample: val }))
-                }
-              />
-            </View>
-          </View>
+              );
+            })}
+          </ScrollView>
         </View>
 
         {/* ── Action Buttons ── */}
@@ -792,26 +848,36 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 16,
   },
+  applianceScroller: {
+    maxHeight: 360,
+  },
   applianceCardList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    gap: 10,
+    paddingBottom: 4,
   },
   applianceSwitchRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    padding: 14,
+    gap: 12,
+  },
+  applianceSwitchTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F4',
   },
   applianceLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  applianceTextGroup: {
+    flex: 1,
+    minWidth: 0,
   },
   applianceIconBox: {
     width: 38,
@@ -831,6 +897,96 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#78716C',
     marginTop: 2,
+  },
+  emptyAppliancesText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  applianceControls: {
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F4',
+  },
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAF7F2',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  controlLabel: {
+    fontFamily: 'SourceSans3_500Medium',
+    fontSize: 12.5,
+    color: '#57534E',
+  },
+  stepperPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    gap: 6,
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    minWidth: 38,
+    textAlign: 'center',
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 13,
+    color: '#292524',
+  },
+  fanControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F4',
+  },
+  fanSpeedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F5F4',
+    borderRadius: 9999,
+    padding: 2,
+    gap: 2,
+  },
+  fanSpeedButton: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    borderRadius: 9999,
+  },
+  fanSpeedButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  fanSpeedText: {
+    fontFamily: 'SourceSans3_500Medium',
+    fontSize: 11,
+    color: '#78716C',
+  },
+  fanSpeedTextActive: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    color: '#292524',
   },
   actions: {
     flexDirection: 'row',
