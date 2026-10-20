@@ -59,3 +59,23 @@ export const COMMUNITY_TASKS: TaskItem[] = [
     completed: false,
   },
 ];
+
+export const MOCK_OAKRIDGE_STATS = {
+  sector: 'Oakridge Commons • Sector 4B',
+  totalHouseholds: 240,
+  activeToday: 225,
+  participationRate: 94,
+  watering: {
+    count: 142,
+    percent: 59,
+  },
+  fertilizing: {
+    count: 83,
+    percent: 35,
+  },
+  pending: {
+    count: 15,
+    percent: 6,
+  },
+  updatedAt: 'Today, 8:30 AM',
+};

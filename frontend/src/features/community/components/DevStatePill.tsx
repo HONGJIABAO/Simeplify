@@ -96,6 +96,16 @@ export function DevStatePill({
 
             <Pressable
               onPress={() => {
+                onSelectState(8);
+                setExpanded(false);
+              }}
+              style={styles.stateBtn}
+            >
+              <Text style={styles.stateBtnText}>Oakridge Stats</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
                 onReset();
                 setExpanded(false);
               }}
