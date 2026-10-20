@@ -47,7 +47,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useToast } from '@/components/Toast';
 import { ENABLE_GOOGLE_AUTH } from '@/lib/flags';
-import { updateAuthSession, UserGender } from '@/lib/authSession';
+import { signUp, UserGender } from '@/lib/authSession';
 
 function GoogleIcon({ size = 18 }: { size?: number }) {
   return (
@@ -134,7 +134,7 @@ export default function SignUpScreen() {
     showToast('Location set to Petaling Jaya, Selangor', 'success');
   };
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
     setTouched(true);
 
     if (!isFormComplete) {
@@ -142,24 +142,28 @@ export default function SignUpScreen() {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const addressDisplay = street.trim()
-        ? `${street.trim()}, ${city.trim()}, ${stateName.trim()}`
-        : `${city.trim()}, ${stateName.trim()}`;
-
-      updateAuthSession({
-        isLoggedIn: true,
+    try {
+      const { user, error } = await signUp(email.trim(), password.trim(), {
+        name: email.trim().split('@')[0],
         gender,
-        email: email.trim(),
         state: stateName.trim(),
         city: city.trim(),
         street: street.trim(),
-        addressDisplay,
       });
 
-      router.replace('/(tabs)/profile' as any);
-    }, 600);
+      if (error || !user) {
+        showToast(error?.message || 'Failed to create account.', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      showToast('Account created! Welcome to Simeplify.', 'success');
+      router.replace('/(onboarding)/layout' as any);
+    } catch (err: any) {
+      showToast(err?.message || 'Error creating account.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignUp = () => {
