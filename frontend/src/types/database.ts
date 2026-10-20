@@ -398,6 +398,121 @@ export interface Database {
           }
         ];
       };
+      waste_scans: {
+        Row: {
+          id: string;
+          household_id: string;
+          image_path: string;
+          item_name: string;
+          bin_type: 'paper' | 'plastic' | 'glass_metal' | 'general';
+          is_recyclable: boolean;
+          confidence: number | null;
+          confirmed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          image_path: string;
+          item_name: string;
+          bin_type: 'paper' | 'plastic' | 'glass_metal' | 'general';
+          is_recyclable: boolean;
+          confidence?: number | null;
+          confirmed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          image_path?: string;
+          item_name?: string;
+          bin_type?: 'paper' | 'plastic' | 'glass_metal' | 'general';
+          is_recyclable?: boolean;
+          confidence?: number | null;
+          confirmed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "waste_scans_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      deeds: {
+        Row: {
+          id: string;
+          household_id: string;
+          task_type: 'recycle' | 'upload_lower_bill' | 'simulator_action';
+          deed_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          task_type: 'recycle' | 'upload_lower_bill' | 'simulator_action';
+          deed_date?: string;
+          created_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          task_type?: 'recycle' | 'upload_lower_bill' | 'simulator_action';
+          deed_date?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deeds_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      points: {
+        Row: {
+          id: string;
+          household_id: string;
+          source: 'recycling' | 'energy';
+          amount: number;
+          deed_id: string | null;
+          billing_month: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          source: 'recycling' | 'energy';
+          amount: number;
+          deed_id?: string | null;
+          billing_month?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          source?: 'recycling' | 'energy';
+          amount?: number;
+          deed_id?: string | null;
+          billing_month?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "points_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "points_deed_id_fkey";
+            columns: ["deed_id"];
+            isOneToOne: false;
+            referencedRelation: "deeds";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

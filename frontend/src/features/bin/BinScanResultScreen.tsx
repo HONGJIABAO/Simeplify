@@ -47,6 +47,7 @@ import { Header } from '@/components/Header';
 import { MiniCard } from '@/components/MiniCard';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
+import { useAuthSession } from '@/lib/authSession';
 import {
   type BinType,
   type ClassifyWasteResult,
@@ -110,30 +111,63 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
 
 export default function BinScanResultScreen() {
   const router = useRouter();
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
+
   const params = useLocalSearchParams<{
     binType?: string;
     state?: string;
     imageUri?: string;
     itemName?: string;
+    material?: string;
+    confidence?: string;
+    tips?: string;
+    tip?: string;
+    isRecyclable?: string;
+    pointsAwarded?: string;
+    dailyLimitReached?: string;
+    scanId?: string;
   }>();
 
   const { showToast } = useToast();
 
   const requestedBin = (params.binType as BinType) || 'paper';
   const baseResult = mockScanResults[requestedBin] || mockScanResults.paper;
-  const initialResult = params.itemName
-    ? { ...baseResult, itemName: params.itemName }
-    : baseResult;
+
+  const initialConfidence = params.confidence ? parseFloat(params.confidence) : baseResult.confidence;
+  const initialRecyclable = params.isRecyclable !== undefined
+    ? params.isRecyclable === 'true'
+    : (requestedBin !== 'general');
+  const initialTip = params.tips || params.tip || baseResult.tip;
+
+  const initialResult: ClassifyWasteResult = {
+    ...baseResult,
+    itemName: params.itemName || baseResult.itemName,
+    binType: requestedBin,
+    material: params.material || baseResult.material,
+    confidence: initialConfidence,
+    recyclable: initialRecyclable,
+    tip: initialTip,
+  };
+
+  const initialUiState = (params.state as any) ||
+    (initialConfidence < 0.6 ? 'low-confidence' : 'default');
 
   const [uiState, setUiState] = useState<'default' | 'low-confidence' | 'error' | 'loading'>(
-    (params.state as any) || 'default'
+    initialUiState
   );
   const [result, setResult] = useState<ClassifyWasteResult>(initialResult);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Deeds count for daily cap
   const isDailyLimitReached =
-    params.state === 'daily-limit' || mockDeedsToday.count >= LEAF_DAILY_DEED_CAP;
+    params.dailyLimitReached === 'true' ||
+    params.state === 'daily-limit' ||
+    mockDeedsToday.count >= LEAF_DAILY_DEED_CAP;
+
+  const pointsAwarded = params.pointsAwarded !== undefined
+    ? parseInt(params.pointsAwarded, 10)
+    : (result.recyclable && !isDailyLimitReached ? 10 : 0);
 
   const binInfo = getBinInfo(result.binType);
 
@@ -154,11 +188,13 @@ export default function BinScanResultScreen() {
     setIsSubmitting(true);
 
     try {
-      const outcome = await confirmDisposal('scan-auto', result.binType);
+      if (householdId) {
+        await confirmDisposal(params.scanId || 'scan-auto', result.binType, householdId);
+      }
 
-      if (outcome.pointsAwarded > 0) {
+      if (pointsAwarded > 0) {
         showToast('+10 points', 'success');
-      } else if (outcome.dailyLimitReached && result.recyclable) {
+      } else if (isDailyLimitReached && result.recyclable) {
         showToast('Daily limit reached. 0 points today.', 'warning');
       } else {
         showToast('Item sorted into General waste', 'info');

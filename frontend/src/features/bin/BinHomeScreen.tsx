@@ -31,13 +31,41 @@ import {
   getBinInfo,
   SHOW_CO2_CARD,
 } from '@/lib/mockData';
+import { useAuthSession } from '@/lib/authSession';
+import { fetchBinState, type BinState } from '@/lib/services/binService';
+import { useFocusEffect } from 'expo-router';
 
 export default function BinHomeScreen() {
   const router = useRouter();
-  const [ecoData] = useState(mockEcoProgress);
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
 
-  const progress = ecoData.milestoneTarget > 0 ? ecoData.points / ecoData.milestoneTarget : 0;
-  const pointsRemaining = Math.max(0, ecoData.milestoneTarget - ecoData.points);
+  const [binState, setBinState] = useState<BinState | null>(null);
+
+  const loadState = React.useCallback(async () => {
+    if (!householdId) return;
+    try {
+      const state = await fetchBinState(householdId);
+      setBinState(state);
+    } catch (err) {
+      console.error('Failed to load bin state:', err);
+    }
+  }, [householdId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadState();
+    }, [loadState])
+  );
+
+  const points = binState?.points ?? mockEcoProgress.points;
+  const milestoneTarget = binState?.milestoneTarget ?? mockEcoProgress.milestoneTarget;
+  const milestoneName = binState?.milestoneName ?? mockEcoProgress.milestoneName;
+  const itemsDiverted = binState?.itemsDiverted ?? mockEcoProgress.itemsDiverted;
+  const scans = binState ? binState.recentScans : mockRecentScans;
+
+  const progress = milestoneTarget > 0 ? points / milestoneTarget : 0;
+  const pointsRemaining = Math.max(0, milestoneTarget - points);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -56,11 +84,11 @@ export default function BinHomeScreen() {
             <View style={styles.ecoHeaderLeft}>
               <Text style={styles.ecoLabel}>Household eco progress</Text>
               <Text style={styles.ecoHeroNumber}>
-                {ecoData.points}
+                {points}
                 <Text style={styles.ecoHeroPts}> pts</Text>
               </Text>
               <Text style={styles.ecoSubline}>
-                +{ecoData.pointsPerItem} pts per cleanly sorted item
+                +10 pts per cleanly sorted item
               </Text>
             </View>
             <View style={styles.ecoBadge}>
@@ -70,9 +98,9 @@ export default function BinHomeScreen() {
 
           {/* Milestone progress */}
           <View style={styles.milestoneRow}>
-            <Text style={styles.milestoneName}>{ecoData.milestoneName}</Text>
+            <Text style={styles.milestoneName}>{milestoneName}</Text>
             <Text style={styles.milestoneCount}>
-              {ecoData.points} / {ecoData.milestoneTarget} pts
+              {points} / {milestoneTarget} pts
             </Text>
           </View>
           <ProgressBar progress={progress} style={styles.progressBar} />
@@ -86,19 +114,19 @@ export default function BinHomeScreen() {
               <View style={styles.miniCardInner}>
                 <Recycle size={18} color="#566549" strokeWidth={1.5} />
                 <View>
-                  <Text style={styles.miniCardValue}>{ecoData.itemsDiverted} items</Text>
+                  <Text style={styles.miniCardValue}>{itemsDiverted} items</Text>
                   <Text style={styles.miniCardLabel}>Diverted total</Text>
                 </View>
               </View>
             </MiniCard>
 
             {/* TODO(open-item 10): CO2 card hidden until factor is decided. SHOW_CO2_CARD = false */}
-            {SHOW_CO2_CARD && ecoData.co2Prevented !== null && (
+            {SHOW_CO2_CARD && mockEcoProgress.co2Prevented !== null && (
               <MiniCard style={styles.miniCardHalf}>
                 <View style={styles.miniCardInner}>
                   <Leaf size={18} color="#566549" strokeWidth={1.5} />
                   <View>
-                    <Text style={styles.miniCardValue}>{ecoData.co2Prevented} kg</Text>
+                    <Text style={styles.miniCardValue}>{mockEcoProgress.co2Prevented} kg</Text>
                     <Text style={styles.miniCardLabel}>CO₂ prevented</Text>
                   </View>
                 </View>
@@ -177,43 +205,57 @@ export default function BinHomeScreen() {
             </Pressable>
           </View>
 
-          {mockRecentScans.map((scan, index) => {
-            const info = getBinInfo(scan.binType);
-            return (
-              <View key={scan.id}>
-                {index > 0 && <View style={styles.divider} />}
-                <MiniCard style={styles.recentItemCard}>
-                  <View style={styles.recentItemRow}>
-                    <View style={[styles.recentItemIcon, { backgroundColor: info.color + '22' }]}>
-                      <Recycle size={18} color={info.color} strokeWidth={1.5} />
+          {scans.length === 0 ? (
+            <View style={styles.emptyScansBox}>
+              <Text style={styles.emptyScansText}>No waste scans yet. Tap above to scan your first item.</Text>
+            </View>
+          ) : (
+            scans.map((scan, index) => {
+              const info = getBinInfo(scan.binType);
+              const dateDisplay = (scan as any).dateStr || (scan as any).date || 'Today';
+              return (
+                <View key={scan.id}>
+                  {index > 0 && <View style={styles.divider} />}
+                  <MiniCard style={styles.recentItemCard}>
+                    <View style={styles.recentItemRow}>
+                      <View style={[styles.recentItemIcon, { backgroundColor: info.color + '22' }]}>
+                        <Recycle size={18} color={info.color} strokeWidth={1.5} />
+                      </View>
+                      <View style={styles.recentItemInfo}>
+                        <Text style={styles.recentItemName}>{scan.itemName}</Text>
+                        <Text style={styles.recentItemMeta}>
+                          {info.name} bin • {dateDisplay}
+                        </Text>
+                      </View>
+                      <Badge
+                        tone={scan.points > 0 ? 'sage' : 'stone'}
+                        style={styles.recentPointsBadge}
+                      >
+                        {scan.points > 0 ? `+${scan.points} pts` : `${scan.points} pts`}
+                      </Badge>
                     </View>
-                    <View style={styles.recentItemInfo}>
-                      <Text style={styles.recentItemName}>{scan.itemName}</Text>
-                      <Text style={styles.recentItemMeta}>
-                        {info.name} bin • {scan.date}
-                      </Text>
-                    </View>
-                    <Badge
-                      tone={scan.points > 0 ? 'sage' : 'stone'}
-                      style={styles.recentPointsBadge}
-                    >
-                      {scan.points > 0 ? `+${scan.points} pts` : `${scan.points} pts`}
-                    </Badge>
-                  </View>
-                </MiniCard>
-              </View>
-            );
-          })}
+                  </MiniCard>
+                </View>
+              );
+            })
+          )}
         </Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
+  emptyScansBox: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyScansText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 14,
+    color: '#78716c',
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: '#faf6f1', // cream

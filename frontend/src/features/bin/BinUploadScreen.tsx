@@ -32,6 +32,9 @@ import { Header } from '@/components/Header';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
+import { useToast } from '@/components/Toast';
+import { useAuthSession } from '@/lib/authSession';
+import { uploadAndScanWaste } from '@/lib/services/binService';
 import { type BinType, getBinInfo } from '@/lib/mockData';
 
 const cartonImage = require('../../../assets/images/plain_carton_box.png');
@@ -85,6 +88,10 @@ const SAMPLE_ITEMS: SampleItem[] = [
 
 export default function BinUploadScreen() {
   const router = useRouter();
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
+  const { showToast } = useToast();
+
   const [selectedItem, setSelectedItem] = useState<SampleItem>(SAMPLE_ITEMS[0]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -134,21 +141,52 @@ export default function BinUploadScreen() {
     }
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
+    if (!householdId) {
+      setIsAnalyzing(true);
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        const isCustomUri = selectedItem.image?.uri;
+        router.push({
+          pathname: '/bin/result' as any,
+          params: {
+            binType: selectedItem.binType,
+            imageUri: isCustomUri ? selectedItem.image.uri : undefined,
+            itemName: selectedItem.name,
+          },
+        });
+      }, 1000);
+      return;
+    }
+
     setIsAnalyzing(true);
-    // Simulate Gemini classification delay then navigate to result
-    setTimeout(() => {
-      setIsAnalyzing(false);
+    try {
+      const scanRes = await uploadAndScanWaste(householdId, selectedItem.image, {
+        fileName: selectedItem.fileName,
+      });
+
       const isCustomUri = selectedItem.image?.uri;
       router.push({
         pathname: '/bin/result' as any,
         params: {
-          binType: selectedItem.binType,
+          binType: scanRes.binType,
+          itemName: scanRes.itemName,
+          material: scanRes.material,
+          confidence: scanRes.confidence.toString(),
+          tips: scanRes.tips,
+          isRecyclable: scanRes.isRecyclable ? 'true' : 'false',
+          pointsAwarded: scanRes.pointsAwarded.toString(),
+          dailyLimitReached: scanRes.dailyLimitReached ? 'true' : 'false',
+          scanId: scanRes.scanId,
           imageUri: isCustomUri ? selectedItem.image.uri : undefined,
-          itemName: selectedItem.name,
         },
       });
-    }, 1200);
+    } catch (err: any) {
+      console.error('Scan failed:', err);
+      showToast(err?.message || 'Classification failed. Please try again.', 'error');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const binInfo = getBinInfo(selectedItem.binType);
