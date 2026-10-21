@@ -30,6 +30,7 @@ import {
   X,
   Minus,
   Plus,
+  Smartphone,
 } from 'lucide-react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
@@ -51,10 +52,11 @@ interface AddBlockSheetProps {
 }
 
 const QUICK_ROUTINES = [
-  { name: 'Watching TV', icon: <Tv size={16} color="#57534E" strokeWidth={1.5} />, room: 'living' },
-  { name: 'Working', icon: <Briefcase size={16} color="#57534E" strokeWidth={1.5} />, room: 'living' },
-  { name: 'Studying', icon: <BookOpen size={16} color="#57534E" strokeWidth={1.5} />, room: 'bedroom' },
-  { name: 'Cooking', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} />, room: 'kitchen' },
+  { name: 'Watching TV', icon: <Tv size={16} color="#57534E" strokeWidth={1.5} />, room: 'living', avatarWalks: true },
+  { name: 'Working', icon: <Briefcase size={16} color="#57534E" strokeWidth={1.5} />, room: 'bedroom', avatarWalks: true },
+  { name: 'Studying', icon: <BookOpen size={16} color="#57534E" strokeWidth={1.5} />, room: 'bedroom', avatarWalks: true },
+  { name: 'Charging phone', icon: <Smartphone size={16} color="#57534E" strokeWidth={1.5} />, room: 'bedroom', avatarWalks: false },
+  { name: 'Cooking', icon: <Utensils size={16} color="#57534E" strokeWidth={1.5} />, room: 'kitchen', avatarWalks: true },
 ];
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -83,6 +85,7 @@ export function AddBlockSheet({
   const [endTime, setEndTime] = useState('20:00');
   const [activeDays, setActiveDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
   const [repeatMode, setRepeatMode] = useState<'weekdays' | 'weekends' | 'all'>('weekdays');
+  const [avatarWalks, setAvatarWalks] = useState(true);
 
   // Room appliances switch state
   const [applianceSwitches, setApplianceSwitches] = useState<Record<string, boolean>>({});
@@ -120,6 +123,7 @@ export function AddBlockSheet({
       setTemperature(23);
       setTimerHours(1);
       setFanSpeed('Med');
+      setAvatarWalks(true);
     }, 0);
     return () => clearTimeout(timer);
   }, [visible, rooms, initialSimulateError]);
@@ -150,7 +154,16 @@ export function AddBlockSheet({
 
   const handleSelectQuickRoutine = (q: (typeof QUICK_ROUTINES)[0]) => {
     setName(q.name);
-    setSelectedRoom(rooms.find((room) => room.type === q.room)?.id || selectedRoom);
+    setAvatarWalks(q.avatarWalks);
+    const workplace = appliances.find((item) => item.type === 'workplace');
+    const suggestedRoom = (q.name === 'Working' || q.name === 'Studying' || q.name === 'Charging phone')
+      ? rooms.find((room) => room.id === workplace?.roomId)
+      : rooms.find((room) => room.type === q.room);
+    const nextRoom = suggestedRoom?.id || selectedRoom;
+    setSelectedRoom(nextRoom);
+    if (workplace && workplace.roomId === nextRoom) {
+      setApplianceSwitches((previous) => ({ ...previous, [workplace.id]: true }));
+    }
   };
 
   const handleToggleDay = (day: string) => {
@@ -179,8 +192,11 @@ export function AddBlockSheet({
         ? 'sleep'
         : isAwaySelected
         ? 'away'
+        : ['working', 'studying', 'charging phone'].includes(name.toLowerCase())
+        ? 'work'
         : 'custom',
       isAway: isAwaySelected,
+      avatarWalks,
       repeatDays: activeDays,
       temperature,
       timerHours,

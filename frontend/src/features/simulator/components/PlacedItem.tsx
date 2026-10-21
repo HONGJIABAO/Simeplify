@@ -117,7 +117,10 @@ export function PlacedItem({
     [isEditMode, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
   );
 
-  const zIndex = Math.floor(item.posY * 100) + (isFurniture ? 2 : 5) + (isSelected ? 50 : 0);
+  const isCeilingLayer = item.type === 'light_bulb' || item.spriteKey === 'light_bulb';
+  const zIndex = isCeilingLayer
+    ? 1
+    : Math.floor(item.posY * 100) + (isFurniture ? 2 : 5) + (isSelected ? 50 : 0);
 
   const horizontalSlop = Math.max(0, Math.ceil((48 - width) / 2));
   const verticalSlop = Math.max(0, Math.ceil((48 - height) / 2));
@@ -190,6 +193,7 @@ export function PlacedItem({
               type={item.spriteKey || item.type}
               width={width * 1.12}
               height={height * 1.12}
+              cropTransparent
               style={{ tintColor: '#F3C98B' }}
               containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
             />
@@ -200,6 +204,7 @@ export function PlacedItem({
           type={item.spriteKey || item.type}
           width={width}
           height={height}
+          cropTransparent
           style={
             Platform.OS === 'web' && webGlowFilter
               ? ({

@@ -52,21 +52,21 @@ interface DefaultRoomSeed {
 const DEFAULT_ROOM_SEEDS: DefaultRoomSeed[] = [
   { floor: 1, slot: 'A', type: 'living', name: 'Living room', isSetUp: true },
   { floor: 1, slot: 'B', type: 'kitchen', name: 'Kitchen', isSetUp: true },
-  { floor: 1, slot: 'C', type: 'bedroom', name: 'Bedroom 1', isSetUp: true },
-  { floor: 1, slot: 'D', type: 'bathroom', name: 'Bathroom', isSetUp: true },
+  { floor: 1, slot: 'C', type: 'bathroom', name: 'Downstairs Bath', isSetUp: true },
+  { floor: 1, slot: 'D', type: 'bathroom', name: '', isSetUp: false },
   { floor: 2, slot: 'A', type: 'bedroom', name: 'Master bedroom', isSetUp: true },
-  { floor: 2, slot: 'B', type: 'bedroom', name: 'Bedroom 2', isSetUp: true },
-  { floor: 2, slot: 'C', type: 'bedroom', name: '', isSetUp: false },
+  { floor: 2, slot: 'B', type: 'bedroom', name: 'Study & Guest', isSetUp: true },
+  { floor: 2, slot: 'C', type: 'bathroom', name: 'Upstairs Bath', isSetUp: true },
   { floor: 2, slot: 'D', type: 'bathroom', name: '', isSetUp: false },
 ];
 
 export function createDefaultRooms(setupAllFloor2: boolean = false): StoredRoom[] {
   return DEFAULT_ROOM_SEEDS.map((seed) => {
-    if (setupAllFloor2 && seed.floor === 2 && (seed.slot === 'C' || seed.slot === 'D')) {
+    if (setupAllFloor2 && seed.floor === 2 && !seed.isSetUp) {
       return {
         id: `f${seed.floor}-${seed.slot}`,
         ...seed,
-        name: seed.slot === 'C' ? 'Bedroom 3' : 'Bathroom 2',
+        name: 'Bathroom 2',
         isSetUp: true,
       };
     }
@@ -82,7 +82,6 @@ export function getRoomSuggestedName(room: Pick<StoredRoom, 'floor' | 'slot' | '
     (candidate) => candidate.floor === room.floor && candidate.slot === room.slot
   );
   if (seed?.name) return seed.name;
-  if (room.floor === 2 && room.slot === 'C') return 'Bedroom 3';
   if (room.floor === 2 && room.slot === 'D') return 'Bathroom 2';
   if (room.type === 'bedroom') return 'Bedroom 3';
   if (room.type === 'bathroom') return 'Bathroom 2';

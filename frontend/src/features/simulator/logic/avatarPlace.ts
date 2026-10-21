@@ -10,7 +10,14 @@
  * - Backdrop color transitions according to time of day.
  */
 
-import { RoutineBlock, timeToMinutes } from './myDayLogic';
+// @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
+import { timeToMinutes } from './myDayLogic.ts';
+import type { RoutineBlock } from './myDayLogic';
+import type { StoredPlacedItem, StoredRoom } from './storage';
+// @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
+import { useSpot as getItemUseSpot } from './furnishedLayout.ts';
+// @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
+import { getSlotRect } from './roomLayout.ts';
 
 export type AvatarPose = 'stand' | 'walk' | 'sit' | 'lie' | 'cook' | 'shower';
 
@@ -22,6 +29,69 @@ export interface AvatarState {
   awayLabel?: string;
   isEnergySaving: boolean;
   activeApplianceIds: string[];
+}
+
+export interface AvatarPlacement {
+  target: { x: number; y: number };
+  activeApplianceIds: string[];
+  interactionItemId: string | null;
+  facingLeft: boolean;
+  pose: 'stand';
+}
+
+function itemType(item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>) {
+  return item.type || item.spriteKey;
+}
+
+function roomCenter(room: Pick<StoredRoom, 'slot'>) {
+  const rect = getSlotRect(room.slot);
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+/**
+ * Resolves one target for an active block. There is no intermediate route:
+ * the Simulator moves straight toward this point and then remains still.
+ */
+export function resolveAvatarPlacement(
+  block: Pick<RoutineBlock, 'name' | 'iconType' | 'applianceIds' | 'avatarWalks'>,
+  room: StoredRoom,
+  roomItems: StoredPlacedItem[]
+): AvatarPlacement {
+  const activity = block.name.toLowerCase();
+  const isTv = activity.includes('tv') || activity.includes('watching');
+  const isShower = block.iconType === 'shower' || activity.includes('shower');
+  const isWork = activity.includes('working') || activity.includes('studying') || activity.includes('work');
+  const isCharging = activity.includes('charging phone') || block.avatarWalks === false;
+  const isSleeping = block.iconType === 'sleep' || activity.includes('sleep');
+
+  const selectedIds = new Set(block.applianceIds);
+  let active = roomItems.filter((item) => item.category === 'Appliances'
+    && (selectedIds.has(item.id) || selectedIds.has(item.type))).map((item) => item.id);
+  if (active.length === 0) {
+    const defaultTypes = isTv
+      ? new Set(['tv', 'lights', 'light_bulb', 'air_conditioner'])
+      : isShower
+        ? new Set(['water_heater'])
+        : isWork || isCharging
+          ? new Set(['workplace'])
+          : new Set<string>();
+    active = roomItems.filter((item) => item.category === 'Appliances' && defaultTypes.has(itemType(item))).map((item) => item.id);
+  }
+
+  let interactionItem: StoredPlacedItem | undefined;
+  if (isTv) interactionItem = roomItems.find((item) => itemType(item) === 'sofa');
+  else if (isShower) interactionItem = roomItems.find((item) => itemType(item) === 'water_heater');
+  else if (isWork && !isCharging) interactionItem = roomItems.find((item) => itemType(item) === 'workplace');
+  else if (isSleeping) interactionItem = roomItems.find((item) => itemType(item) === 'bed');
+
+  const target = interactionItem ? getItemUseSpot(interactionItem, room, roomItems) : roomCenter(room);
+  return {
+    target,
+    activeApplianceIds: active,
+    interactionItemId: interactionItem?.id ?? null,
+    facingLeft: interactionItem ? target.x > interactionItem.posX : false,
+    pose: 'stand',
+  };
 }
 
 export const ROOM_AVATAR_POSITIONS: Record<string, { x: number; y: number }> = {
@@ -61,22 +131,11 @@ export function getAvatarState(
     };
   }
 
-  let pose: AvatarPose = 'stand';
-  if (activeBlock.iconType === 'sleep') {
-    pose = 'lie';
-  } else if (activeBlock.iconType === 'shower') {
-    pose = 'shower';
-  } else if (activeBlock.iconType === 'meal') {
-    pose = 'cook';
-  } else if (activeBlock.iconType === 'evening') {
-    pose = 'sit';
-  }
-
   const roomPos = ROOM_AVATAR_POSITIONS[activeBlock.roomId] ?? ROOM_AVATAR_POSITIONS.living;
 
   return {
     roomId: activeBlock.roomId,
-    pose,
+    pose: 'stand',
     normalizedPos: roomPos,
     isAway: false,
     isEnergySaving: false,

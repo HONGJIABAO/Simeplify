@@ -2,8 +2,8 @@ import React from 'react';
 import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
-import { ImageOff } from 'lucide-react-native';
 import { getSpriteSource, SPRITE_MAP } from '../logic/spriteMap';
+import { ITEM_IMAGE_META } from '../logic/furnishedLayout';
 
 interface SpriteProps {
   type: string;
@@ -12,19 +12,13 @@ interface SpriteProps {
   height?: number;
   style?: ImageStyle;
   containerStyle?: ViewStyle;
+  cropTransparent?: boolean;
 }
 
-export function Sprite({ type, size = 44, width, height, style, containerStyle }: SpriteProps) {
+export function Sprite({ type, size = 44, width, height, style, containerStyle, cropTransparent = false }: SpriteProps) {
   const source = getSpriteSource(type);
   if (!source) {
-    return (
-      <View
-        pointerEvents="none"
-        style={[styles.container, styles.placeholder, { width: size, height: size }, containerStyle]}
-      >
-        <ImageOff size={Math.max(18, size * 0.42)} color="#78716C" strokeWidth={1.5} />
-      </View>
-    );
+    return null;
   }
 
   const itemDef = SPRITE_MAP[type];
@@ -38,13 +32,21 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle }
     ? Asset.fromModule(source as Parameters<typeof Asset.fromModule>[0]).uri
     : undefined;
   const imageSource = resolvedWebUri ? { uri: resolvedWebUri } : source;
+  const cropMeta = cropTransparent ? ITEM_IMAGE_META[type] : undefined;
+  const croppedCanvasWidth = cropMeta && width
+    ? width * cropMeta.canvasWidth / cropMeta.contentWidth
+    : targetW;
+  const croppedCanvasHeight = cropMeta && height
+    ? height * cropMeta.canvasHeight / cropMeta.contentHeight
+    : targetH;
 
   return (
     <View
       pointerEvents="none"
       style={[
         styles.container,
-        { width: size, height: size },
+        { width: width ?? size, height: height ?? size },
+        cropMeta && styles.croppedContainer,
         containerStyle,
       ]}
     >
@@ -56,9 +58,14 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle }
         style={[
           styles.image,
           {
-            width: targetW,
-            height: targetH,
+            width: croppedCanvasWidth,
+            height: croppedCanvasHeight,
           },
+          cropMeta && width && height ? {
+            position: 'absolute',
+            left: -cropMeta.contentX * width / cropMeta.contentWidth,
+            top: -cropMeta.contentY * height / cropMeta.contentHeight,
+          } : undefined,
           style,
         ]}
       />
@@ -72,6 +79,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
+  croppedContainer: {
+    overflow: 'hidden',
+  },
   image: {
     ...Platform.select({
       web: {
@@ -79,11 +89,5 @@ const styles = StyleSheet.create({
         imageRendering: 'auto',
       } as any,
     }),
-  },
-  placeholder: {
-    borderRadius: 16,
-    backgroundColor: '#F5F5F4',
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
   },
 });

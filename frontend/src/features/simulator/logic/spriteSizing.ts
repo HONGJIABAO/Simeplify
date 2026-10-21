@@ -62,7 +62,8 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     canvasHeight: 388,
     contentWidth: 182,
     contentHeight: 164,
-    targetRoomHeightFraction: 0.26,
+    // 15% smaller so the TV can stay at x=.72 without entering the A-B doorway.
+    targetRoomHeightFraction: 0.22,
   },
   sofa: {
     canvasWidth: 520,
@@ -76,7 +77,9 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     canvasHeight: 388,
     contentWidth: 262,
     contentHeight: 161,
-    targetRoomHeightFraction: 0.26,
+    // The transparent canvas makes tables wider than 55% of the small rooms at
+    // the medium size. A uniform 25% reduction keeps every table in bounds.
+    targetRoomHeightFraction: 0.195,
   },
   workplace: {
     canvasWidth: 520,

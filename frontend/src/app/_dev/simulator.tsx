@@ -5,7 +5,7 @@
  * Each state can be opened directly for review.
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -43,7 +43,7 @@ import { FloorNumber } from '@/features/simulator/logic/roomLayout';
 import { SuggestionArea } from '@/features/simulator/components/SuggestionArea';
 import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
 import { ResidentAvatar } from '@/features/simulator/components/ResidentAvatar';
-import { AvatarPose } from '@/features/simulator/logic/avatarPlace';
+import { AvatarPose, resolveAvatarPlacement } from '@/features/simulator/logic/avatarPlace';
 import {
   RoutineBlock,
   DEFAULT_ROUTINE_BLOCKS,
@@ -54,6 +54,7 @@ import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
+import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
 
 type DemoState =
   // Stage 6
@@ -110,14 +111,34 @@ type DemoState =
   // Furnished Mock States
   | 'home-furnished-floor-1'
   | 'home-furnished-floor-2'
-  | 'floor-2-setup-all';
+  | 'home-furnished-floor-1-debug'
+  | 'home-furnished-floor-2-debug'
+  | 'floor-2-setup-all'
+  | 'living-room-layout'
+  | 'kitchen-layout'
+  | 'bathroom-layout'
+  | 'bedroom-layout'
+  | 'workplace-room-layout'
+  | 'avatar-at-sofa'
+  | 'avatar-at-shower'
+  | 'avatar-at-workplace';
 
 const STATE_GROUPS = [
   {
     title: 'Furnished Home Floor Plans',
     items: [
+      { id: 'living-room-layout' as DemoState, label: 'Living room layout' },
+      { id: 'kitchen-layout' as DemoState, label: 'Kitchen layout' },
+      { id: 'bathroom-layout' as DemoState, label: 'Bathroom layout' },
+      { id: 'bedroom-layout' as DemoState, label: 'Bedroom layout' },
+      { id: 'workplace-room-layout' as DemoState, label: 'Workplace room layout' },
+      { id: 'avatar-at-sofa' as DemoState, label: 'Avatar at sofa, TV lit' },
+      { id: 'avatar-at-shower' as DemoState, label: 'Avatar at shower' },
+      { id: 'avatar-at-workplace' as DemoState, label: 'Avatar at Workplace' },
       { id: 'home-furnished-floor-1' as DemoState, label: 'Home furnished, floor 1' },
       { id: 'home-furnished-floor-2' as DemoState, label: 'Home furnished, floor 2' },
+      { id: 'home-furnished-floor-1-debug' as DemoState, label: 'Home furnished, floor 1 — layout overlay' },
+      { id: 'home-furnished-floor-2-debug' as DemoState, label: 'Home furnished, floor 2 — layout overlay' },
       { id: 'floor-2-setup-all' as DemoState, label: 'Floor 2 with all rooms set up' },
     ],
   },
@@ -217,10 +238,12 @@ function TwoFloorPlanPreview({
   initialFloor = 1,
   residentFloor = 1,
   isEditMode = false,
-  activeApplianceIds = ['f1-fridge-kitchen', 'f1-ac-living'],
+  activeApplianceIds,
   hoveredRoomId = null,
   containerHeight,
   setupAllRooms = false,
+  debugLayout = false,
+  avatarScenario,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -229,27 +252,46 @@ function TwoFloorPlanPreview({
   hoveredRoomId?: string | null;
   containerHeight?: number;
   setupAllRooms?: boolean;
+  debugLayout?: boolean;
+  avatarScenario?: 'sofa' | 'shower' | 'workplace';
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const floorRef = useRef<View>(null);
   const rooms = setupAllRooms ? createDefaultRooms(true) : MOCK_SIMULATOR_ROOMS;
   const items = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
+  const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A' : avatarScenario === 'shower' ? 'f1-C' : avatarScenario === 'workplace' ? 'f2-B' : null;
+  const scenarioRoom = rooms.find((room) => room.id === scenarioRoomId);
+  const scenarioItems = items.filter((item) => item.roomId === scenarioRoomId);
+  const scenarioBlock = avatarScenario === 'sofa'
+    ? { name: 'Watching TV', iconType: 'custom' as const, applianceIds: ['f1-tv-living', 'f1-lamp-living', 'f1-ac-living'], avatarWalks: true }
+    : avatarScenario === 'shower'
+      ? { name: 'Morning Shower', iconType: 'shower' as const, applianceIds: ['f1-shower-bath'], avatarWalks: true }
+      : { name: 'Working', iconType: 'work' as const, applianceIds: ['f2-workplace-study'], avatarWalks: true };
+  const scenarioPlacement = scenarioRoom ? resolveAvatarPlacement(scenarioBlock, scenarioRoom, scenarioItems) : null;
+  const shownFloor = scenarioRoom?.floor ?? residentFloor;
   const avatarState: AvatarSimulationState = {
-    currentX: residentFloor === 1 ? 0.28 : 0.72,
-    currentY: residentFloor === 1 ? 0.35 : 0.30,
-    facingLeft: false,
+    currentX: scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72),
+    currentY: scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30),
+    facingLeft: scenarioPlacement?.facingLeft ?? false,
     isWalking: false,
     isSleeping: false,
     isSitting: false,
-    currentRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
-    targetRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
+    currentRoomId: scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B'),
+    targetRoomId: scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B'),
     currentActivity: 'At home',
-    currentFloor: residentFloor,
-    targetFloor: residentFloor,
+    currentFloor: shownFloor,
+    targetFloor: shownFloor,
     isFloorTransitioning: false,
   };
   return (
     <View style={{ flex: 1, minHeight: containerHeight ?? 420, padding: 16 }}>
+      {debugLayout && (
+        <View style={galleryStyles.missingPicturesCard}>
+          <Text style={galleryStyles.missingPicturesText}>
+            Missing pictures: {SKIPPED_ITEM_TYPES.join(', ')}
+          </Text>
+        </View>
+      )}
       <FloorPlan
         rooms={rooms}
         items={items}
@@ -257,12 +299,11 @@ function TwoFloorPlanPreview({
         onFloorChange={setFloor}
         avatarState={avatarState}
         avatarVariant="avatar_girl"
-        activeApplianceIds={activeApplianceIds}
+        activeApplianceIds={activeApplianceIds ?? scenarioPlacement?.activeApplianceIds ?? ['f1-fridge-kitchen', 'f1-ac-living']}
         activeRoomLightIds={[]}
         isEditMode={isEditMode}
         selectedItemId={null}
         hoveredRoomId={hoveredRoomId}
-        walkPath={[]}
         onRoomPress={() => {}}
         onSelectItem={() => {}}
         onDeleteItem={() => {}}
@@ -270,6 +311,7 @@ function TwoFloorPlanPreview({
         onMoveItemEnd={() => {}}
         floorPlanRef={floorRef}
         onLayout={() => {}}
+        debugLayout={debugLayout}
       />
     </View>
   );
@@ -298,6 +340,11 @@ export default function SimulatorGallery() {
 
   // In-memory swap demo state
   const [activeSwapIds, setActiveSwapIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (activeState !== 'home-furnished-floor-1-debug' && activeState !== 'home-furnished-floor-2-debug') return;
+    SKIPPED_ITEM_TYPES.forEach((type) => console.warn(`[Simulator layout] Missing sprite picture: ${type}`));
+  }, [activeState]);
 
   const onCanvasLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -371,16 +418,24 @@ export default function SimulatorGallery() {
           activeState === 'square-plan-default' || activeState === 'square-plan-shrunk' ||
           activeState === 'glow-on' || activeState === 'glow-off' ||
           activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode' ||
-          activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all') && (
+          activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' ||
+          activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' ||
+          activeState === 'living-room-layout' || activeState === 'kitchen-layout' || activeState === 'bathroom-layout' ||
+          activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' ||
+          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace') && (
           <TwoFloorPlanPreview
             key={activeState}
-            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all' ? 2 : 1}
-            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all' ? 2 : 1}
+            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' ? 2 : 1}
+            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' ? 2 : 1}
             isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode'}
-            activeApplianceIds={activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
+            activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace'
+              ? undefined
+              : activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
             hoveredRoomId={activeState === 'room-tags-hovered' ? 'f1-A' : null}
             containerHeight={activeState === 'square-plan-shrunk' ? 260 : undefined}
             setupAllRooms={activeState === 'floor-2-setup-all'}
+            debugLayout={activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug'}
+            avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa' : activeState === 'avatar-at-shower' ? 'shower' : activeState === 'avatar-at-workplace' ? 'workplace' : undefined}
           />
         )}
 
@@ -887,6 +942,19 @@ const galleryStyles = StyleSheet.create({
     borderColor: '#e7e5e4',
     padding: 16,
     overflow: 'hidden',
+  },
+  missingPicturesCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 8,
+  },
+  missingPicturesText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
   },
   skeletonDemo: {
     flex: 1,

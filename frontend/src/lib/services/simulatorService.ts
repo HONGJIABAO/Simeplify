@@ -6,10 +6,9 @@
  */
 
 import { supabase } from '../supabase';
-import type { Database, RoomType, DayType } from '@/types/database';
+import type { Database, RoomType } from '@/types/database';
 import type { StoredRoom, StoredPlacedItem } from '@/features/simulator/logic/storage';
 import type { RoutineBlock } from '@/features/simulator/logic/myDayLogic';
-import { SPRITE_MAP } from '@/features/simulator/logic/spriteMap';
 import { STAR_EFFICIENCY_FACTORS, USAGE_THRESHOLDS } from '@/features/simulator/logic/routineConfig';
 
 export type RoomRow = Database['public']['Tables']['rooms']['Row'];
@@ -148,6 +147,7 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
       isLocked: isAway,
       applianceIds,
       iconType: (b.type as any) || 'custom',
+      avatarWalks: !b.title.toLowerCase().includes('charging phone'),
     };
   });
 

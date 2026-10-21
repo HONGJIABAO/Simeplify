@@ -4,6 +4,7 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { Plus } from 'lucide-react-native';
 import { StoredRoom } from '../logic/storage';
 import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
+import { ROOM_DOOR_RATIOS, type RoomSide } from '../logic/furnishedLayout';
 
 interface RoomProps {
   room: StoredRoom;
@@ -17,15 +18,6 @@ interface RoomProps {
   isOccupied?: boolean;
   onPress: (room: StoredRoom) => void;
 }
-
-type Side = 'top' | 'right' | 'bottom' | 'left';
-
-const ROOM_DOORS: Record<StoredRoom['slot'], Partial<Record<Side, number>>> = {
-  A: { right: 0.545, bottom: 0.483 },
-  B: { left: 0.545, bottom: 0.833 },
-  C: { top: 0.56, right: 0.51 },
-  D: { left: 0.51, right: 0.51 },
-};
 
 export function Room({
   room,
@@ -97,11 +89,11 @@ export function Room({
   };
 
   const doorGap = Math.max(24, Math.min(38, Math.min(width, height) * 0.24));
-  const doors = ROOM_DOORS[room.slot];
+  const doors = ROOM_DOOR_RATIOS[room.slot];
 
   const wallLines = useMemo(() => {
     const walls: React.ReactNode[] = [];
-    const addWall = (side: Side, length: number, gapRatio?: number) => {
+    const addWall = (side: RoomSide, length: number, gapRatio?: number) => {
       const gapStart = gapRatio === undefined ? length : Math.max(8, length * gapRatio - doorGap / 2);
       const gapEnd = gapRatio === undefined ? length : Math.min(length - 8, length * gapRatio + doorGap / 2);
       const segments = gapRatio === undefined ? [[0, length]] : [[0, gapStart], [gapEnd, length]];

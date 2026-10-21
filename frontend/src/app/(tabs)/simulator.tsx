@@ -22,13 +22,14 @@ import {
 import { DEFAULT_ROUTINE_BLOCKS, RoutineBlock, getActiveBlockAtTime } from '@/features/simulator/logic/myDayLogic';
 import { DEFAULT_ROUTINE, SimSpeed, SIM_SPEED_MULTIPLIERS } from '@/features/simulator/logic/routineConfig';
 import {
-  AvatarSimulationState, getCurrentRoutine, getRoomCenter, buildWaypoints,
-  computeSimulationBill, formatTimeMinutes, Point,
+  AvatarSimulationState, getCurrentRoutine, getRoomCenter,
+  formatTimeMinutes, Point,
 } from '@/features/simulator/logic/SimulationEngine';
-import { SPRITE_MAP, SpriteItemDef } from '@/features/simulator/logic/spriteMap';
+import { resolveAvatarPlacement } from '@/features/simulator/logic/avatarPlace';
+import { getRoomSlotDefinition, getSlotPlanPoint, layoutItemsInRooms } from '@/features/simulator/logic/furnishedLayout';
+import { SpriteItemDef } from '@/features/simulator/logic/spriteMap';
 import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms } from '@/features/simulator/logic/roomData';
-import { clampPointToRect, containsPoint, FloorNumber, getFloorPlanLayout, getSlotRect, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
-import { getFloorSpriteSizes } from '@/features/simulator/logic/spriteSizing';
+import { containsPoint, FloorNumber, getFloorPlanLayout, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
 import {
@@ -101,7 +102,12 @@ export default function SimulatorScreen() {
         }
         if (data.appliances.length > 0) {
           setItems((prev) => {
-            const furniture = prev.filter((it) => it.category === 'Furniture');
+            const furniture = prev.filter((it) => it.category === 'Furniture').map((item) => {
+              const legacyMatch = /^f([12])-([A-D])$/.exec(item.roomId);
+              if (!legacyMatch) return item;
+              const room = data.rooms.find((candidate) => candidate.floor === Number(legacyMatch[1]) && candidate.slot === legacyMatch[2]);
+              return room ? { ...item, roomId: room.id } : item;
+            });
             return [...data.appliances, ...furniture];
           });
         }
@@ -174,11 +180,20 @@ export default function SimulatorScreen() {
   });
   const avatarStateRef = useRef(avatarState);
   useEffect(() => { avatarStateRef.current = avatarState; }, [avatarState]);
-  const waypointQueue = useRef<Point[]>([]);
-  const arrivalRoomIdRef = useRef<string | null>(firstRoom.id);
-  const pendingFloorTransferRef = useRef<{ floor: FloorNumber; roomId: string; destination: Point } | null>(null);
+  const avatarTargetRef = useRef<{
+    point: Point;
+    floor: FloorNumber;
+    roomId: string | null;
+    facingLeft: boolean;
+    isStair: boolean;
+  } | null>(null);
+  const pendingFloorTransferRef = useRef<{
+    floor: FloorNumber;
+    roomId: string;
+    destination: Point;
+    facingLeft: boolean;
+  } | null>(null);
   const transitionStartedRef = useRef(false);
-  const [avatarWalkPath, setAvatarWalkPath] = useState<Point[]>([]);
   const fastForwardRunRef = useRef<FastForwardRun | null>(null);
   const [activeFastForward, setActiveFastForward] = useState<FastForwardPeriod | null>(null);
 
@@ -198,40 +213,38 @@ export default function SimulatorScreen() {
       } else simMinutesDelta = deltaSec / SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour * 60;
       setSimulatedMinutes((value) => (value + simMinutesDelta) % 1440);
       setSimulatedDateTime((value) => new Date(value.getTime() + simMinutesDelta * 60_000));
-      if (waypointQueue.current.length === 0) return;
-      const nextTarget = waypointQueue.current[0];
+      const target = avatarTargetRef.current;
+      if (!target) return;
+      const nextTarget = target.point;
       setAvatarState((previous) => {
         const dx = nextTarget.x - previous.currentX;
         const dy = nextTarget.y - previous.currentY;
         const distance = Math.hypot(dx, dy);
         const step = (run ? 12 : 0.28) * deltaSec;
         if (distance <= step) {
-          waypointQueue.current.shift();
-          const reachedFinal = waypointQueue.current.length === 0;
-          if (reachedFinal) {
-            const transfer = pendingFloorTransferRef.current;
-            if (transfer && previous.currentFloor !== transfer.floor && !transitionStartedRef.current) {
-              transitionStartedRef.current = true;
-              setTimeout(() => {
-                pendingFloorTransferRef.current = null;
-                transitionStartedRef.current = false;
-                arrivalRoomIdRef.current = transfer.roomId;
-                const route = buildWaypoints(STAIR_CENTER, null, transfer.destination, transfer.roomId);
-                waypointQueue.current = route;
-                setAvatarWalkPath(route);
-                setAvatarState((state) => ({
-                  ...state, currentFloor: transfer.floor, targetFloor: transfer.floor,
-                  currentX: STAIR_CENTER.x, currentY: STAIR_CENTER.y,
-                  isFloorTransitioning: false, isWalking: true,
-                }));
-              }, reduceMotion ? 0 : 400);
-              return { ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false, isFloorTransitioning: true };
-            }
+          avatarTargetRef.current = null;
+          const transfer = pendingFloorTransferRef.current;
+          if (target.isStair && transfer && previous.currentFloor !== transfer.floor && !transitionStartedRef.current) {
+            transitionStartedRef.current = true;
+            setTimeout(() => {
+              pendingFloorTransferRef.current = null;
+              transitionStartedRef.current = false;
+              avatarTargetRef.current = {
+                point: transfer.destination, floor: transfer.floor, roomId: transfer.roomId,
+                facingLeft: transfer.facingLeft, isStair: false,
+              };
+              setAvatarState((state) => ({
+                ...state, currentFloor: transfer.floor, targetFloor: transfer.floor,
+                currentX: STAIR_CENTER.x, currentY: STAIR_CENTER.y,
+                isFloorTransitioning: false, isWalking: true,
+              }));
+            }, reduceMotion ? 0 : 400);
+            return { ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false, isFloorTransitioning: true };
           }
           return {
-            ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: !reachedFinal,
-            currentRoomId: reachedFinal ? arrivalRoomIdRef.current : previous.currentRoomId,
-            facingLeft: dx < 0 ? true : dx > 0 ? false : previous.facingLeft,
+            ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false,
+            currentRoomId: target.roomId ?? previous.currentRoomId,
+            facingLeft: target.facingLeft,
           };
         }
         const ratio = step / distance;
@@ -240,7 +253,6 @@ export default function SimulatorScreen() {
           isWalking: true, facingLeft: dx < 0 ? true : dx > 0 ? false : previous.facingLeft,
         };
       });
-      setAvatarWalkPath([...waypointQueue.current]);
     }, 50);
     return () => clearInterval(interval);
   }, [reduceMotion, simSpeed]);
@@ -251,59 +263,73 @@ export default function SimulatorScreen() {
       id: active.id, name: active.name, startTime: active.startTime, endTime: active.endTime,
       targetRoomId: active.roomId, targetRoomType: active.roomId === 'away' ? 'living' : undefined,
       isSleeping: active.iconType === 'sleep', isAway: active.isAway, activeApplianceTypes: active.applianceIds,
+      iconType: active.iconType, avatarWalks: active.avatarWalks,
     };
     const fallback = getCurrentRoutine(simulatedMinutes, DEFAULT_ROUTINE);
-    return { ...fallback, targetRoomId: undefined as string | undefined };
+    return {
+      ...fallback, targetRoomId: undefined as string | undefined,
+      iconType: fallback.isSleeping ? 'sleep' as const : fallback.name.toLowerCase().includes('shower') ? 'shower' as const : 'custom' as const,
+      avatarWalks: true,
+    };
   }, [routineBlocks, simulatedMinutes]);
-  const routineKey = `${currentRoutine.id}|${currentRoutine.name}|${currentRoutine.targetRoomId ?? currentRoutine.targetRoomType}|${currentRoutine.isSleeping}`;
+  const routineKey = `${currentRoutine.id}|${currentRoutine.name}|${currentRoutine.targetRoomId ?? currentRoutine.targetRoomType}|${currentRoutine.isSleeping}|${currentRoutine.avatarWalks}|${currentRoutine.activeApplianceTypes?.join(',')}`;
   useEffect(() => {
     if (!setupRooms.length) return;
     const directId = currentRoutine.targetRoomId && currentRoutine.targetRoomId !== 'away' ? migrateRoomId(currentRoutine.targetRoomId) : null;
     const targetRoom = setupRooms.find((room) => room.id === directId)
       ?? setupRooms.find((room) => room.type === currentRoutine.targetRoomType) ?? setupRooms[0];
-    const activity = currentRoutine.name.toLowerCase();
-    const activityItem = items.find((item) => {
-      const definition = SPRITE_MAP[item.spriteKey || item.type];
-      return item.roomId === targetRoom.id && definition?.activityNames?.some((name) => activity.includes(name));
-    });
-    const sleepingSpot = items.find((item) => {
-      const definition = SPRITE_MAP[item.spriteKey || item.type];
-      return item.roomId === targetRoom.id && item.category === 'Furniture' && definition?.isSleepingSpot;
-    });
-    const destination = currentRoutine.isSleeping && sleepingSpot
-      ? { x: sleepingSpot.posX, y: sleepingSpot.posY }
-      : activityItem ? { x: activityItem.posX, y: activityItem.posY } : getRoomCenter(targetRoom);
+    const arrangedRoomItems = layoutItemsInRooms(items, rooms).filter((item) => item.roomId === targetRoom.id);
+    const placement = resolveAvatarPlacement({
+      name: currentRoutine.name,
+      iconType: currentRoutine.iconType,
+      applianceIds: currentRoutine.activeApplianceTypes ?? [],
+      avatarWalks: currentRoutine.avatarWalks,
+    }, targetRoom, arrangedRoomItems);
+    const destination = placement.target;
     const previous = avatarStateRef.current;
-    arrivalRoomIdRef.current = targetRoom.id;
     if (targetRoom.floor !== previous.currentFloor) {
-      pendingFloorTransferRef.current = { floor: targetRoom.floor, roomId: targetRoom.id, destination };
-      waypointQueue.current = buildWaypoints({ x: previous.currentX, y: previous.currentY }, previous.currentRoomId, STAIR_CENTER, null);
+      pendingFloorTransferRef.current = {
+        floor: targetRoom.floor, roomId: targetRoom.id, destination, facingLeft: placement.facingLeft,
+      };
+      avatarTargetRef.current = {
+        point: STAIR_CENTER, floor: previous.currentFloor, roomId: null, facingLeft: STAIR_CENTER.x < previous.currentX, isStair: true,
+      };
     } else {
       pendingFloorTransferRef.current = null;
-      waypointQueue.current = buildWaypoints({ x: previous.currentX, y: previous.currentY }, previous.currentRoomId, destination, targetRoom.id);
+      avatarTargetRef.current = {
+        point: destination, floor: targetRoom.floor, roomId: targetRoom.id, facingLeft: placement.facingLeft, isStair: false,
+      };
     }
-    setAvatarWalkPath([...waypointQueue.current]);
-    setAvatarState((state) => ({
-      ...state, targetRoomId: targetRoom.id, targetFloor: targetRoom.floor, currentActivity: currentRoutine.name,
-      isSleeping: Boolean(currentRoutine.isSleeping), isSitting: Boolean(activityItem), isWalking: waypointQueue.current.length > 0,
-    }));
-  }, [routineKey, setupRooms, items, currentRoutine.isSleeping, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType]);
+    const stateTimer = setTimeout(() => {
+      setAvatarState((state) => ({
+        ...state, targetRoomId: targetRoom.id, targetFloor: targetRoom.floor, currentActivity: currentRoutine.name,
+        isSleeping: false, isSitting: false, isWalking: true,
+      }));
+    }, 0);
+    return () => clearTimeout(stateTimer);
+  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType]);
 
   const { activeApplianceIds, activeRoomLightIds } = useMemo(() => {
     const activeIds: string[] = [];
     const lightRooms: string[] = [];
-    const activity = currentRoutine.name.toLowerCase();
+    const targetRoom = setupRooms.find((room) => room.id === avatarState.targetRoomId);
+    const arrangedRoomItems = targetRoom
+      ? layoutItemsInRooms(items, rooms).filter((item) => item.roomId === targetRoom.id)
+      : [];
+    const visualActiveIds = targetRoom ? resolveAvatarPlacement({
+      name: currentRoutine.name,
+      iconType: currentRoutine.iconType,
+      applianceIds: currentRoutine.activeApplianceTypes ?? [],
+      avatarWalks: currentRoutine.avatarWalks,
+    }, targetRoom, arrangedRoomItems).activeApplianceIds : [];
     for (const item of items) {
       if (item.category !== 'Appliances') continue;
-      const definition = SPRITE_MAP[item.spriteKey || item.type];
-      const scheduled = currentRoutine.activeApplianceTypes?.some((value) => value === item.id || value === item.type);
-      const activityDriven = definition?.activityNames?.some((name) => activity.includes(name));
-      if (!(item.alwaysOn || item.isOn || (item.roomId === avatarState.targetRoomId && (scheduled || activityDriven)))) continue;
+      if (!(item.alwaysOn || item.isOn || visualActiveIds.includes(item.id))) continue;
       activeIds.push(item.id);
       if (item.type === 'lights' || item.type === 'light_bulb') lightRooms.push(item.roomId);
     }
     return { activeApplianceIds: activeIds, activeRoomLightIds: [...new Set(lightRooms)] };
-  }, [avatarState.targetRoomId, currentRoutine.activeApplianceTypes, currentRoutine.name, items]);
+  }, [avatarState.targetRoomId, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, items, rooms, setupRooms]);
 
   const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => {
     return calculateLiveTnbBill({
@@ -328,26 +354,31 @@ export default function SimulatorScreen() {
     showToast(`${config.label} preview: completing 7 days in ${config.durationSeconds} seconds`, 'info');
   };
 
-  const clampItemPoint = (item: Pick<StoredPlacedItem, 'category'>, room: StoredRoom, point: Point) => {
-    const planWidth = floorRectRef.current?.width ?? 358;
-    const planHeight = floorRectRef.current?.height ?? 330;
-    const sizes = getFloorSpriteSizes(planWidth);
-    const size = item.category === 'Furniture' ? sizes.furniture : sizes.appliance;
-    return clampPointToRect(getSlotRect(room.slot), point, size / 2 / planWidth, (size / 2 + 12) / planHeight);
+  const getFixedPlacementPoint = (
+    item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>,
+    room: StoredRoom
+  ) => {
+    const roomItems = [...items.filter((candidate) => candidate.roomId === room.id), item as StoredPlacedItem];
+    const slot = getRoomSlotDefinition(item, room, roomItems);
+    return slot ? getSlotPlanPoint(room, slot) : null;
   };
-  const placeItem = (itemDef: SpriteItemDef, targetRoom: StoredRoom, point: Point) => {
-    const clamped = clampItemPoint({ category: itemDef.category as 'Appliances' | 'Furniture' }, targetRoom, point);
+  const placeItem = (itemDef: SpriteItemDef, targetRoom: StoredRoom, _point: Point) => {
+    const fixed = getFixedPlacementPoint({ type: itemDef.key, spriteKey: itemDef.key }, targetRoom);
+    if (!fixed) {
+      showToast(`${itemDef.label} has no slot in this room`, 'info');
+      return;
+    }
     if (itemDef.category === 'Furniture') {
       setItems((previous) => [...previous, {
         id: `furn_${Date.now()}`, category: 'Furniture', type: itemDef.key, spriteKey: itemDef.key,
-        name: itemDef.label, roomId: targetRoom.id, posX: clamped.x, posY: clamped.y,
+        name: itemDef.label, roomId: targetRoom.id, posX: fixed.x, posY: fixed.y,
       }]);
       showToast(`Placed ${itemDef.label}`, 'success');
       return;
     }
     const pending: StoredPlacedItem = {
       id: `pending_${Date.now()}`, category: 'Appliances', type: itemDef.key, spriteKey: itemDef.key,
-      name: itemDef.fullName, roomId: targetRoom.id, posX: clamped.x, posY: clamped.y,
+      name: itemDef.fullName, roomId: targetRoom.id, posX: fixed.x, posY: fixed.y,
       brand: '', model: '', quantity: 1, wattage: itemDef.defaultWattage,
       stars: itemDef.hasStarRating === false ? undefined : 3, hoursPerDay: itemDef.defaultHours,
       alwaysOn: itemDef.alwaysOn ?? false, isOn: false,
@@ -378,14 +409,19 @@ export default function SimulatorScreen() {
     if (pendingRoomAction?.kind === 'new') placeItem(pendingRoomAction.itemDef, setUpRoom, pendingRoomAction.point);
     if (pendingRoomAction?.kind === 'move') {
       const movedItem = items.find((it) => it.id === pendingRoomAction.itemId);
-      const clamped = clampItemPoint(movedItem || { category: 'Appliances' }, setUpRoom, pendingRoomAction.point);
+      const fixed = movedItem ? getFixedPlacementPoint(movedItem, setUpRoom) : null;
+      if (!fixed) {
+        showToast('This item has no slot in that room', 'info');
+        setPendingRoomAction(null);
+        return;
+      }
       setItems((previous) => previous.map((item) => item.id === pendingRoomAction.itemId
-        ? { ...item, ...clamped, roomId } : item));
+        ? { ...item, ...fixed, roomId } : item));
       if (movedItem?.category === 'Appliances' && !pendingRoomAction.itemId.startsWith('pending_') && !pendingRoomAction.itemId.startsWith('mock_')) {
         updateAppliance(pendingRoomAction.itemId, {
           roomId,
-          posX: clamped.x,
-          posY: clamped.y,
+          posX: fixed.x,
+          posY: fixed.y,
         }).catch((err) => console.error('Failed to update moved appliance in Supabase:', err));
       }
     }
@@ -468,16 +504,18 @@ export default function SimulatorScreen() {
     if (!target.room.isSetUp) {
       setPendingRoomAction({ kind: 'move', itemId, point }); setNamingRoom(target.room); setNamingModalVisible(true); return;
     }
-    const clamped = clampItemPoint({ category: 'Appliances' }, target.room, point);
+    const item = items.find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    const fixed = getFixedPlacementPoint(item, target.room);
+    if (!fixed) { showToast('This item has no slot in that room', 'info'); return; }
     setItems((value) => value.map((item) => item.id === itemId
-      ? { ...item, ...clampItemPoint(item, target.room, point), roomId: target.room.id } : item));
+      ? { ...item, ...fixed, roomId: target.room.id } : item));
 
-    const item = items.find((it) => it.id === itemId);
     if (item?.category === 'Appliances' && !itemId.startsWith('pending_') && !itemId.startsWith('mock_')) {
       updateAppliance(itemId, {
         roomId: target.room.id,
-        posX: clamped.x,
-        posY: clamped.y,
+        posX: fixed.x,
+        posY: fixed.y,
       }).catch((err) => console.error('Failed to update appliance position in Supabase:', err));
     }
   };
@@ -553,7 +591,7 @@ export default function SimulatorScreen() {
           ]}
         >
           <FloorPlan rooms={rooms} items={items} currentFloor={currentFloor} onFloorChange={setCurrentFloor}
-            avatarState={avatarState} walkPath={avatarWalkPath} avatarVariant={avatarVariant}
+            avatarState={avatarState} avatarVariant={avatarVariant}
             activeApplianceIds={activeApplianceIds} activeRoomLightIds={activeRoomLightIds}
             isEditMode={isEditMode} selectedItemId={selectedItemId} dragGhost={dragGhost} hoveredRoomId={hoveredRoomId}
             onRoomPress={handleRoomPress} onSelectItem={handleSelectItem} onDeleteItem={handleDeleteItem}

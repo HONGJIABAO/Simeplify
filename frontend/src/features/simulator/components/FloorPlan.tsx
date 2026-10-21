@@ -14,16 +14,25 @@ import { StairBlock } from './StairBlock';
 import { PlacedItem } from './PlacedItem';
 import { Avatar } from './Avatar';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
-import { AvatarSimulationState, Point } from '../logic/SimulationEngine';
+import { AvatarSimulationState } from '../logic/SimulationEngine';
 import { SpriteItemDef } from '../logic/spriteMap';
 import {
   calculateSquarePlanSide,
-  clampPointToRect,
   FloorNumber,
   getFloorPlanLayout,
   getSlotRect,
 } from '../logic/roomLayout';
-import { getFloorSpriteSizes, getItemDimensions } from '../logic/spriteSizing';
+import { getFloorSpriteSizes } from '../logic/spriteSizing';
+import {
+  footprintOverlapArea,
+  getDoorKeepOuts,
+  getFixedItemDimensions,
+  getItemLocalFootprint,
+  INNER_FLOOR_RECT,
+  isFootprintInside,
+  layoutItemsInRooms,
+  sortItemsForRoom,
+} from '../logic/furnishedLayout';
 
 export interface FloorViewport {
   scale: number;
@@ -37,7 +46,6 @@ interface FloorPlanProps {
   currentFloor: FloorNumber;
   onFloorChange: (floor: FloorNumber) => void;
   avatarState: AvatarSimulationState;
-  walkPath?: Point[];
   avatarVariant: 'avatar_girl' | 'avatar_boy';
   activeApplianceIds: string[];
   activeRoomLightIds: string[];
@@ -53,6 +61,7 @@ interface FloorPlanProps {
   onViewportChange?: (viewport: FloorViewport) => void;
   floorPlanRef: React.RefObject<any>;
   onLayout: (event: LayoutChangeEvent) => void;
+  debugLayout?: boolean;
 }
 
 export { calculateSquarePlanSide };
@@ -63,7 +72,6 @@ export function FloorPlan({
   currentFloor,
   onFloorChange,
   avatarState,
-  walkPath = [],
   avatarVariant,
   activeApplianceIds,
   activeRoomLightIds,
@@ -78,6 +86,7 @@ export function FloorPlan({
   onViewportChange,
   floorPlanRef,
   onLayout,
+  debugLayout = false,
 }: FloorPlanProps) {
   const [containerSize, setContainerSize] = useState({ width: 350, height: 350 });
   const [settledZoom, setSettledZoom] = useState(1);
@@ -189,11 +198,12 @@ export function FloorPlan({
   }));
 
   const spriteSizes = getFloorSpriteSizes(width);
+  const arrangedItems = useMemo(() => layoutItemsInRooms(items, rooms), [items, rooms]);
   const labelOverlaps = useMemo(() => {
     const perFloor = new Map<FloorNumber, Set<string>>([[1, new Set()], [2, new Set()]]);
     for (const floor of [1, 2] as const) {
       const floorRoomIds = new Set(rooms.filter((room) => room.floor === floor).map((room) => room.id));
-      const floorItems = items.filter((item) => floorRoomIds.has(item.roomId));
+      const floorItems = arrangedItems.filter((item) => floorRoomIds.has(item.roomId));
       for (let index = 0; index < floorItems.length; index += 1) {
         for (let other = index + 1; other < floorItems.length; other += 1) {
           const first = floorItems[index];
@@ -206,26 +216,26 @@ export function FloorPlan({
       }
     }
     return perFloor;
-  }, [height, items, rooms, width]);
+  }, [arrangedItems, height, rooms, width]);
 
   const renderFloor = (floor: FloorNumber) => {
     const layout = getFloorPlanLayout(floor);
     const floorRooms = rooms.filter((room) => room.floor === floor);
     const visibleRoomIds = new Set(floorRooms.filter((room) => room.isSetUp).map((room) => room.id));
-    const floorItems = items.filter((item) => visibleRoomIds.has(item.roomId));
-    const pathPoints = avatarState.currentFloor === floor && avatarState.isWalking
-      ? [{ x: avatarState.currentX, y: avatarState.currentY }, ...walkPath]
-      : [];
-    const sleepingBed = floorItems.find((item) =>
-      item.category === 'Furniture'
-      && (item.type === 'bed' || item.spriteKey === 'bed')
-      && item.roomId === avatarState.targetRoomId
-    );
-    const avatarHasReachedBed = !sleepingBed || Math.hypot(
-      avatarState.currentX - sleepingBed.posX,
-      avatarState.currentY - sleepingBed.posY
-    ) < 0.04;
-
+    const floorItems = sortItemsForRoom(arrangedItems.filter((item) => visibleRoomIds.has(item.roomId)));
+    const debugViolations: string[] = [];
+    if (debugLayout) {
+      for (const room of floorRooms.filter((candidate) => candidate.isSetUp)) {
+        const roomRect = getSlotRect(room.slot);
+        const roomItems = floorItems.filter((item) => item.roomId === room.id);
+        const keepOuts = getDoorKeepOuts(room.slot, roomRect.width * width, roomRect.height * height);
+        for (const item of roomItems) {
+          const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+          if (!isFootprintInside(footprint, INNER_FLOOR_RECT)) debugViolations.push(`${room.name}: ${item.name} outside inner floor`);
+          if (keepOuts.some((keepOut) => footprintOverlapArea(footprint, keepOut) > 0)) debugViolations.push(`${room.name}: ${item.name} in doorway`);
+        }
+      }
+    }
     return (
       <>
         <View style={[styles.planBase, { width, height }]} />
@@ -257,36 +267,66 @@ export function FloorPlan({
           onChangeFloor={onFloorChange}
         />
 
-        {pathPoints.slice(0, -1).map((point, index) => {
-          const next = pathPoints[index + 1];
-          const x1 = point.x * width;
-          const y1 = point.y * height;
-          const x2 = next.x * width;
-          const y2 = next.y * height;
-          const length = Math.hypot(x2 - x1, y2 - y1);
-          const angle = Math.atan2(y2 - y1, x2 - x1);
-          return <View key={`${index}-${x2}-${y2}`} pointerEvents="none" style={[styles.walkPath, { left: (x1 + x2) / 2 - length / 2, top: (y1 + y2) / 2 - 1.5, width: length, transform: [{ rotate: `${angle}rad` }] }]} />;
+        {debugLayout && floorRooms.map((room) => {
+          const rect = getSlotRect(room.slot);
+          const roomItems = floorItems.filter((item) => item.roomId === room.id);
+          const keepOuts = getDoorKeepOuts(room.slot, rect.width * width, rect.height * height);
+          return (
+            <React.Fragment key={`debug-${room.id}`}>
+              <View pointerEvents="none" style={[styles.debugInnerFloor, {
+                left: (rect.x + INNER_FLOOR_RECT.x * rect.width) * width,
+                top: (rect.y + INNER_FLOOR_RECT.y * rect.height) * height,
+                width: INNER_FLOOR_RECT.width * rect.width * width,
+                height: INNER_FLOOR_RECT.height * rect.height * height,
+              }]} />
+              {keepOuts.map((keepOut, index) => (
+                <View key={`${room.id}-door-${index}`} pointerEvents="none" style={[styles.debugDoorKeepOut, {
+                  left: (rect.x + keepOut.x * rect.width) * width,
+                  top: (rect.y + keepOut.y * rect.height) * height,
+                  width: keepOut.width * rect.width * width,
+                  height: keepOut.height * rect.height * height,
+                }]} />
+              ))}
+              {roomItems.map((item) => {
+                const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+                return (
+                  <React.Fragment key={`${item.id}-footprint`}>
+                    <View pointerEvents="none" style={[styles.debugFootprint, {
+                      left: (rect.x + footprint.x * rect.width) * width,
+                      top: (rect.y + footprint.y * rect.height) * height,
+                      width: footprint.width * rect.width * width,
+                      height: footprint.height * rect.height * height,
+                    }]} />
+                    <View pointerEvents="none" style={[styles.debugAnchor, {
+                      left: (rect.x + footprint.anchorX * rect.width) * width - 3,
+                      top: (rect.y + footprint.anchorY * rect.height) * height - 3,
+                    }]} />
+                  </React.Fragment>
+                );
+              })}
+            </React.Fragment>
+          );
         })}
+
+        {debugLayout && (
+          <View pointerEvents="none" style={styles.debugViolationPanel}>
+            <Text style={styles.debugViolationText}>
+              {debugViolations.length === 0 ? '✓ No layout violations' : debugViolations.join('\n')}
+            </Text>
+          </View>
+        )}
 
         {floorItems.map((item) => {
           const room = floorRooms.find((candidate) => candidate.id === item.roomId);
           if (!room) return null;
-          const roomRect = getSlotRect(room.slot);
-          const roomPixelHeight = roomRect.height * height;
-          const roomPixelWidth = roomRect.width * width;
-          const dimensions = getItemDimensions(item.spriteKey || item.type, roomPixelHeight, roomPixelWidth);
-          const clampedPoint = clampPointToRect(
-            roomRect,
-            { x: item.posX, y: item.posY },
-            (dimensions.visibleWidth / 2) / width,
-            (dimensions.visibleHeight / 2) / height
-          );
+          const roomItems = floorItems.filter((candidate) => candidate.roomId === room.id);
+          const dimensions = getFixedItemDimensions(item, room, roomItems, width, height);
           const isFurniture = item.category === 'Furniture';
           const isOn = !isFurniture && (activeApplianceIds.includes(item.id) || item.alwaysOn || item.isOn);
           return (
             <PlacedItem
               key={item.id}
-              item={{ ...item, posX: clampedPoint.x, posY: clampedPoint.y }}
+              item={item}
               canvasWidth={width}
               canvasHeight={height}
               itemWidth={dimensions.width}
@@ -313,18 +353,18 @@ export function FloorPlan({
           canvasHeight={height}
           facingLeft={avatarState.facingLeft}
           isWalking={avatarState.isWalking}
-          isSleeping={avatarState.isSleeping && !avatarState.isWalking && avatarHasReachedBed}
-          isSitting={avatarState.isSitting}
+          isSleeping={false}
+          isSitting={false}
           visible={avatarState.currentFloor === floor && !avatarState.isFloorTransitioning}
           reduceMotion={reduceMotion}
-          sleepRotation={sleepingBed?.rotation ?? 0}
+          sleepRotation={0}
           size={spriteSizes.avatar}
         />
       </>
     );
   };
 
-  const homeHasAppliance = items.some((item) => {
+  const homeHasAppliance = arrangedItems.some((item) => {
     const room = rooms.find((candidate) => candidate.id === item.roomId);
     return item.category === 'Appliances' && room?.isSetUp;
   });
@@ -380,10 +420,63 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#EFEAD8',
   },
+  debugBackStrip: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#B85C38',
+    backgroundColor: 'rgba(184,92,56,0.12)',
+    zIndex: 300,
+  },
+  debugInnerFloor: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#566549',
+    zIndex: 301,
+  },
+  debugDoorKeepOut: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#A97A4A',
+    backgroundColor: 'rgba(212,163,115,0.24)',
+    zIndex: 302,
+  },
+  debugFootprint: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#57534E',
+    backgroundColor: 'rgba(87,83,78,0.08)',
+    zIndex: 303,
+  },
+  debugAnchor: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#B85C38',
+    zIndex: 304,
+  },
+  debugViolationPanel: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    borderColor: '#D6D3D1',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    zIndex: 400,
+  },
+  debugViolationText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
+  },
   zoomLayer: { ...StyleSheet.absoluteFill },
   floorLayer: { ...StyleSheet.absoluteFill },
   planBase: { position: 'absolute', top: 0, left: 0, backgroundColor: '#EFEAD8' },
-  walkPath: { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: 'rgba(86, 101, 73, 0.55)', zIndex: 15 },
   emptyPill: {
     position: 'absolute', bottom: 10, left: 10, right: 10, minHeight: 36,
     backgroundColor: '#FFFFFF', borderRadius: 9999, paddingVertical: 8,
