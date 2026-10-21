@@ -41,9 +41,9 @@ function blockCategory(block: RoutineBlock): FeaturedCategory | null {
   const name = block.name.toLowerCase();
   if (block.iconType === 'shower' || name.includes('shower')) return 'shower';
   if (block.iconType === 'work' || name.includes('work') || name.includes('study')) return 'work';
-  if (name.includes('breakfast')) return 'breakfast';
-  if (name.includes('dinner')) return 'dinner';
-  if (block.iconType === 'evening' || name.includes('evening') || name.includes('tv') || name.includes('watch')) return 'evening';
+  if (name.includes('breakfast') || (block.iconType === 'meal' && timeValue(block) < 11 * 60)) return 'breakfast';
+  if (name.includes('dinner') || (block.iconType === 'meal' && timeValue(block) >= 17 * 60)) return 'dinner';
+  if (block.iconType === 'evening' || name.includes('evening') || name.includes('tv') || name.includes('watch') || name.includes('living')) return 'evening';
   return null;
 }
 
@@ -93,3 +93,46 @@ export function getReelTargetDate(start: Date, period: ReelPeriod, progress: num
 export function getReducedMotionSummary(blocks: readonly RoutineBlock[], totalSavingsRm: number) {
   return { segments: buildWeekReel(blocks), finalSavingsRm: Math.max(0, Math.round(totalSavingsRm)) };
 }
+
+export interface PlayFlowState {
+  menuOpen: boolean;
+  isPlaying: boolean;
+  isEditMode: boolean;
+}
+
+export type PlayFlowAction = 'tapButton' | 'tapOrDragScreen' | 'toggleEdit';
+
+export function reducePlayFlow(state: PlayFlowState, action: PlayFlowAction): PlayFlowState {
+  if (action === 'toggleEdit') {
+    const nextEdit = !state.isEditMode;
+    return {
+      isEditMode: nextEdit,
+      menuOpen: false,
+      isPlaying: false,
+    };
+  }
+
+  if (state.isEditMode) {
+    return state;
+  }
+
+  if (action === 'tapOrDragScreen') {
+    if (state.isPlaying) {
+      return { ...state, isPlaying: false };
+    }
+    return state;
+  }
+
+  if (action === 'tapButton') {
+    if (state.isPlaying) {
+      return { ...state, isPlaying: false, menuOpen: false };
+    }
+    if (!state.menuOpen) {
+      return { ...state, menuOpen: true };
+    }
+    return { ...state, menuOpen: false, isPlaying: true };
+  }
+
+  return state;
+}
+

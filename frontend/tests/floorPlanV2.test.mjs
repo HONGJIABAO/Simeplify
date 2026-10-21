@@ -28,11 +28,19 @@ import {
 } from '../src/features/simulator/logic/mockHomeData.ts';
 import { createDefaultRooms } from '../src/features/simulator/logic/roomData.ts';
 import { resolveAvatarPlacement } from '../src/features/simulator/logic/avatarPlace.ts';
-import { WORK_ROUTINE_SUGGESTIONS } from '../src/features/simulator/logic/myDayLogic.ts';
+import { DEFAULT_ROUTINE_BLOCKS, WORK_ROUTINE_SUGGESTIONS } from '../src/features/simulator/logic/myDayLogic.ts';
 import { shouldFollowAvatarFloor } from '../src/features/simulator/logic/floorFollow.ts';
 import { findFloorWalkPath, findHomeWalkRoute, isWalkSegmentValid } from '../src/features/simulator/logic/walkGraph.ts';
 import { getEditLayoutMetrics, getInTrayTypeIds, getTrayTileWidth } from '../src/features/simulator/logic/trayRules.ts';
 import { getLitAppearance } from '../src/features/simulator/logic/litAppearance.ts';
+import {
+  buildWeekReel,
+  chooseFeaturedBlock,
+  FEATURED_BLOCK_BY_DAY,
+  getReducedMotionSummary,
+  getReelSavings,
+  reducePlayFlow,
+} from '../src/features/simulator/logic/weekReel.ts';
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_ROOT = resolve(TEST_DIR, '..');
@@ -353,3 +361,112 @@ test('tidy layout moves known items, preserves unknown leftovers, and is stable 
     assert.equal(tidied.leftovers.length, 0);
   }
 });
+
+test('the reel has 7 segments Monday to Sunday', () => {
+  const reel = buildWeekReel(DEFAULT_ROUTINE_BLOCKS);
+  assert.equal(reel.length, 7);
+  assert.deepEqual(reel.map((segment) => segment.day), [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ]);
+  assert.deepEqual(reel.map((segment) => segment.dayIndex), [0, 1, 2, 3, 4, 5, 6]);
+});
+
+test('the featured block for each weekday follows the mapping and the fallbacks', () => {
+  const customBlocks = [
+    { id: 'b-sleep', name: 'Sleep', startTime: '00:00', endTime: '06:00', roomId: 'f2-A', iconType: 'sleep', applianceIds: [] },
+    { id: 'b-shower', name: 'Morning Shower', startTime: '06:30', endTime: '07:00', roomId: 'f1-C', iconType: 'shower', applianceIds: [] },
+    { id: 'b-breakfast', name: 'Breakfast & Prep', startTime: '07:15', endTime: '08:00', roomId: 'f1-B', iconType: 'meal', applianceIds: [] },
+    { id: 'b-work', name: 'Workplace Study', startTime: '09:00', endTime: '12:00', roomId: 'f2-B', iconType: 'work', applianceIds: [] },
+    { id: 'b-dinner', name: 'Dinner', startTime: '18:30', endTime: '19:30', roomId: 'f1-B', iconType: 'meal', applianceIds: [] },
+    { id: 'b-tv', name: 'Watching TV', startTime: '20:00', endTime: '22:00', roomId: 'f1-A', iconType: 'evening', applianceIds: [] },
+  ];
+
+  // Monday: shower
+  assert.equal(chooseFeaturedBlock('Monday', customBlocks).block.id, 'b-shower');
+  // Tuesday: breakfast
+  assert.equal(chooseFeaturedBlock('Tuesday', customBlocks).block.id, 'b-breakfast');
+  // Wednesday: work
+  assert.equal(chooseFeaturedBlock('Wednesday', customBlocks).block.id, 'b-work');
+  // Thursday: evening
+  assert.equal(chooseFeaturedBlock('Thursday', customBlocks).block.id, 'b-tv');
+  // Friday: dinner
+  assert.equal(chooseFeaturedBlock('Friday', customBlocks).block.id, 'b-dinner');
+  // Saturday: evening
+  assert.equal(chooseFeaturedBlock('Saturday', customBlocks).block.id, 'b-tv');
+  // Sunday: evening
+  assert.equal(chooseFeaturedBlock('Sunday', customBlocks).block.id, 'b-tv');
+
+  // Fallback 1: category missing -> uses first non-away, non-sleep block
+  const missingWorkBlocks = [
+    { id: 'b-sleep', name: 'Sleep', startTime: '00:00', endTime: '06:00', roomId: 'f2-A', iconType: 'sleep', applianceIds: [] },
+    { id: 'b-reading', name: 'Reading in Bed', startTime: '10:00', endTime: '11:00', roomId: 'f1-A', iconType: 'custom', applianceIds: [] },
+  ];
+  assert.equal(chooseFeaturedBlock('Wednesday', missingWorkBlocks).block.id, 'b-reading');
+
+  // Fallback 2: only sleep exists -> uses sleep
+  const onlySleep = [
+    { id: 'b-sleep', name: 'Sleep', startTime: '00:00', endTime: '06:00', roomId: 'f2-A', iconType: 'sleep', applianceIds: [] },
+  ];
+  assert.equal(chooseFeaturedBlock('Monday', onlySleep).block.id, 'b-sleep');
+});
+
+test('the savings counter reaches the total at the end of Sunday', () => {
+  const totalSavings = 144;
+  // Beginning of Monday (day 0, progress 0)
+  assert.equal(getReelSavings(totalSavings, 0, 0), 0);
+  // Mid-week progress
+  assert.equal(getReelSavings(totalSavings, 3, 0.5), Math.round(144 * (3.5 / 7)));
+  // End of Sunday (dayIndex 6, progress 1.0)
+  assert.equal(getReelSavings(totalSavings, 6, 1.0), totalSavings);
+});
+
+test('an all-away weekday gives the Away segment', () => {
+  const allAwayBlocks = [
+    { id: 'b-away', name: 'Office Day', startTime: '08:00', endTime: '18:00', roomId: 'away', isAway: true, iconType: 'away', applianceIds: [], repeatDays: ['tuesday'] },
+  ];
+  const segment = chooseFeaturedBlock('Tuesday', allAwayBlocks);
+  assert.equal(segment.isAway, true);
+  assert.equal(segment.caption, 'Tuesday · Away');
+});
+
+test('reduced motion returns the static summary', () => {
+  const summary = getReducedMotionSummary(DEFAULT_ROUTINE_BLOCKS, 85);
+  assert.equal(summary.segments.length, 7);
+  assert.equal(summary.finalSavingsRm, 85);
+  assert.equal(summary.segments[0].day, 'Monday');
+});
+
+test('the play flow: first tap opens the menu, second tap plays, tap while playing stops, Edit mode disables it', () => {
+  let state = { menuOpen: false, isPlaying: false, isEditMode: false };
+  // First tap opens the period menu
+  state = reducePlayFlow(state, 'tapButton');
+  assert.equal(state.menuOpen, true);
+  assert.equal(state.isPlaying, false);
+
+  // Second tap plays
+  state = reducePlayFlow(state, 'tapButton');
+  assert.equal(state.menuOpen, false);
+  assert.equal(state.isPlaying, true);
+
+  // Tap while playing stops it
+  state = reducePlayFlow(state, 'tapButton');
+  assert.equal(state.isPlaying, false);
+
+  // Tap or drag screen while playing stops it
+  state = { menuOpen: false, isPlaying: true, isEditMode: false };
+  state = reducePlayFlow(state, 'tapOrDragScreen');
+  assert.equal(state.isPlaying, false);
+
+  // Edit mode disables playing
+  state = { menuOpen: false, isPlaying: false, isEditMode: true };
+  state = reducePlayFlow(state, 'tapButton');
+  assert.equal(state.menuOpen, false);
+  assert.equal(state.isPlaying, false);
+
+  // Toggling edit mode while playing stops playback
+  state = { menuOpen: false, isPlaying: true, isEditMode: false };
+  state = reducePlayFlow(state, 'toggleEdit');
+  assert.equal(state.isEditMode, true);
+  assert.equal(state.isPlaying, false);
+});
+

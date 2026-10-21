@@ -369,7 +369,8 @@ export default function SimulatorScreen() {
       run.segmentStartedAt = Date.now();
       const targetRoomId = run.segments[run.index].block?.roomId;
       const targetRoom = rooms.find((room) => room.id === targetRoomId);
-      run.segmentDurationMs = targetRoom && targetRoom.floor !== avatarStateRef.current.currentFloor ? 6000 : 4000;
+      const isAway = run.segments[run.index].isAway;
+      run.segmentDurationMs = isAway ? 2500 : (targetRoom && targetRoom.floor !== avatarStateRef.current.currentFloor ? 6000 : 4000);
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
     }, 50);
     return () => clearInterval(interval);
@@ -406,7 +407,7 @@ export default function SimulatorScreen() {
       avatarWalks: true,
     };
   }, [routineBlocks, setupRooms, simulatedMinutes, weekReelView]);
-  const routineKey = `${currentRoutine.id}|${currentRoutine.name}|${currentRoutine.targetRoomId ?? currentRoutine.targetRoomType}|${currentRoutine.isSleeping}|${currentRoutine.avatarWalks}|${currentRoutine.activeApplianceTypes?.join(',')}`;
+  const routineKey = `${currentRoutine.id}|${currentRoutine.name}|${currentRoutine.targetRoomId ?? currentRoutine.targetRoomType}|${currentRoutine.isSleeping}|${currentRoutine.isAway}|${currentRoutine.avatarWalks}|${currentRoutine.activeApplianceTypes?.join(',')}`;
   useEffect(() => {
     if (!setupRooms.length) return;
     const directId = currentRoutine.targetRoomId && currentRoutine.targetRoomId !== 'away' ? migrateRoomId(currentRoutine.targetRoomId) : null;
@@ -459,15 +460,16 @@ export default function SimulatorScreen() {
       }));
     }, 0);
     return () => clearTimeout(stateTimer);
-  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType, isEditMode, installAvatarRoute]);
+  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.isAway, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType, isEditMode, installAvatarRoute]);
 
   const handleFloorChange = useCallback((floor: FloorNumber) => {
+    if (isWeekReelPlaying) stopWeekReel();
     if (pendingFloorTransferRef.current || transitionStartedRef.current) {
       userChangedFloorDuringWalkRef.current = true;
       if (pendingFloorTransferRef.current) pendingFloorTransferRef.current.followView = false;
     }
     setCurrentFloor(floor);
-  }, []);
+  }, [isWeekReelPlaying, stopWeekReel]);
 
   const { activeApplianceIds, activeRoomLightIds } = useMemo(() => {
     const activeIds: string[] = [];
@@ -530,11 +532,15 @@ export default function SimulatorScreen() {
     const durations: number[] = [];
     let expectedFloor = avatarState.currentFloor;
     for (const segment of segments) {
-      const roomId = segment.block?.roomId;
-      const room = rooms.find((candidate) => candidate.id === roomId);
-      const changesFloor = Boolean(room && room.floor !== expectedFloor);
-      durations.push(changesFloor ? 6000 : 4000);
-      if (room) expectedFloor = room.floor;
+      if (segment.isAway) {
+        durations.push(2500);
+      } else {
+        const roomId = segment.block?.roomId;
+        const room = rooms.find((candidate) => candidate.id === roomId);
+        const changesFloor = Boolean(room && room.floor !== expectedFloor);
+        durations.push(changesFloor ? 6000 : 4000);
+        if (room) expectedFloor = room.floor;
+      }
     }
     const snapshot: WeekReelSnapshot = {
       simulatedMinutes, simulatedDateTime: new Date(simulatedDateTime.getTime()),
@@ -592,6 +598,10 @@ export default function SimulatorScreen() {
     placeItem(itemDef, room, point);
   };
   const handleRoomPress = (room: StoredRoom) => {
+    if (isWeekReelPlaying) {
+      stopWeekReel();
+      return;
+    }
     if (selectedPendingItem) {
       requestPlacement(selectedPendingItem, room, getRoomCenter(room));
       setSelectedPendingItem(null); return;
@@ -666,6 +676,10 @@ export default function SimulatorScreen() {
   };
 
   const handleSelectItem = (item: StoredPlacedItem) => {
+    if (isWeekReelPlaying) {
+      stopWeekReel();
+      return;
+    }
     setSelectedItemId(item.id);
     if (!isEditMode) return;
     if (item.category === 'Appliances') { setEditingAppliance(item); setApplianceSheetVisible(true); }
@@ -789,30 +803,82 @@ export default function SimulatorScreen() {
     color: '#D4A373', spriteKey: item.spriteKey, isOn: item.isOn,
   })), [items]);
 
+  const reelRoomName = useMemo(() => {
+    if (!weekReelView?.segment.block?.roomId) return weekReelView?.segment.isAway ? 'Entrance' : undefined;
+    const targetId = weekReelView.segment.block.roomId;
+    const directId = targetId !== 'away' ? migrateRoomId(targetId) : null;
+    const targetRoom = (directId ? setupRooms.find((r) => r.id === directId) : null)
+      ?? setupRooms.find((r) => r.type === targetId)
+      ?? rooms.find((r) => r.id === targetId || r.type === targetId);
+    return targetRoom?.name ?? (targetId.charAt(0).toUpperCase() + targetId.slice(1));
+  }, [rooms, setupRooms, weekReelView]);
+
   return <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
     <View style={styles.mobileShell}>
       <View style={styles.mainContainer}>
         <BillCard monthlyBillRm={monthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
-          activeFastForward={activeFastForward} isEditMode={isEditMode}
+          activeFastForward={selectedFastForward}
+          isFastForwardPlaying={isWeekReelPlaying || Boolean(reducedWeekSummary)}
+          fastForwardSavingsRm={weekReelView?.savingsRm ?? (reducedWeekSummary ? reducedWeekSummary.finalSavingsRm : null)}
+          fastForwardDisabled={isEditMode}
+          isEditMode={isEditMode}
           hasUnreadNotifications={unreadNotificationsCount > 0}
-          onToggleEdit={() => { setIsEditMode((value) => !value); setSelectedItemId(null); setSelectedPendingItem(null); }}
+          onToggleEdit={() => {
+            if (isWeekReelPlaying) stopWeekReel();
+            setIsEditMode((value) => !value);
+            setSelectedItemId(null);
+            setSelectedPendingItem(null);
+          }}
           onTidyUp={() => setTidySheetVisible(true)}
-          onSelectFastForward={handleFastForward} onPressBillCard={() => setBillModalVisible(true)}
-          onPressBell={() => router.push('/notifications')} onPressCalendar={() => setTimelineVisible(true)} />
-        {!(isEditMode && Math.min(screenWidth - 32, screenHeight - 460) < 280) && <View style={styles.currentTaskRow} accessibilityRole="text">
-          <View style={styles.currentTaskDot} />
-          <View style={styles.currentTaskCopy}><Text style={styles.currentTaskLabel}>Current task</Text>
-            <Text style={styles.currentTaskName} numberOfLines={1}>{currentRoutine.name}</Text></View>
-          <Text style={styles.currentTaskTime}>{currentRoutine.startTime}–{currentRoutine.endTime}</Text>
-        </View>}
+          onSelectFastForward={handleFastForwardPeriod}
+          onToggleFastForward={handleFastForwardToggle}
+          onPressBillCard={() => {
+            if (isWeekReelPlaying) stopWeekReel();
+            else setBillModalVisible(true);
+          }}
+          onPressBell={() => {
+            if (isWeekReelPlaying) stopWeekReel();
+            router.push('/notifications');
+          }}
+          onPressCalendar={() => {
+            if (isWeekReelPlaying) stopWeekReel();
+            setTimelineVisible(true);
+          }} />
+        {!(isEditMode && Math.min(screenWidth - 32, screenHeight - 460) < 280) && (
+          weekReelView ? (
+            <WeekReelCaption
+              segment={weekReelView.segment}
+              roomName={reelRoomName}
+              savingsRm={weekReelView.savingsRm}
+            />
+          ) : reducedWeekSummary ? (
+            <WeekReelSummary
+              segments={reducedWeekSummary.segments}
+              finalSavingsRm={reducedWeekSummary.finalSavingsRm}
+            />
+          ) : (
+            <View style={styles.currentTaskRow} accessibilityRole="text">
+              <View style={styles.currentTaskDot} />
+              <View style={styles.currentTaskCopy}>
+                <Text style={styles.currentTaskLabel}>Current task</Text>
+                <Text style={styles.currentTaskName} numberOfLines={1}>{currentRoutine.name}</Text>
+              </View>
+              <Text style={styles.currentTaskTime}>{currentRoutine.startTime}–{currentRoutine.endTime}</Text>
+            </View>
+          )
+        )}
         <View
           style={[
             styles.floorPlanArea,
             { paddingBottom: isEditMode ? 214 : tabBarClearance },
           ]}
+          onTouchStart={() => {
+            if (isWeekReelPlaying) stopWeekReel();
+          }}
         >
           <FloorPlan rooms={rooms} items={items} currentFloor={currentFloor} onFloorChange={handleFloorChange}
             avatarState={avatarState} avatarVariant={avatarVariant}
+            isAvatarAway={Boolean(weekReelView?.segment.isAway || currentRoutine.isAway)}
             walkPath={walkPath}
             activeApplianceIds={activeApplianceIds} activeRoomLightIds={activeRoomLightIds}
             isEditMode={isEditMode} selectedItemId={selectedItemId} dragGhost={dragGhost} hoveredRoomId={hoveredRoomId}

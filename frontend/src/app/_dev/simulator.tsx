@@ -57,6 +57,8 @@ import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
+import { WeekReelCaption, WeekReelSummary } from '@/features/simulator/components/WeekReelStatus';
+import { buildWeekReel } from '@/features/simulator/logic/weekReel';
 
 type DemoState =
   // Stage 6
@@ -133,7 +135,12 @@ type DemoState =
   | 'floor-follow-looked-away'
   | 'floor-follow-edit-mode'
   | 'doorway-route-preview'
-  | 'unreachable-room-route';
+  | 'unreachable-room-route'
+  // Fast-Forward Week Reel (Part 6)
+  | 'week-reel-caption-shower'
+  | 'week-reel-caption-away'
+  | 'week-reel-playing'
+  | 'week-reel-reduced-summary';
 
 const STATE_GROUPS = [
   {
@@ -249,6 +256,15 @@ const STATE_GROUPS = [
       { id: 'home-look-away' as DemoState, label: 'Home look: away (energy saving overlay & out pill)' },
     ],
   },
+  {
+    title: 'Fast-Forward Week Reel (Part 6)',
+    items: [
+      { id: 'week-reel-caption-shower' as DemoState, label: 'Week reel caption (Mon Shower)' },
+      { id: 'week-reel-caption-away' as DemoState, label: 'Week reel caption (Tue Away)' },
+      { id: 'week-reel-playing' as DemoState, label: 'Week reel playing (Floor 1)' },
+      { id: 'week-reel-reduced-summary' as DemoState, label: 'Week reel reduced motion summary' },
+    ],
+  },
 ];
 
 function BillHero({ kWh }: { kWh: number }) {
@@ -268,6 +284,7 @@ function TwoFloorPlanPreview({
   avatarScenario,
   routeScenario,
   messy = false,
+  isAvatarAway = false,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -280,6 +297,7 @@ function TwoFloorPlanPreview({
   avatarScenario?: 'sofa' | 'shower' | 'workplace';
   routeScenario?: 'doorway' | 'unreachable';
   messy?: boolean;
+  isAvatarAway?: boolean;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const floorRef = useRef<View>(null);
@@ -306,17 +324,17 @@ function TwoFloorPlanPreview({
   const routePosition = routeResult?.points[routeResult.points.length - 1];
   const shownFloor = routeScenario ? 1 : scenarioRoom?.floor ?? residentFloor;
   const avatarState: AvatarSimulationState = {
-    currentX: routePosition?.x ?? scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72),
-    currentY: routePosition?.y ?? scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30),
+    currentX: isAvatarAway ? 0.29 : (routePosition?.x ?? scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72)),
+    currentY: isAvatarAway ? 0.50 : (routePosition?.y ?? scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30)),
     facingLeft: scenarioPlacement?.facingLeft ?? false,
     isWalking: false,
     isSleeping: false,
     isSitting: false,
-    currentRoomId: scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B'),
-    targetRoomId: scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B'),
-    currentActivity: 'At home',
-    currentFloor: shownFloor,
-    targetFloor: shownFloor,
+    currentRoomId: isAvatarAway ? 'f1-A' : (scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B')),
+    targetRoomId: isAvatarAway ? 'f1-A' : (scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B')),
+    currentActivity: isAvatarAway ? 'Away' : 'At home',
+    currentFloor: isAvatarAway ? 1 : shownFloor,
+    targetFloor: isAvatarAway ? 1 : shownFloor,
     isFloorTransitioning: false,
   };
   return (
@@ -335,6 +353,7 @@ function TwoFloorPlanPreview({
         onFloorChange={setFloor}
         avatarState={avatarState}
         avatarVariant="avatar_girl"
+        isAvatarAway={isAvatarAway}
         walkPath={routeResult?.points}
         activeApplianceIds={activeApplianceIds ?? scenarioPlacement?.activeApplianceIds ?? ['f1-fridge-kitchen', 'f1-ac-living']}
         activeRoomLightIds={[]}
@@ -503,6 +522,82 @@ export default function SimulatorGallery() {
             <EditSheet visible initialCollapsed={activeState === 'edit-tray-collapsed'}
               initialScrollToEnd={activeState === 'tray-scrolled-end'}
               isDragging={activeState === 'edit-tray-dragging'} onItemPointerDown={() => {}} onItemTap={() => {}} />
+          </View>
+        )}
+
+        {/* ── Week Reel (Part 6) ── */}
+        {activeState === 'week-reel-caption-shower' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Monday',
+                dayIndex: 0,
+                block: {
+                  id: 'block-shower',
+                  name: 'Morning Shower',
+                  startTime: '06:30',
+                  endTime: '07:15',
+                  roomId: 'f1-C',
+                  iconType: 'shower',
+                  applianceIds: ['f1-shower-bath'],
+                },
+                isAway: false,
+                caption: 'Monday · Morning Shower · 06:30',
+              }}
+              roomName="Bathroom"
+              savingsRm={15}
+            />
+            <TwoFloorPlanPreview avatarScenario="shower" />
+          </View>
+        )}
+
+        {activeState === 'week-reel-caption-away' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Tuesday',
+                dayIndex: 1,
+                block: null,
+                isAway: true,
+                caption: 'Tuesday · Away',
+              }}
+              savingsRm={30}
+            />
+            <TwoFloorPlanPreview isAvatarAway />
+          </View>
+        )}
+
+        {activeState === 'week-reel-playing' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Monday',
+                dayIndex: 0,
+                block: {
+                  id: 'block-shower',
+                  name: 'Morning Shower',
+                  startTime: '06:30',
+                  endTime: '07:15',
+                  roomId: 'f1-C',
+                  iconType: 'shower',
+                  applianceIds: ['f1-shower-bath'],
+                },
+                isAway: false,
+                caption: 'Monday · Morning Shower · 06:30',
+              }}
+              roomName="Bathroom"
+              savingsRm={12}
+            />
+            <TwoFloorPlanPreview routeScenario="doorway" />
+          </View>
+        )}
+
+        {activeState === 'week-reel-reduced-summary' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelSummary
+              segments={buildWeekReel(DEFAULT_ROUTINE_BLOCKS)}
+              finalSavingsRm={80}
+            />
           </View>
         )}
 
