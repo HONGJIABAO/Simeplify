@@ -38,7 +38,8 @@ import { ApplianceDetailsSheet } from '@/features/simulator/components/Appliance
 import { FloorPlan } from '@/features/simulator/components/FloorPlan';
 import { EditSheet } from '@/features/simulator/components/EditSheet';
 import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
-import { AvatarSimulationState } from '@/features/simulator/logic/SimulationEngine';
+import { AvatarSimulationState, getRoomCenter } from '@/features/simulator/logic/SimulationEngine';
+import { findFloorWalkPath } from '@/features/simulator/logic/walkGraph';
 import { FloorNumber } from '@/features/simulator/logic/roomLayout';
 import { SuggestionArea } from '@/features/simulator/components/SuggestionArea';
 import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
@@ -52,6 +53,7 @@ import { QuickSetupSheet } from '@/features/simulator/components/QuickSetupSheet
 import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
+import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
@@ -98,6 +100,11 @@ type DemoState =
   | 'workplace-details'
   | 'edit-tray-collapsed'
   | 'edit-tray-dragging'
+  | 'tray-first-screen'
+  | 'tray-scrolled-end'
+  | 'tidy-up-confirm'
+  | 'tidy-up-before'
+  | 'tidy-up-after'
   // Floor Plan V2
   | 'stair-filled-floor-1'
   | 'stair-filled-floor-2'
@@ -121,7 +128,12 @@ type DemoState =
   | 'workplace-room-layout'
   | 'avatar-at-sofa'
   | 'avatar-at-shower'
-  | 'avatar-at-workplace';
+  | 'avatar-at-workplace'
+  | 'floor-follow-transition'
+  | 'floor-follow-looked-away'
+  | 'floor-follow-edit-mode'
+  | 'doorway-route-preview'
+  | 'unreachable-room-route';
 
 const STATE_GROUPS = [
   {
@@ -162,10 +174,20 @@ const STATE_GROUPS = [
       { id: 'two-floor-plan' as DemoState, label: '1F unequal rooms + stairs' },
       { id: 'floor-two-dark' as DemoState, label: '2F with two dark rooms' },
       { id: 'resident-other-floor' as DemoState, label: 'Resident is on the other floor' },
+      { id: 'floor-follow-transition' as DemoState, label: 'Floor follows resident after stair crossing' },
+      { id: 'floor-follow-looked-away' as DemoState, label: 'User looked away — resident floor pill' },
+      { id: 'floor-follow-edit-mode' as DemoState, label: 'Edit mode — floor follow disabled' },
+      { id: 'doorway-route-preview' as DemoState, label: 'Avatar doorway route preview' },
+      { id: 'unreachable-room-route' as DemoState, label: 'No route — nearest reachable waypoint' },
       { id: 'room-setup-sheet' as DemoState, label: 'Dark-room setup sheet' },
       { id: 'workplace-details' as DemoState, label: 'Workplace details (no star rating)' },
       { id: 'edit-tray-collapsed' as DemoState, label: 'Collapsed item tray' },
       { id: 'edit-tray-dragging' as DemoState, label: 'Item tray while dragging (30%)' },
+      { id: 'tray-first-screen' as DemoState, label: 'Tray — first screen' },
+      { id: 'tray-scrolled-end' as DemoState, label: 'Tray — scrolled to end' },
+      { id: 'tidy-up-confirm' as DemoState, label: 'Tidy up — confirm' },
+      { id: 'tidy-up-before' as DemoState, label: 'Tidy up — before' },
+      { id: 'tidy-up-after' as DemoState, label: 'Tidy up — after' },
     ],
   },
   {
@@ -244,6 +266,8 @@ function TwoFloorPlanPreview({
   setupAllRooms = false,
   debugLayout = false,
   avatarScenario,
+  routeScenario,
+  messy = false,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -254,11 +278,16 @@ function TwoFloorPlanPreview({
   setupAllRooms?: boolean;
   debugLayout?: boolean;
   avatarScenario?: 'sofa' | 'shower' | 'workplace';
+  routeScenario?: 'doorway' | 'unreachable';
+  messy?: boolean;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const floorRef = useRef<View>(null);
   const rooms = setupAllRooms ? createDefaultRooms(true) : MOCK_SIMULATOR_ROOMS;
-  const items = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
+  const baseItems = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
+  const items = messy ? baseItems.map((item, index) => item.roomId === 'f1-A'
+    ? { ...item, posX: 0.18 + (index % 3) * 0.025, posY: 0.34 + (index % 2) * 0.02 }
+    : item) : baseItems;
   const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A' : avatarScenario === 'shower' ? 'f1-C' : avatarScenario === 'workplace' ? 'f2-B' : null;
   const scenarioRoom = rooms.find((room) => room.id === scenarioRoomId);
   const scenarioItems = items.filter((item) => item.roomId === scenarioRoomId);
@@ -268,10 +297,17 @@ function TwoFloorPlanPreview({
       ? { name: 'Morning Shower', iconType: 'shower' as const, applianceIds: ['f1-shower-bath'], avatarWalks: true }
       : { name: 'Working', iconType: 'work' as const, applianceIds: ['f2-workplace-study'], avatarWalks: true };
   const scenarioPlacement = scenarioRoom ? resolveAvatarPlacement(scenarioBlock, scenarioRoom, scenarioItems) : null;
-  const shownFloor = scenarioRoom?.floor ?? residentFloor;
+  const routeStartRoom = rooms.find((room) => room.id === 'f1-A')!;
+  const routeEndRoom = rooms.find((room) => room.id === (routeScenario === 'unreachable' ? 'f1-D' : 'f1-C'))!;
+  const routeResult = routeScenario ? findFloorWalkPath({
+    floor: 1, rooms, start: getRoomCenter(routeStartRoom), startRoomId: routeStartRoom.id,
+    end: getRoomCenter(routeEndRoom), endRoomId: routeEndRoom.id,
+  }) : null;
+  const routePosition = routeResult?.points[routeResult.points.length - 1];
+  const shownFloor = routeScenario ? 1 : scenarioRoom?.floor ?? residentFloor;
   const avatarState: AvatarSimulationState = {
-    currentX: scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72),
-    currentY: scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30),
+    currentX: routePosition?.x ?? scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72),
+    currentY: routePosition?.y ?? scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30),
     facingLeft: scenarioPlacement?.facingLeft ?? false,
     isWalking: false,
     isSleeping: false,
@@ -299,6 +335,7 @@ function TwoFloorPlanPreview({
         onFloorChange={setFloor}
         avatarState={avatarState}
         avatarVariant="avatar_girl"
+        walkPath={routeResult?.points}
         activeApplianceIds={activeApplianceIds ?? scenarioPlacement?.activeApplianceIds ?? ['f1-fridge-kitchen', 'f1-ac-living']}
         activeRoomLightIds={[]}
         isEditMode={isEditMode}
@@ -422,12 +459,14 @@ export default function SimulatorGallery() {
           activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' ||
           activeState === 'living-room-layout' || activeState === 'kitchen-layout' || activeState === 'bathroom-layout' ||
           activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' ||
-          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace') && (
+          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' ||
+          activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ||
+          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route') && (
           <TwoFloorPlanPreview
             key={activeState}
-            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' ? 2 : 1}
-            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' ? 2 : 1}
-            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode'}
+            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' ? 2 : 1}
+            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ? 2 : 1}
+            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'floor-follow-edit-mode'}
             activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace'
               ? undefined
               : activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
@@ -436,8 +475,15 @@ export default function SimulatorGallery() {
             setupAllRooms={activeState === 'floor-2-setup-all'}
             debugLayout={activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug'}
             avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa' : activeState === 'avatar-at-shower' ? 'shower' : activeState === 'avatar-at-workplace' ? 'workplace' : undefined}
+            routeScenario={activeState === 'doorway-route-preview' ? 'doorway' : activeState === 'unreachable-room-route' ? 'unreachable' : undefined}
           />
         )}
+
+        {(activeState === 'tidy-up-before' || activeState === 'tidy-up-after' || activeState === 'tidy-up-confirm') && <>
+          <TwoFloorPlanPreview isEditMode messy={activeState === 'tidy-up-before'} debugLayout={activeState !== 'tidy-up-confirm'} />
+          <TidyUpSheet visible={activeState === 'tidy-up-confirm'} onConfirm={() => setActiveState('tidy-up-after')}
+            onClose={() => setActiveState(null)} />
+        </>}
 
         {activeState === 'room-setup-sheet' && (
           <RoomNamingModal visible room={MOCK_SIMULATOR_ROOMS.find((room) => !room.isSetUp) ?? null}
@@ -451,9 +497,11 @@ export default function SimulatorGallery() {
             onSave={() => {}} onCancel={() => setActiveState(null)} />
         )}
 
-        {(activeState === 'edit-tray-collapsed' || activeState === 'edit-tray-dragging') && (
-          <View style={{ flex: 1, justifyContent: 'flex-end', maxHeight: '28%' }}>
+        {(activeState === 'edit-tray-collapsed' || activeState === 'edit-tray-dragging' ||
+          activeState === 'tray-first-screen' || activeState === 'tray-scrolled-end') && (
+          <View style={{ flex: 1, justifyContent: 'flex-end', maxHeight: '22%' }}>
             <EditSheet visible initialCollapsed={activeState === 'edit-tray-collapsed'}
+              initialScrollToEnd={activeState === 'tray-scrolled-end'}
               isDragging={activeState === 'edit-tray-dragging'} onItemPointerDown={() => {}} onItemTap={() => {}} />
           </View>
         )}

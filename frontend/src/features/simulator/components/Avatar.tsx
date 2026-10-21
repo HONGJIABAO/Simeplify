@@ -16,6 +16,7 @@ interface AvatarProps {
   reduceMotion?: boolean;
   sleepRotation?: number;
   size?: number;
+  dimmed?: boolean;
 }
 
 export function Avatar({
@@ -32,6 +33,7 @@ export function Avatar({
   reduceMotion = false,
   sleepRotation = 0,
   size = 44,
+  dimmed = false,
 }: AvatarProps) {
   // Pixel coordinates
   const pixelX = normX * canvasWidth;
@@ -39,6 +41,7 @@ export function Avatar({
 
   // Smooth position animation
   const [posAnim] = useState(() => new Animated.ValueXY({ x: pixelX, y: pixelY }));
+  const [visibilityAnim] = useState(() => new Animated.Value(visible ? 1 : 0));
 
   useEffect(() => {
     Animated.timing(posAnim, {
@@ -48,6 +51,15 @@ export function Avatar({
       useNativeDriver: true,
     }).start();
   }, [pixelX, pixelY, posAnim, reduceMotion]);
+
+  useEffect(() => {
+    Animated.timing(visibilityAnim, {
+      toValue: visible ? 1 : 0,
+      duration: reduceMotion ? 0 : 200,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [reduceMotion, visibilityAnim, visible]);
 
   // Walking bob oscillation
   const [bobAnim] = useState(() => new Animated.Value(0));
@@ -122,9 +134,10 @@ export function Avatar({
           width: size,
           height: size,
           marginLeft: -size / 2,
-          marginTop: isSleeping ? -size / 2 : -size * 0.64,
+          // The normalized route point represents the resident's feet.
+          marginTop: isSleeping ? -size / 2 : -size,
           zIndex,
-          opacity: visible ? 1 : 0,
+          opacity: dimmed ? Animated.multiply(visibilityAnim, 0.45) : visibilityAnim,
           transform: [
             { translateX: posAnim.x },
             { translateY: Animated.add(posAnim.y, bobAnim) },

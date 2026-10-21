@@ -36,6 +36,8 @@ export interface StoredPlacedItem {
   isOn?: boolean;
   color?: string;
   rotation?: number;
+  /** Distinguishes repeated sprites, for example coffee table and side table. */
+  role?: string;
 }
 
 export interface LayoutState {

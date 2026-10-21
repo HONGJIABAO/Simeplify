@@ -13,6 +13,7 @@ import {
 import { RotateCw, X } from 'lucide-react-native';
 import { Sprite } from './Sprite';
 import { StoredPlacedItem } from '../logic/storage';
+import { getLitAppearance, type GlowPlatform } from '../logic/litAppearance';
 
 interface PlacedItemProps {
   item: StoredPlacedItem;
@@ -76,13 +77,22 @@ export function PlacedItem({
       toValue: isOn ? 1 : 0,
       duration: reduceMotion ? 0 : 500,
       easing: Easing.inOut(Easing.ease),
-      useNativeDriver: Platform.OS !== 'web',
+      useNativeDriver: false,
     }).start();
   }, [glowAnim, isOn, reduceMotion]);
 
   // Pixel coordinates on floor plan
   const posX = item.posX * canvasWidth;
   const posY = item.posY * canvasHeight;
+  const [layoutPosition] = useState(() => new Animated.ValueXY({ x: posX - width / 2, y: posY - height / 2 }));
+  useEffect(() => {
+    Animated.timing(layoutPosition, {
+      toValue: { x: posX - width / 2, y: posY - height / 2 },
+      duration: reduceMotion ? 0 : 400,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  }, [height, layoutPosition, posX, posY, reduceMotion, width]);
 
   // Drag responder in edit mode
   const [pan] = useState(() => new Animated.ValueXY());
@@ -125,19 +135,7 @@ export function PlacedItem({
   const horizontalSlop = Math.max(0, Math.ceil((48 - width) / 2));
   const verticalSlop = Math.max(0, Math.ceil((48 - height) / 2));
 
-  const glowRadius = Math.max(4, Math.round(height * 0.09));
-  const webGlowFilter = Platform.OS === 'web' && isOn && !isFurniture
-    ? `drop-shadow(0px 0px ${glowRadius}px rgba(243, 201, 139, 0.70)) drop-shadow(0px 0px ${Math.round(glowRadius * 1.5)}px rgba(243, 201, 139, 0.45))`
-    : undefined;
-
-  const iosGlowStyle = Platform.OS === 'ios' && isOn && !isFurniture
-    ? {
-        shadowColor: '#F3C98B',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.7,
-        shadowRadius: glowRadius,
-      }
-    : undefined;
+  const appearance = getLitAppearance(isOn, isFurniture, Platform.OS as GlowPlatform);
 
   return (
     <Animated.View
@@ -145,8 +143,8 @@ export function PlacedItem({
       style={[
         styles.itemContainer,
         {
-          left: posX - width / 2,
-          top: posY - height / 2,
+          left: layoutPosition.x,
+          top: layoutPosition.y,
           width,
           height: height + (shouldShowLabel ? 24 : 0),
           zIndex,
@@ -170,8 +168,7 @@ export function PlacedItem({
         style={[
           styles.pressableArea,
           { width, height },
-          !isOn && !isFurniture && styles.dimmedOffline,
-          iosGlowStyle,
+          appearance.surface,
         ]}
       >
         {/* Android fallback glow: scaled warm tinted copy behind sprite */}
@@ -180,41 +177,45 @@ export function PlacedItem({
             pointerEvents="none"
             style={[
               StyleSheet.absoluteFill,
-              styles.androidGlowContainer,
+              styles.pictureOnly,
               {
                 opacity: glowAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, 0.5],
+                  outputRange: [0, appearance.androidCopy?.opacity ?? 0],
                 }),
+                transform: [{ scale: appearance.androidCopy?.scale ?? 1 }],
               },
             ]}
           >
             <Sprite
               type={item.spriteKey || item.type}
-              width={width * 1.12}
-              height={height * 1.12}
+              width={width}
+              height={height}
               cropTransparent
-              style={{ tintColor: '#F3C98B' }}
+              style={{ tintColor: appearance.androidCopy?.tintColor }}
               containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
             />
           </Animated.View>
         )}
 
-        <Sprite
-          type={item.spriteKey || item.type}
-          width={width}
-          height={height}
-          cropTransparent
-          style={
-            Platform.OS === 'web' && webGlowFilter
-              ? ({
-                  filter: webGlowFilter,
-                  transition: reduceMotion ? 'none' : 'filter 500ms ease-in-out',
-                } as any)
-              : undefined
-          }
-          containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
-        />
+        <Animated.View pointerEvents="none" style={[styles.pictureOnly, appearance.iosShadow, appearance.iosShadow ? {
+          shadowOpacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] }),
+        } : undefined]}>
+          <Sprite
+            type={item.spriteKey || item.type}
+            width={width}
+            height={height}
+            cropTransparent
+            style={({
+              opacity: appearance.spriteOpacity,
+              ...(appearance.webFilter ? {
+                filter: appearance.webFilter,
+                transition: reduceMotion ? 'none' : 'filter 500ms ease-in-out',
+              } : {}),
+            } as any)}
+            containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
+          />
+        </Animated.View>
 
         {/* Small sage on-dot on top-right of lit appliance */}
         {isOn && !isFurniture && (
@@ -291,12 +292,15 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: 'transparent',
   },
-  dimmedOffline: {
-    opacity: 0.40,
-  },
-  androidGlowContainer: {
+  pictureOnly: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   onDot: {
     position: 'absolute',

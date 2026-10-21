@@ -26,6 +26,7 @@ export interface RoomSlotDefinition {
   w: number;
   facing?: Facing;
   layer?: 'ceiling' | 'floor';
+  role?: string;
 }
 
 export interface RoomTemplateDefinition {
@@ -33,54 +34,63 @@ export interface RoomTemplateDefinition {
   clearZones: readonly FractionRect[];
 }
 
+type LayoutItemIdentity = Pick<StoredPlacedItem, 'type' | 'spriteKey'> & Pick<Partial<StoredPlacedItem>, 'id' | 'role'>;
+
 /** Single source of truth for every fixed room item position and size. */
 export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   living: {
     slots: [
-      { type: 'tv', spriteKey: 'tv', x: 0.40, y: 0.14, w: 0.24, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.80, y: 0.07, w: 0.22, facing: 'down' },
-      { type: 'sofa', spriteKey: 'sofa', x: 0.40, y: 0.58, w: 0.40, facing: 'up' },
-      { type: 'lights', spriteKey: 'lights', x: 0.82, y: 0.62, w: 0.08 },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.32, y: 0.07, w: 0.20, facing: 'down' },
+      { type: 'tv', spriteKey: 'tv', x: 0.72, y: 0.14, w: 0.22, facing: 'down' },
+      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.56, w: 0.20, role: 'coffee table' },
+      { type: 'sofa', spriteKey: 'sofa', x: 0.50, y: 0.75, w: 0.32, facing: 'up' },
+      { type: 'table', spriteKey: 'table', x: 0.22, y: 0.74, w: 0.13, role: 'side table left' },
+      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.74, w: 0.13, role: 'side table right' },
+      { type: 'fan', spriteKey: 'fan', x: 0.90, y: 0.48, w: 0.10 },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
     ],
-    clearZones: [{ x: 0.06, y: 0.26, width: 0.88, height: 0.19 }],
+    clearZones: [{ x: 0.43, y: 0.30, width: 0.14, height: 0.16 }],
   },
   kitchen: {
     slots: [
-      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.80, y: 0.16, w: 0.22, facing: 'down' },
-      { type: 'sink', spriteKey: 'sink', x: 0.45, y: 0.10, w: 0.14, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.40, y: 0.62, w: 0.34 },
+      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.20, y: 0.16, w: 0.20, facing: 'down' },
+      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.16, w: 0.26, facing: 'down', role: 'counter' },
+      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.70, w: 0.30, role: 'dining' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
     ],
-    clearZones: [],
+    clearZones: [{ x: 0.43, y: 0.25, width: 0.14, height: 0.28 }],
   },
   bathroom: {
     slots: [
-      { type: 'toilet', spriteKey: 'toilet', x: 0.18, y: 0.14, w: 0.14, facing: 'down' },
-      { type: 'sink', spriteKey: 'sink', x: 0.45, y: 0.10, w: 0.14, facing: 'down' },
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.82, y: 0.14, w: 0.16, facing: 'down' },
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.76, y: 0.14, w: 0.16, facing: 'down' },
+      { type: 'sink', spriteKey: 'sink', x: 0.34, y: 0.64, w: 0.13, facing: 'up' },
+      { type: 'toilet', spriteKey: 'toilet', x: 0.66, y: 0.64, w: 0.13, facing: 'up' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
     ],
-    clearZones: [{ x: 0.65, y: 0.25, width: 0.30, height: 0.25 }],
+    clearZones: [{ x: 0.43, y: 0.26, width: 0.14, height: 0.26 }],
   },
   bedroom: {
     slots: [
-      { type: 'bed', spriteKey: 'bed', x: 0.50, y: 0.30, w: 0.38, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.50, y: 0.07, w: 0.22, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.15, y: 0.14, w: 0.08 },
-      { type: 'fan', spriteKey: 'fan', x: 0.85, y: 0.30, w: 0.14 },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.62, w: 0.10, layer: 'ceiling' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.24, y: 0.07, w: 0.20, facing: 'down' },
+      { type: 'bed', spriteKey: 'bed', x: 0.50, y: 0.30, w: 0.34, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.27, y: 0.38, w: 0.07, role: 'bedside left' },
+      { type: 'lights', spriteKey: 'lights', x: 0.73, y: 0.38, w: 0.07, role: 'bedside right' },
+      { type: 'fan', spriteKey: 'fan', x: 0.85, y: 0.78, w: 0.11 },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
     ],
-    clearZones: [],
+    clearZones: [{ x: 0.43, y: 0.52, width: 0.14, height: 0.40 }],
   },
   workplace: {
     slots: [
-      { type: 'workplace', spriteKey: 'workplace', x: 0.50, y: 0.14, w: 0.34, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.80, y: 0.07, w: 0.22, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.18, y: 0.14, w: 0.08 },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.62, w: 0.10, layer: 'ceiling' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.07, w: 0.18, facing: 'down' },
+      { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.30, w: 0.28, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.16, y: 0.38, w: 0.06, role: 'bedside left' },
+      { type: 'lights', spriteKey: 'lights', x: 0.56, y: 0.38, w: 0.06, role: 'bedside right' },
+      { type: 'workplace', spriteKey: 'workplace', x: 0.78, y: 0.26, w: 0.25, facing: 'down' },
+      { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.80, w: 0.10 },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
     ],
-    clearZones: [{ x: 0.06, y: 0.26, width: 0.88, height: 0.24 }],
+    clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
   },
 };
 
@@ -134,12 +144,17 @@ export function getRoomTemplateId(
 }
 
 export function getRoomSlotDefinition(
-  item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>,
+  item: LayoutItemIdentity,
   room: Pick<StoredRoom, 'type'>,
-  roomItems: readonly Pick<StoredPlacedItem, 'type' | 'spriteKey'>[] = []
+  roomItems: readonly LayoutItemIdentity[] = []
 ): RoomSlotDefinition | undefined {
   const type = canonicalItemType(item);
-  return ROOM_SLOTS[getRoomTemplateId(room, roomItems)].slots.find((slot) => slot.type === type);
+  const matches = ROOM_SLOTS[getRoomTemplateId(room, roomItems)].slots.filter((slot) => slot.type === type);
+  const roleMatch = item.role ? matches.find((slot) => slot.role === item.role) : undefined;
+  if (roleMatch) return roleMatch;
+  const sameTypeItems = roomItems.filter((candidate) => canonicalItemType(candidate) === type);
+  const occurrence = item.id ? Math.max(0, sameTypeItems.findIndex((candidate) => candidate.id === item.id)) : 0;
+  return matches[Math.min(occurrence, Math.max(0, matches.length - 1))];
 }
 
 function slotLocalCenter(slot: RoomSlotDefinition) {
@@ -165,6 +180,30 @@ export function layoutItemsInRooms(items: StoredPlacedItem[], rooms: StoredRoom[
     const point = getSlotPlanPoint(room, slot);
     return [{ ...item, posX: point.x, posY: point.y }];
   });
+}
+
+export interface TidyFloorResult {
+  items: StoredPlacedItem[];
+  moved: StoredPlacedItem[];
+  leftovers: StoredPlacedItem[];
+}
+
+/** Re-lay out known items on one floor; unknown items and dark rooms stay put. */
+export function tidyFloorItems(items: StoredPlacedItem[], rooms: StoredRoom[], floor: 1 | 2): TidyFloorResult {
+  const moved: StoredPlacedItem[] = [];
+  const leftovers: StoredPlacedItem[] = [];
+  const next = items.map((item) => {
+    const room = rooms.find((candidate) => candidate.id === item.roomId);
+    if (!room || room.floor !== floor || !room.isSetUp) return item;
+    const roomItems = items.filter((candidate) => candidate.roomId === room.id);
+    const slot = getRoomSlotDefinition(item, room, roomItems);
+    if (!slot) { leftovers.push(item); return item; }
+    const point = getSlotPlanPoint(room, slot);
+    const placed = { ...item, posX: point.x, posY: point.y };
+    if (Math.abs(placed.posX - item.posX) > 0.0001 || Math.abs(placed.posY - item.posY) > 0.0001) moved.push(placed);
+    return placed;
+  });
+  return { items: next, moved, leftovers };
 }
 
 export function getFixedItemDimensions(

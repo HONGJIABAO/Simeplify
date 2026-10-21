@@ -21,6 +21,7 @@ export interface RawSpecItem {
   type: string;
   spriteKey: string;
   alwaysOn?: boolean;
+  role?: string;
 }
 
 type FixtureItem = Omit<StoredPlacedItem, 'posX' | 'posY'>;
@@ -39,22 +40,25 @@ const appliance = (
   alwaysOn: type === 'refrigerator', isOn: false, ...extra,
 });
 
-const furniture = (id: string, roomId: string, type: string, name: string): FixtureItem => ({
-  id, roomId, type, spriteKey: type, name, category: 'Furniture',
+const furniture = (id: string, roomId: string, type: string, name: string, role?: string): FixtureItem => ({
+  id, roomId, type, spriteKey: type, name, category: 'Furniture', role,
 });
 
 const DEFAULT_ITEMS: FixtureItem[] = [
-  // 1F A · Living room. The TV-to-sofa lane remains empty.
+  // 1F A · Living room. Repeated table sprites have explicit roles.
   appliance('f1-tv-living', 'f1-A', 'tv', 'Samsung TV', 90, { brand: 'Samsung' }),
   appliance('f1-ac-living', 'f1-A', 'air_conditioner', 'Panasonic Air Conditioner', 1200, { brand: 'Panasonic', hoursPerDay: 8 }),
   furniture('f1-sofa-living', 'f1-A', 'sofa', 'Sofa'),
-  appliance('f1-lamp-living', 'f1-A', 'lights', 'Philips Table Lamp', 18, { brand: 'Philips' }),
+  furniture('f1-coffee-living', 'f1-A', 'table', 'Coffee Table', 'coffee table'),
+  furniture('f1-side-left-living', 'f1-A', 'table', 'Left Side Table', 'side table left'),
+  furniture('f1-side-right-living', 'f1-A', 'table', 'Right Side Table', 'side table right'),
+  appliance('f1-fan-living', 'f1-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
   appliance('f1-bulb-a', 'f1-A', 'light_bulb', 'Living room light', 9),
 
   // 1F B · Kitchen.
   appliance('f1-fridge-kitchen', 'f1-B', 'refrigerator', 'Samsung Inverter Fridge', 150, { brand: 'Samsung' }),
-  furniture('f1-sink-kitchen', 'f1-B', 'sink', 'Sink'),
-  furniture('f1-table-kitchen', 'f1-B', 'table', 'Dining Table'),
+  furniture('f1-counter-kitchen', 'f1-B', 'table', 'Kitchen Counter', 'counter'),
+  furniture('f1-table-kitchen', 'f1-B', 'table', 'Dining Table', 'dining'),
   appliance('f1-bulb-b', 'f1-B', 'light_bulb', 'Kitchen light', 9),
 
   // 1F C · Bathroom. 1F D deliberately has no items.
@@ -66,13 +70,18 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   // 2F A · Bedroom.
   furniture('f2-bed-master', 'f2-A', 'bed', 'Bed'),
   appliance('f2-ac-master', 'f2-A', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin', hoursPerDay: 8 }),
-  appliance('f2-lamp-master', 'f2-A', 'lights', 'Philips Bedside Lamp', 12, { brand: 'Philips' }),
-  appliance('f2-fan-master', 'f2-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK' }),
+  appliance('f2-lamp-master-left', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside left' }),
+  appliance('f2-lamp-master-right', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside right' }),
+  appliance('f2-fan-master', 'f2-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
   appliance('f2-bulb-a', 'f2-A', 'light_bulb', 'Master bedroom light', 9),
 
   // 2F B · Study & Guest. Workplace is the desk, laptop, and phone in one sprite.
+  furniture('f2-bed-study', 'f2-B', 'bed', 'Guest Bed'),
+  appliance('f2-ac-study', 'f2-B', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin', hoursPerDay: 8 }),
+  appliance('f2-lamp-study-left', 'f2-B', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside left' }),
+  appliance('f2-lamp-study-right', 'f2-B', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside right' }),
   appliance('f2-workplace-study', 'f2-B', 'workplace', 'Workplace', 80, { brand: '' }),
-  appliance('f2-lamp-study', 'f2-B', 'lights', 'Philips Table Lamp', 18, { brand: 'Philips' }),
+  appliance('f2-fan-study', 'f2-B', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
   appliance('f2-bulb-b', 'f2-B', 'light_bulb', 'Study light', 9),
 
   // 2F C · Upstairs bathroom.
@@ -104,7 +113,7 @@ function toRaw(item: StoredPlacedItem): RawSpecItem {
     item: item.name, category: item.category, label: item.name, wattage: item.wattage,
     stars: item.stars, floor: room.floor, slot: room.slot, x: item.posX, y: item.posY,
     size: item.type === 'air_conditioner' || item.type === 'water_heater' ? 'wall' : 'medium',
-    type: item.type, spriteKey: item.spriteKey, alwaysOn: item.alwaysOn,
+    type: item.type, spriteKey: item.spriteKey, alwaysOn: item.alwaysOn, role: item.role,
   };
 }
 

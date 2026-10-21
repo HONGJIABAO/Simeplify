@@ -1,6 +1,7 @@
 /** SIM-05, SIM-06, SIM-07 — two-floor Simulator floor plan. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, LayoutChangeEvent, Platform, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { CircleAlert, MoveUp, Undo2 } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useToast } from '@/components/Toast';
@@ -15,6 +16,8 @@ import { BillModal } from '@/features/simulator/components/BillModal';
 import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
+import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
+import { WeekReelCaption, WeekReelSummary } from '@/features/simulator/components/WeekReelStatus';
 import {
   StoredRoom, StoredPlacedItem, loadLayoutState, saveLayoutState, loadSimulationState,
   saveSimulationState, loadRoutineBlocks, saveRoutineBlocks,
@@ -26,10 +29,14 @@ import {
   formatTimeMinutes, Point,
 } from '@/features/simulator/logic/SimulationEngine';
 import { resolveAvatarPlacement } from '@/features/simulator/logic/avatarPlace';
-import { getRoomSlotDefinition, getSlotPlanPoint, layoutItemsInRooms } from '@/features/simulator/logic/furnishedLayout';
+import { getRoomSlotDefinition, getSlotPlanPoint, tidyFloorItems } from '@/features/simulator/logic/furnishedLayout';
 import { SpriteItemDef } from '@/features/simulator/logic/spriteMap';
 import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms } from '@/features/simulator/logic/roomData';
 import { containsPoint, FloorNumber, getFloorPlanLayout, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
+import { shouldFollowAvatarFloor } from '@/features/simulator/logic/floorFollow';
+import { AVATAR_PLAN_SPEED_PER_SECOND, findHomeWalkRoute } from '@/features/simulator/logic/walkGraph';
+import { buildWeekReel, getReducedMotionSummary, getReelSavings, getReelTargetDate, type WeekReelSegment } from '@/features/simulator/logic/weekReel';
+import { calcTotalSavings } from '@/features/simulator/logic/fastForward';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
 import {
@@ -45,12 +52,27 @@ import {
   type TariffRateRow,
 } from '@/lib/services/simulatorService';
 
-const FAST_FORWARD_CONFIG: Record<FastForwardPeriod, { durationSeconds: number; label: string }> = {
-  '1w': { durationSeconds: 5, label: '1 week' },
-  '1m': { durationSeconds: 10, label: '1 month' },
-  '1y': { durationSeconds: 15, label: '1 year' },
-};
-interface FastForwardRun { period: FastForwardPeriod; durationSeconds: number; elapsedSeconds: number }
+const CURRENT_MONTHLY_SAVINGS_RM = 0;
+interface WeekReelSnapshot {
+  simulatedMinutes: number;
+  simulatedDateTime: Date;
+  avatarState: AvatarSimulationState;
+  viewedFloor: FloorNumber;
+  walkPath: Point[];
+}
+interface WeekReelRun {
+  period: FastForwardPeriod;
+  segments: WeekReelSegment[];
+  index: number;
+  segmentStartedAt: number;
+  segmentDurationMs: number;
+  completedDurationMs: number;
+  totalDurationMs: number;
+  totalSavingsRm: number;
+  startDate: Date;
+  snapshot: WeekReelSnapshot;
+  completing?: boolean;
+}
 type PendingRoomAction =
   | { kind: 'new'; itemDef: SpriteItemDef; point: Point }
   | { kind: 'move'; itemId: string; point: Point };
@@ -60,6 +82,7 @@ export default function SimulatorScreen() {
   const insets = useSafeAreaInsets();
   const tabBarClearance = 56 + Math.max(insets.bottom, 16) + 8;
   const { showToast } = useToast();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const [initialLayout] = useState(loadLayoutState);
   const [initialSimulation] = useState(loadSimulationState);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -68,11 +91,13 @@ export default function SimulatorScreen() {
     (initialLayout?.items && initialLayout.items.length > 0 ? initialLayout.items : MOCK_SIMULATOR_ITEMS).map((item) => ({ ...item, roomId: migrateRoomId(item.roomId) }))
   );
   const [currentFloor, setCurrentFloor] = useState<FloorNumber>(initialSimulation?.viewedFloor ?? 1);
+  const currentFloorRef = useRef(currentFloor);
+  useEffect(() => { currentFloorRef.current = currentFloor; }, [currentFloor]);
   const setupRooms = useMemo(() => getSetUpRooms(rooms), [rooms]);
   const [simSpeed] = useState<SimSpeed>(initialSimulation?.simSpeed ?? 1);
   const [simulatedMinutes, setSimulatedMinutes] = useState(initialSimulation?.simulatedMinutes ?? 18 * 60 + 30);
   const [simulatedDateTime, setSimulatedDateTime] = useState(() => {
-    const date = new Date(2026, 9, 20, 0, 0, 0, 0);
+    const date = new Date(2026, 9, 22, 0, 0, 0, 0);
     date.setMinutes(initialSimulation?.simulatedMinutes ?? 18 * 60 + 30);
     return date;
   });
@@ -146,6 +171,9 @@ export default function SimulatorScreen() {
   const [namingRoom, setNamingRoom] = useState<StoredRoom | null>(null);
   const [pendingRoomAction, setPendingRoomAction] = useState<PendingRoomAction | null>(null);
   const [billModalVisible, setBillModalVisible] = useState(false);
+  const [tidySheetVisible, setTidySheetVisible] = useState(false);
+  const [tidyUndoItems, setTidyUndoItems] = useState<StoredPlacedItem[] | null>(null);
+  const tidyUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [routineBlocks, setRoutineBlocks] = useState<RoutineBlock[]>(() => {
     const saved = loadRoutineBlocks();
@@ -163,6 +191,16 @@ export default function SimulatorScreen() {
   const floorViewportRef = useRef<FloorViewport>({ scale: 1, translateX: 0, translateY: 0 });
   const [dragGhost, setDragGhost] = useState<{ item: SpriteItemDef; x: number; y: number } | null>(null);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+  const [placementMessage, setPlacementMessage] = useState<string | null>(null);
+  const placementMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const publishPlacementMessage = useCallback((message: string) => {
+    if (placementMessageTimerRef.current) clearTimeout(placementMessageTimerRef.current);
+    setPlacementMessage(message);
+    placementMessageTimerRef.current = setTimeout(() => setPlacementMessage(null), 2500);
+  }, []);
+  useEffect(() => () => {
+    if (placementMessageTimerRef.current) clearTimeout(placementMessageTimerRef.current);
+  }, []);
   const measureFloorPlan = useCallback(() => {
     (floorPlanRef.current as any)?.measureInWindow((x: number, y: number, width: number, height: number) => {
       if (width > 0 && height > 0) floorRectRef.current = { left: x, top: y, width, height };
@@ -187,15 +225,58 @@ export default function SimulatorScreen() {
     facingLeft: boolean;
     isStair: boolean;
   } | null>(null);
+  const avatarPathQueueRef = useRef<Point[]>([]);
+  const [walkPath, setWalkPath] = useState<Point[]>([]);
   const pendingFloorTransferRef = useRef<{
     floor: FloorNumber;
     roomId: string;
     destination: Point;
     facingLeft: boolean;
+    followView: boolean;
+    destinationPath: Point[];
   } | null>(null);
+  const userChangedFloorDuringWalkRef = useRef(false);
   const transitionStartedRef = useRef(false);
-  const fastForwardRunRef = useRef<FastForwardRun | null>(null);
-  const [activeFastForward, setActiveFastForward] = useState<FastForwardPeriod | null>(null);
+  const reelRunRef = useRef<WeekReelRun | null>(null);
+  const reelCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectedFastForward, setSelectedFastForward] = useState<FastForwardPeriod>('1M');
+  const [isWeekReelPlaying, setIsWeekReelPlaying] = useState(false);
+  const [weekReelView, setWeekReelView] = useState<{ segment: WeekReelSegment; savingsRm: number } | null>(null);
+  const [reducedWeekSummary, setReducedWeekSummary] = useState<ReturnType<typeof getReducedMotionSummary> | null>(null);
+
+  const installAvatarRoute = useCallback((
+    points: Point[],
+    meta: Omit<NonNullable<typeof avatarTargetRef.current>, 'point'>
+  ) => {
+    const route = points.length ? points : [{
+      x: avatarStateRef.current.currentX,
+      y: avatarStateRef.current.currentY,
+    }];
+    const pending = route.slice(1);
+    const first = pending.shift() ?? route[0];
+    avatarPathQueueRef.current = pending;
+    avatarTargetRef.current = { ...meta, point: first };
+    setWalkPath(route);
+  }, []);
+
+  const stopWeekReel = useCallback(() => {
+    if (reelCompletionTimerRef.current) clearTimeout(reelCompletionTimerRef.current);
+    const run = reelRunRef.current;
+    reelRunRef.current = null;
+    setIsWeekReelPlaying(false);
+    setWeekReelView(null);
+    setReducedWeekSummary(null);
+    if (!run) return;
+    avatarTargetRef.current = null;
+    avatarPathQueueRef.current = [];
+    pendingFloorTransferRef.current = null;
+    transitionStartedRef.current = false;
+    setWalkPath(run.snapshot.walkPath);
+    setAvatarState(run.snapshot.avatarState);
+    setCurrentFloor(run.snapshot.viewedFloor);
+    setSimulatedMinutes(run.snapshot.simulatedMinutes);
+    setSimulatedDateTime(run.snapshot.simulatedDateTime);
+  }, []);
 
   useEffect(() => {
     let lastTime = Date.now();
@@ -203,14 +284,7 @@ export default function SimulatorScreen() {
       const now = Date.now();
       const deltaSec = (now - lastTime) / 1000;
       lastTime = now;
-      const run = fastForwardRunRef.current;
-      let simMinutesDelta: number;
-      if (run) {
-        const frame = Math.min(deltaSec, Math.max(0, run.durationSeconds - run.elapsedSeconds));
-        simMinutesDelta = frame / run.durationSeconds * 7 * 24 * 60;
-        run.elapsedSeconds += frame;
-        if (run.elapsedSeconds >= run.durationSeconds) { fastForwardRunRef.current = null; setActiveFastForward(null); }
-      } else simMinutesDelta = deltaSec / SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour * 60;
+      const simMinutesDelta = reelRunRef.current ? 0 : deltaSec / SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour * 60;
       setSimulatedMinutes((value) => (value + simMinutesDelta) % 1440);
       setSimulatedDateTime((value) => new Date(value.getTime() + simMinutesDelta * 60_000));
       const target = avatarTargetRef.current;
@@ -220,25 +294,40 @@ export default function SimulatorScreen() {
         const dx = nextTarget.x - previous.currentX;
         const dy = nextTarget.y - previous.currentY;
         const distance = Math.hypot(dx, dy);
-        const step = (run ? 12 : 0.28) * deltaSec;
+        const step = AVATAR_PLAN_SPEED_PER_SECOND * deltaSec;
         if (distance <= step) {
+          const nextPathPoint = avatarPathQueueRef.current.shift();
+          if (nextPathPoint) {
+            avatarTargetRef.current = { ...target, point: nextPathPoint };
+            return {
+              ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: true,
+              facingLeft: nextPathPoint.x < nextTarget.x ? true : nextPathPoint.x > nextTarget.x ? false : previous.facingLeft,
+            };
+          }
           avatarTargetRef.current = null;
+          setWalkPath([]);
           const transfer = pendingFloorTransferRef.current;
           if (target.isStair && transfer && previous.currentFloor !== transfer.floor && !transitionStartedRef.current) {
             transitionStartedRef.current = true;
+            const fadeOutMs = reduceMotion ? 0 : 200;
             setTimeout(() => {
-              pendingFloorTransferRef.current = null;
-              transitionStartedRef.current = false;
-              avatarTargetRef.current = {
-                point: transfer.destination, floor: transfer.floor, roomId: transfer.roomId,
-                facingLeft: transfer.facingLeft, isStair: false,
-              };
-              setAvatarState((state) => ({
-                ...state, currentFloor: transfer.floor, targetFloor: transfer.floor,
-                currentX: STAIR_CENTER.x, currentY: STAIR_CENTER.y,
-                isFloorTransitioning: false, isWalking: true,
-              }));
-            }, reduceMotion ? 0 : 400);
+              const shouldFollow = transfer.followView && !userChangedFloorDuringWalkRef.current;
+              if (shouldFollow) setCurrentFloor(transfer.floor);
+              const floorFadeMs = reduceMotion || !shouldFollow ? 0 : 400;
+              setTimeout(() => {
+                pendingFloorTransferRef.current = null;
+                transitionStartedRef.current = false;
+                installAvatarRoute(transfer.destinationPath, {
+                  floor: transfer.floor, roomId: transfer.roomId,
+                  facingLeft: transfer.facingLeft, isStair: false,
+                });
+                setAvatarState((state) => ({
+                  ...state, currentFloor: transfer.floor, targetFloor: transfer.floor,
+                  currentX: STAIR_CENTER.x, currentY: STAIR_CENTER.y,
+                  isFloorTransitioning: false, isWalking: true,
+                }));
+              }, floorFadeMs);
+            }, fadeOutMs);
             return { ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false, isFloorTransitioning: true };
           }
           return {
@@ -255,9 +344,54 @@ export default function SimulatorScreen() {
       });
     }, 50);
     return () => clearInterval(interval);
-  }, [reduceMotion, simSpeed]);
+  }, [installAvatarRoute, reduceMotion, simSpeed]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const run = reelRunRef.current;
+      if (!run || run.completing) return;
+      const elapsed = Date.now() - run.segmentStartedAt;
+      const segmentProgress = Math.min(1, elapsed / run.segmentDurationMs);
+      const overallProgress = Math.min(1, (run.completedDurationMs + Math.min(elapsed, run.segmentDurationMs)) / run.totalDurationMs);
+      const savingsRm = getReelSavings(run.totalSavingsRm, run.index, segmentProgress);
+      setWeekReelView({ segment: run.segments[run.index], savingsRm });
+      setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, overallProgress));
+      if (segmentProgress < 1) return;
+      if (run.index === run.segments.length - 1) {
+        run.completing = true;
+        setWeekReelView({ segment: run.segments[run.index], savingsRm: run.totalSavingsRm });
+        setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, 1));
+        reelCompletionTimerRef.current = setTimeout(stopWeekReel, reduceMotion ? 0 : 700);
+        return;
+      }
+      run.completedDurationMs += run.segmentDurationMs;
+      run.index += 1;
+      run.segmentStartedAt = Date.now();
+      const targetRoomId = run.segments[run.index].block?.roomId;
+      const targetRoom = rooms.find((room) => room.id === targetRoomId);
+      run.segmentDurationMs = targetRoom && targetRoom.floor !== avatarStateRef.current.currentFloor ? 6000 : 4000;
+      setWeekReelView({ segment: run.segments[run.index], savingsRm });
+    }, 50);
+    return () => clearInterval(interval);
+  }, [reduceMotion, rooms, stopWeekReel]);
 
   const currentRoutine = useMemo(() => {
+    if (weekReelView) {
+      const featured = weekReelView.segment.block;
+      if (weekReelView.segment.isAway || !featured) return {
+        id: `reel-${weekReelView.segment.day}-away`, name: 'Away', startTime: featured?.startTime ?? '', endTime: featured?.endTime ?? '',
+        targetRoomId: setupRooms.find((room) => room.type === 'living')?.id ?? setupRooms[0]?.id,
+        targetRoomType: 'living' as const, isSleeping: false, isAway: true, activeApplianceTypes: [] as string[],
+        iconType: 'away' as const, avatarWalks: true,
+      };
+      return {
+        id: `reel-${weekReelView.segment.day}-${featured.id}`, name: featured.name,
+        startTime: featured.startTime, endTime: featured.endTime,
+        targetRoomId: featured.roomId, targetRoomType: undefined,
+        isSleeping: featured.iconType === 'sleep', isAway: false,
+        activeApplianceTypes: featured.applianceIds, iconType: featured.iconType, avatarWalks: featured.avatarWalks,
+      };
+    }
     const active = getActiveBlockAtTime(formatTimeMinutes(simulatedMinutes), routineBlocks);
     if (active) return {
       id: active.id, name: active.name, startTime: active.startTime, endTime: active.endTime,
@@ -271,34 +405,52 @@ export default function SimulatorScreen() {
       iconType: fallback.isSleeping ? 'sleep' as const : fallback.name.toLowerCase().includes('shower') ? 'shower' as const : 'custom' as const,
       avatarWalks: true,
     };
-  }, [routineBlocks, simulatedMinutes]);
+  }, [routineBlocks, setupRooms, simulatedMinutes, weekReelView]);
   const routineKey = `${currentRoutine.id}|${currentRoutine.name}|${currentRoutine.targetRoomId ?? currentRoutine.targetRoomType}|${currentRoutine.isSleeping}|${currentRoutine.avatarWalks}|${currentRoutine.activeApplianceTypes?.join(',')}`;
   useEffect(() => {
     if (!setupRooms.length) return;
     const directId = currentRoutine.targetRoomId && currentRoutine.targetRoomId !== 'away' ? migrateRoomId(currentRoutine.targetRoomId) : null;
     const targetRoom = setupRooms.find((room) => room.id === directId)
       ?? setupRooms.find((room) => room.type === currentRoutine.targetRoomType) ?? setupRooms[0];
-    const arrangedRoomItems = layoutItemsInRooms(items, rooms).filter((item) => item.roomId === targetRoom.id);
+    const arrangedRoomItems = items.filter((item) => item.roomId === targetRoom.id);
     const placement = resolveAvatarPlacement({
       name: currentRoutine.name,
       iconType: currentRoutine.iconType,
       applianceIds: currentRoutine.activeApplianceTypes ?? [],
       avatarWalks: currentRoutine.avatarWalks,
     }, targetRoom, arrangedRoomItems);
-    const destination = placement.target;
+    const destination = currentRoutine.isAway ? { x: 0.29, y: 0.50 } : placement.target;
     const previous = avatarStateRef.current;
+    const routes = findHomeWalkRoute({
+      rooms: setupRooms,
+      startFloor: previous.currentFloor,
+      endFloor: targetRoom.floor,
+      start: { x: previous.currentX, y: previous.currentY },
+      startRoomId: previous.currentRoomId,
+      end: destination,
+      endRoomId: targetRoom.id,
+    });
     if (targetRoom.floor !== previous.currentFloor) {
+      userChangedFloorDuringWalkRef.current = false;
       pendingFloorTransferRef.current = {
         floor: targetRoom.floor, roomId: targetRoom.id, destination, facingLeft: placement.facingLeft,
+        destinationPath: routes[1]?.points ?? [STAIR_CENTER, destination],
+        followView: shouldFollowAvatarFloor({
+          viewedFloor: currentFloorRef.current,
+          avatarFloorAtWalkStart: previous.currentFloor,
+          isEditMode,
+        }),
       };
-      avatarTargetRef.current = {
-        point: STAIR_CENTER, floor: previous.currentFloor, roomId: null, facingLeft: STAIR_CENTER.x < previous.currentX, isStair: true,
-      };
+      installAvatarRoute(routes[0]?.points ?? [{ x: previous.currentX, y: previous.currentY }, STAIR_CENTER], {
+        floor: previous.currentFloor, roomId: null,
+        facingLeft: STAIR_CENTER.x < previous.currentX, isStair: true,
+      });
     } else {
       pendingFloorTransferRef.current = null;
-      avatarTargetRef.current = {
-        point: destination, floor: targetRoom.floor, roomId: targetRoom.id, facingLeft: placement.facingLeft, isStair: false,
-      };
+      installAvatarRoute(routes[0]?.points ?? [{ x: previous.currentX, y: previous.currentY }, destination], {
+        floor: targetRoom.floor, roomId: targetRoom.id,
+        facingLeft: placement.facingLeft, isStair: false,
+      });
     }
     const stateTimer = setTimeout(() => {
       setAvatarState((state) => ({
@@ -307,14 +459,22 @@ export default function SimulatorScreen() {
       }));
     }, 0);
     return () => clearTimeout(stateTimer);
-  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType]);
+  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType, isEditMode, installAvatarRoute]);
+
+  const handleFloorChange = useCallback((floor: FloorNumber) => {
+    if (pendingFloorTransferRef.current || transitionStartedRef.current) {
+      userChangedFloorDuringWalkRef.current = true;
+      if (pendingFloorTransferRef.current) pendingFloorTransferRef.current.followView = false;
+    }
+    setCurrentFloor(floor);
+  }, []);
 
   const { activeApplianceIds, activeRoomLightIds } = useMemo(() => {
     const activeIds: string[] = [];
     const lightRooms: string[] = [];
     const targetRoom = setupRooms.find((room) => room.id === avatarState.targetRoomId);
     const arrangedRoomItems = targetRoom
-      ? layoutItemsInRooms(items, rooms).filter((item) => item.roomId === targetRoom.id)
+      ? items.filter((item) => item.roomId === targetRoom.id)
       : [];
     const visualActiveIds = targetRoom ? resolveAvatarPlacement({
       name: currentRoutine.name,
@@ -322,14 +482,20 @@ export default function SimulatorScreen() {
       applianceIds: currentRoutine.activeApplianceTypes ?? [],
       avatarWalks: currentRoutine.avatarWalks,
     }, targetRoom, arrangedRoomItems).activeApplianceIds : [];
+    const residentHasArrived = Boolean(targetRoom
+      && avatarState.currentRoomId === targetRoom.id
+      && !avatarState.isWalking
+      && !avatarState.isFloorTransitioning);
     for (const item of items) {
       if (item.category !== 'Appliances') continue;
-      if (!(item.alwaysOn || item.isOn || visualActiveIds.includes(item.id))) continue;
+      const isRoomCeilingLight = residentHasArrived && item.roomId === targetRoom?.id && item.type === 'light_bulb';
+      if (!(item.alwaysOn || (residentHasArrived && visualActiveIds.includes(item.id)) || isRoomCeilingLight)) continue;
       activeIds.push(item.id);
       if (item.type === 'lights' || item.type === 'light_bulb') lightRooms.push(item.roomId);
     }
     return { activeApplianceIds: activeIds, activeRoomLightIds: [...new Set(lightRooms)] };
-  }, [avatarState.targetRoomId, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, items, rooms, setupRooms]);
+  }, [avatarState.currentRoomId, avatarState.isFloorTransitioning, avatarState.isWalking, avatarState.targetRoomId,
+    currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, items, setupRooms]);
 
   const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => {
     return calculateLiveTnbBill({
@@ -347,11 +513,42 @@ export default function SimulatorScreen() {
   const simulatedDateStr = useMemo(() => simulatedDateTime.toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kuala_Lumpur',
   }), [simulatedDateTime]);
-  const handleFastForward = (period: FastForwardPeriod) => {
-    const config = FAST_FORWARD_CONFIG[period];
-    fastForwardRunRef.current = { period, durationSeconds: config.durationSeconds, elapsedSeconds: 0 };
-    setActiveFastForward(period);
-    showToast(`${config.label} preview: completing 7 days in ${config.durationSeconds} seconds`, 'info');
+  const handleFastForwardPeriod = (period: FastForwardPeriod) => {
+    if (isWeekReelPlaying) stopWeekReel();
+    setSelectedFastForward(period);
+  };
+
+  const handleFastForwardToggle = () => {
+    if (isEditMode) return;
+    if (isWeekReelPlaying || reducedWeekSummary) { stopWeekReel(); return; }
+    const segments = buildWeekReel(routineBlocks);
+    const totalSavingsRm = calcTotalSavings(CURRENT_MONTHLY_SAVINGS_RM, selectedFastForward);
+    if (reduceMotion) {
+      setReducedWeekSummary(getReducedMotionSummary(routineBlocks, totalSavingsRm));
+      return;
+    }
+    const durations: number[] = [];
+    let expectedFloor = avatarState.currentFloor;
+    for (const segment of segments) {
+      const roomId = segment.block?.roomId;
+      const room = rooms.find((candidate) => candidate.id === roomId);
+      const changesFloor = Boolean(room && room.floor !== expectedFloor);
+      durations.push(changesFloor ? 6000 : 4000);
+      if (room) expectedFloor = room.floor;
+    }
+    const snapshot: WeekReelSnapshot = {
+      simulatedMinutes, simulatedDateTime: new Date(simulatedDateTime.getTime()),
+      avatarState: { ...avatarState }, viewedFloor: currentFloor, walkPath: [...walkPath],
+    };
+    reelRunRef.current = {
+      period: selectedFastForward, segments, index: 0, segmentStartedAt: Date.now(),
+      segmentDurationMs: durations[0], completedDurationMs: 0,
+      totalDurationMs: durations.reduce((sum, duration) => sum + duration, 0),
+      totalSavingsRm, startDate: new Date(simulatedDateTime.getTime()), snapshot,
+    };
+    setReducedWeekSummary(null);
+    setWeekReelView({ segment: segments[0], savingsRm: 0 });
+    setIsWeekReelPlaying(true);
   };
 
   const getFixedPlacementPoint = (
@@ -459,22 +656,13 @@ export default function SimulatorScreen() {
     setDragGhost(null); setHoveredRoomId(null);
     const point = pointerToPlanPosition(clientX, clientY);
     const target = point ? getPlanTarget(point) : null;
-    if (target?.kind === 'stair') showToast("Stairs can't hold items", 'info');
+    if (target?.kind === 'stair') publishPlacementMessage("Stairs can't hold items");
     else if (target?.kind === 'room' && point) requestPlacement(itemDef, target.room, point);
-    else showToast('Drop inside a room to place item', 'info');
+    else publishPlacementMessage('Drop inside a room to place item');
   };
   const handleItemPointerDown = (itemDef: SpriteItemDef, clientX: number, clientY: number) => {
     measureFloorPlan();
     setDragGhost({ item: itemDef, x: clientX, y: clientY });
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const onPointerMove = (event: PointerEvent) => {
-      updateTrayDrag(itemDef, event.clientX, event.clientY);
-    };
-    const onPointerUp = (event: PointerEvent) => {
-      window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp);
-      completeTrayDrop(itemDef, event.clientX, event.clientY);
-    };
-    window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
   };
 
   const handleSelectItem = (item: StoredPlacedItem) => {
@@ -563,6 +751,38 @@ export default function SimulatorScreen() {
     setFurnitureSheetVisible(false); setEditingFurniture(null); showToast(`Saved ${saved.name}`, 'success');
   };
 
+  const saveMovedAppliancePositions = (moved: StoredPlacedItem[]) => Promise.all(moved
+    .filter((item) => item.category === 'Appliances' && !item.id.startsWith('pending_') && !item.id.startsWith('mock_'))
+    .map((item) => updateAppliance(item.id, { roomId: item.roomId, posX: item.posX, posY: item.posY })));
+
+  const handleTidyFloor = () => {
+    const before = items.map((item) => ({ ...item }));
+    const result = tidyFloorItems(items, rooms, currentFloor);
+    setItems(result.items);
+    setTidyUndoItems(before);
+    if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
+    tidyUndoTimerRef.current = setTimeout(() => setTidyUndoItems(null), 6000);
+    saveMovedAppliancePositions(result.moved).catch((err) => console.error('Failed to save tidy positions:', err));
+    showToast(result.leftovers.length
+      ? `Tidied ${result.moved.length} items; ${result.leftovers.length} stayed in place`
+      : `Tidied ${result.moved.length} items on ${currentFloor}F`, 'success');
+  };
+
+  const handleUndoTidy = () => {
+    if (!tidyUndoItems) return;
+    const restored = tidyUndoItems;
+    const restoredFloorItems = restored.filter((item) => rooms.find((room) => room.id === item.roomId)?.floor === currentFloor);
+    setItems(restored);
+    setTidyUndoItems(null);
+    if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
+    saveMovedAppliancePositions(restoredFloorItems).catch((err) => console.error('Failed to save restored positions:', err));
+    showToast('Tidy up undone', 'info');
+  };
+
+  useEffect(() => () => {
+    if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
+  }, []);
+
   const appliancesForBillModal: Appliance[] = useMemo(() => items.filter((item) => item.category === 'Appliances').map((item) => ({
     id: item.id, name: item.name, type: item.type as any, brand: item.brand || 'Standard', wattage: item.wattage || 100,
     stars: item.stars ?? 3, roomId: item.roomId, posX: item.posX, posY: item.posY, alwaysOn: item.alwaysOn || false,
@@ -576,22 +796,24 @@ export default function SimulatorScreen() {
           activeFastForward={activeFastForward} isEditMode={isEditMode}
           hasUnreadNotifications={unreadNotificationsCount > 0}
           onToggleEdit={() => { setIsEditMode((value) => !value); setSelectedItemId(null); setSelectedPendingItem(null); }}
+          onTidyUp={() => setTidySheetVisible(true)}
           onSelectFastForward={handleFastForward} onPressBillCard={() => setBillModalVisible(true)}
           onPressBell={() => router.push('/notifications')} onPressCalendar={() => setTimelineVisible(true)} />
-        <View style={styles.currentTaskRow} accessibilityRole="text">
+        {!(isEditMode && Math.min(screenWidth - 32, screenHeight - 460) < 280) && <View style={styles.currentTaskRow} accessibilityRole="text">
           <View style={styles.currentTaskDot} />
           <View style={styles.currentTaskCopy}><Text style={styles.currentTaskLabel}>Current task</Text>
             <Text style={styles.currentTaskName} numberOfLines={1}>{currentRoutine.name}</Text></View>
           <Text style={styles.currentTaskTime}>{currentRoutine.startTime}–{currentRoutine.endTime}</Text>
-        </View>
+        </View>}
         <View
           style={[
             styles.floorPlanArea,
-            { paddingBottom: isEditMode ? 220 : tabBarClearance },
+            { paddingBottom: isEditMode ? 214 : tabBarClearance },
           ]}
         >
-          <FloorPlan rooms={rooms} items={items} currentFloor={currentFloor} onFloorChange={setCurrentFloor}
+          <FloorPlan rooms={rooms} items={items} currentFloor={currentFloor} onFloorChange={handleFloorChange}
             avatarState={avatarState} avatarVariant={avatarVariant}
+            walkPath={walkPath}
             activeApplianceIds={activeApplianceIds} activeRoomLightIds={activeRoomLightIds}
             isEditMode={isEditMode} selectedItemId={selectedItemId} dragGhost={dragGhost} hoveredRoomId={hoveredRoomId}
             onRoomPress={handleRoomPress} onSelectItem={handleSelectItem} onDeleteItem={handleDeleteItem}
@@ -599,10 +821,21 @@ export default function SimulatorScreen() {
             onViewportChange={(viewport) => { floorViewportRef.current = viewport; }} floorPlanRef={floorPlanRef} onLayout={onFloorLayout} />
         </View>
       </View>
-      {isEditMode && <View style={styles.editTrayOverlay}><EditSheet visible isDragging={Boolean(dragGhost)}
+      {isEditMode && <View style={styles.editTrayOverlay}><EditSheet visible applianceTypes={applianceTypes} isDragging={Boolean(dragGhost)}
         onItemPointerDown={handleItemPointerDown} onItemDragMove={updateTrayDrag} onItemDragEnd={completeTrayDrop}
-        onItemTap={(item) => { setDragGhost(null); setSelectedPendingItem(item); showToast(`Tap a room to place ${item.label}`, 'info'); }}
+        onItemTap={(item) => { setDragGhost(null); setSelectedPendingItem(item); publishPlacementMessage(`Tap a room to place ${item.label}`); }}
         selectedPendingKey={selectedPendingItem?.key} /></View>}
+      {isEditMode && (dragGhost || selectedPendingItem || placementMessage) && <View pointerEvents="none" style={styles.placementPill}>
+        {placementMessage ? <CircleAlert size={16} color="#A65A43" strokeWidth={1.8} /> : <MoveUp size={16} color="#566549" strokeWidth={1.8} />}
+        <Text style={[styles.placementPillText, placementMessage && styles.placementPillError]}>
+          {placementMessage ?? (selectedPendingItem ? `Tap a room to place ${selectedPendingItem.label}` : 'Drop inside a room to place item')}
+        </Text>
+      </View>}
+      {isEditMode && tidyUndoItems && !dragGhost && !selectedPendingItem && <Pressable style={styles.undoTidyPill}
+        onPress={handleUndoTidy} accessibilityRole="button" accessibilityLabel="Undo tidy up">
+        <Undo2 size={16} color="#566549" strokeWidth={1.8} />
+        <Text style={styles.undoTidyText}>Undo tidy up</Text>
+      </Pressable>}
       {dragGhost && <View pointerEvents="none" style={[styles.dragGhostRoot, { left: dragGhost.x - 26, top: dragGhost.y - 26 }]}>
         <Sprite type={dragGhost.item.key} size={52} /></View>}
       <ApplianceDetailsSheet visible={applianceSheetVisible} item={editingAppliance} rooms={setupRooms}
@@ -611,6 +844,7 @@ export default function SimulatorScreen() {
         onSave={handleSaveFurniture} onCancel={() => { setFurnitureSheetVisible(false); setEditingFurniture(null); }} onDelete={handleDeleteItem} />
       <RoomNamingModal visible={namingModalVisible} room={namingRoom} onSave={handleSaveRoomName}
         onClose={() => { setNamingModalVisible(false); setNamingRoom(null); setPendingRoomAction(null); }} />
+      <TidyUpSheet visible={tidySheetVisible} onConfirm={handleTidyFloor} onClose={() => setTidySheetVisible(false)} />
       <BillModal visible={billModalVisible} onClose={() => setBillModalVisible(false)} appliances={appliancesForBillModal}
         totalKwh={totalKwh} rooms={setupRooms as any} onAddAppliances={() => { setBillModalVisible(false); setIsEditMode(true); }} />
       <MyDayTimelineSheet visible={timelineVisible} onClose={() => setTimelineVisible(false)} blocks={routineBlocks}
@@ -675,6 +909,15 @@ const styles = StyleSheet.create({
   currentTaskLabel: { fontFamily: 'SourceSans3_400Regular', fontSize: 12, lineHeight: 16, color: '#57534E' },
   currentTaskName: { fontFamily: 'Lora_500Medium', fontSize: 18, lineHeight: 23, color: '#292524', letterSpacing: -0.2 },
   currentTaskTime: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549', marginLeft: 10 },
-  editTrayOverlay: { position: 'absolute', left: 0, right: 0, bottom: 64, zIndex: 40, maxHeight: '28%', overflow: 'hidden' },
+  editTrayOverlay: { position: 'absolute', left: 0, right: 0, bottom: 64, zIndex: 40, height: 150, maxHeight: '22%', overflow: 'hidden' },
+  placementPill: { position: 'absolute', left: 32, right: 32, bottom: 222, zIndex: 42, minHeight: 40, borderRadius: 999,
+    paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#D9DED2' },
+  placementPillText: { flexShrink: 1, fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549', textAlign: 'center' },
+  placementPillError: { color: '#A65A43' },
+  undoTidyPill: { position: 'absolute', alignSelf: 'center', bottom: 222, zIndex: 43, minHeight: 48, borderRadius: 24,
+    paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
+  undoTidyText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },
   dragGhostRoot: { position: Platform.OS === 'web' ? 'fixed' as any : 'absolute', width: 52, height: 52, opacity: 0.88, zIndex: 9999 },
 });

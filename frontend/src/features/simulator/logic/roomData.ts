@@ -103,8 +103,8 @@ export function getRoomDisplayName(room: StoredRoom, rooms: StoredRoom[]): strin
 const LEGACY_ROOM_ID_MAP: Record<string, string> = {
   living: 'f1-A',
   kitchen: 'f1-B',
-  bedroom: 'f1-C',
-  bathroom: 'f1-D',
+  bedroom: 'f2-A',
+  bathroom: 'f1-C',
 };
 
 export function migrateRoomId(roomId: string): string {
