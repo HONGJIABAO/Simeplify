@@ -49,7 +49,7 @@ export function CheckAndCorrectSheet({
   const [amount, setAmount] = useState('');
   const [provider, setProvider] = useState<string | undefined>(undefined);
   const [confirmReplace, setConfirmReplace] = useState(false);
-  const [prevInitialValues, setPrevInitialValues] = useState<CheckAndCorrectInitialValues | undefined>(undefined);
+  const [prevInitialValues, setPrevInitialValues] = useState<CheckAndCorrectInitialValues | null | undefined>(undefined);
   const [prevReadingFailed, setPrevReadingFailed] = useState<boolean>(false);
 
   // Sync initial values when sheet opens or read finishes

@@ -513,6 +513,71 @@ export interface Database {
           }
         ];
       };
+      rewards: {
+        Row: {
+          id: string;
+          voting_month: string;
+          title: string;
+          description: string;
+          target_points: number | null;
+          is_unlocked: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          voting_month: string;
+          title: string;
+          description?: string;
+          target_points?: number | null;
+          is_unlocked?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          voting_month?: string;
+          title?: string;
+          description?: string;
+          target_points?: number | null;
+          is_unlocked?: boolean;
+        };
+        Relationships: [];
+      };
+      votes: {
+        Row: {
+          id: string;
+          household_id: string;
+          reward_id: string;
+          voting_month: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          reward_id: string;
+          voting_month: string;
+          created_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          reward_id?: string;
+          voting_month?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "votes_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "votes_reward_id_fkey";
+            columns: ["reward_id"];
+            isOneToOne: false;
+            referencedRelation: "rewards";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       bills: {
         Row: {
           id: string;

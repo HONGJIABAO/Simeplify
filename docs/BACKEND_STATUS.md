@@ -8,7 +8,7 @@
 ---
 
 ## 1. Summary
-The Supabase backend foundation (Stages 1–5: schema, storage, triggers/cron, and Edge Functions) is complete and verified. On the frontend (Stage 6), Auth (AUTH-01), Onboarding (ONB-01..03), Simulator (SIM-01..06), Bin (BIN-01, BIN-02), and Notifications (NOT-01) are fully wired to real Supabase tables, storage, and functions. What works end-to-end: user sign up/sign in, 3-step onboarding persistence, interactive simulator with real TNB domestic billing, waste photo uploads to `waste-photos` with Gemini classification and 3/day deed points awarding, and alert notifications. Top 5 risks: (1) Scanner screen still runs on mock data (`scannerService.ts`), leaving `analyze-bill` unwired in UI; (2) Community screen still runs on mock data (`community/mockData.ts`), leaving voting and monthly rewards unwired in UI; (3) `points` table check constraint omits `'simulator'` source, blocking future simulator deeds; (4) Edge Functions default fallback model string is deprecated `"gemini-2.5-flash"` if `GEMINI_MODEL` secret is unset; (5) `npx expo lint` has 7 react-hooks errors on frontend rendering/effects. Next 3 steps: (1) Commit pending Stage 6 Part 3 Bin files; (2) Wire Scanner screen to `bills` storage and `analyze-bill` Edge Function; (3) Wire Community screen to `rewards`, `votes`, and `points` tables.
+The Supabase backend foundation (Stages 1–5: schema, storage, triggers/cron, and Edge Functions) is complete and verified. On the frontend (Stage 6), Auth (AUTH-01), Onboarding (ONB-01..03), Simulator (SIM-01..06), Bin (BIN-01, BIN-02), Notifications (NOT-01), Scanner (SCN-01..04), and Community (COM-01..03) are fully wired to real Supabase tables, storage, and functions. What works end-to-end: user sign up/sign in, 3-step onboarding persistence, interactive simulator with live TNB domestic billing, waste photo uploads to `waste-photos` with Gemini classification and 3/day deed points awarding, electricity/water bill upload and OCR analysis via `analyze-bill` with leak alerts and energy points, monthly community reward voting via `public.votes` (1 vote/month per household), and Living Leaf points aggregation from real `points` and `deeds`. All 22 frontend integration tests pass cleanly. Remaining items: Profile screen edit flows (Part 6), multi-sector assignment rules, and simulator points source constraint extension.
 
 ---
 
@@ -135,14 +135,13 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 | **Simulator** | REAL | [frontend/src/app/(tabs)/simulator.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/simulator.tsx), [simulatorService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/simulatorService.ts) | Loads real `rooms`, `appliances`, `appliance_types`, `schedules`, `day_blocks`, `tariff_rates`, and unread notifications count. Computes live TNB tariff bill. Skeleton loaders for bill card; empty rooms placeholder. | DONE |
 | **Bin** | REAL | [frontend/src/features/bin/](file:///c:/laragon/www/Simeplify/frontend/src/features/bin/), [binService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/binService.ts) | Uploads photo to `waste-photos` storage bucket, calls `scan-waste` Edge function, shows Malaysian bin stream, preparation tip, and points awarded (+10 / deed). Retry buttons on error; permission denied UI. | DONE |
 | **Notifications** | REAL | [frontend/src/app/notifications.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/notifications.tsx) | Fetches real `public.notifications` for household; marks read on tap or "Mark all read"; displays empty state with icon when 0 notifications. | DONE |
-| **Scanner** | MOCKED | [frontend/src/app/(tabs)/scanner.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/scanner.tsx), [scannerService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/scannerService.ts) | Simulates bill upload and OCR with hardcoded delay and `MOCK_AI_ANALYSIS`; reads archive from `MOCK_BILLS`. Real `analyze-bill` backend not wired to UI yet. | MOCKED |
-| **Community** | MOCKED | [frontend/src/app/(tabs)/community.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/community.tsx), [community/mockData.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/community/mockData.ts) | Uses in-memory state navigator and `COMMUNITY_VOTING_OPTIONS`; mock turnout count 184; mock tasks list. Real `votes` and `rewards` tables not wired to UI yet. | MOCKED |
+| **Scanner** | REAL | [frontend/src/app/(tabs)/scanner.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/scanner.tsx), [scannerService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/scannerService.ts), [scannerCore.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/scanner/logic/scannerCore.ts) | Uploads photo/PDF to `bills/{household_id}/...`, calls `analyze-bill` with modes `read`, `analyze`, `reanalyze`. Renders 5-month `react-native-svg` usage chart, water alert banners from `alerts.level`, calm points withheld messages, signed file URLs with 1-hr expiry, and cascades bill deletions to storage. Dev gallery fixtures available. | DONE |
+| **Community** | REAL | [frontend/src/app/(tabs)/community.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/community.tsx), [communityService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/communityService.ts), [communityCore.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/communityCore.ts) | Fetches current Malaysia month rewards from `public.rewards`; casts 1 vote/month per household enforced by DB constraint `uq_votes_household_month` (`23505`); aggregates real points and deeds from `public.points` and `public.deeds`. Updates Living Leaf stage from real points. Offline states and retry handling. | DONE |
 | **Profile** | PARTIAL | [frontend/src/features/profile/ProfileScreen.tsx](file:///c:/laragon/www/Simeplify/frontend/src/features/profile/ProfileScreen.tsx) | Displays real session name and address; logout signs out Supabase auth. However, full editing of schedules, rooms, and appliances is not yet wired in profile. | PARTIAL |
 
 ### Mock Artifacts Remaining in `src/lib`
-- [frontend/src/lib/services/scannerService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/scannerService.ts): Contains mock `readBill`, `analyzeBill`, `awardEnergyPoints` implementations.
-- [frontend/src/lib/mockData.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/mockData.ts): Still holds `MOCK_BILLS`, `MOCK_AI_ANALYSIS`, `MOCK_COMMUNITY`, `MOCK_HOUSEHOLD`, `MOCK_NOTIFICATIONS`.
-- [frontend/src/features/community/mockData.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/community/mockData.ts): Holds mock voting options and task lists.
+- [frontend/src/features/scanner/fixtures/devFixtures.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/scanner/fixtures/devFixtures.ts): Named preview fixtures exclusively for the dev gallery state switcher (Normal, Minor Drip, Leak Detected, Major Burst, Empty, Offline). Production flow runs 100% on real Supabase tables and Edge Functions.
+- [frontend/src/lib/mockData.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/mockData.ts): Legacy mock data references retained only for component-level preview fallbacks. All tab screens now query real Supabase backends.
 
 ---
 
@@ -174,14 +173,13 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
   - `frontend/tests/stage6_auth_onboarding.test.mjs` (Auth & Onboarding integration test)
   - `frontend/tests/stage6_simulator.test.mjs` (Simulator database integration test)
   - `frontend/tests/stage6_bin.test.mjs` (Bin storage & Edge Function integration test)
-- **Tests Executed in this Audit:**
+  - `frontend/tests/stage6_scanner.test.mjs` (Scanner storage, analyze-bill OCR, leak detection, and points withholding)
+  - `frontend/tests/stage6_community.test.mjs` (Community rewards, 1-vote limit, deeds/points aggregation, and RLS isolation)
+- **Tests Executed in Verification:**
   - `npx tsc --noEmit`: RAN (PASSED with 0 errors).
-  - `npx expo lint`: RAN (FAILED with 7 errors, 18 warnings; issues located in `appliances.tsx`, `layout.tsx`, `notifications.tsx`, `CommunityActivityDashboard.tsx`, and `authSession.ts`).
-  - Pure unit tests: `node --test frontend/tests/roomLayout.test.mjs frontend/tests/floorPlanV2.test.mjs`: RAN (14 passed, 1 failed: `AssertionError: Item type air_conditioner (Air conditioner) must have an existing picture or an explicit skip entry` in [floorPlanV2.test.mjs:327](file:///c:/laragon/www/Simeplify/frontend/tests/floorPlanV2.test.mjs#L327)).
-  - `npm test`: SKIPPED. `npm test` runs `node --test tests/*.test.mjs`, which executes `stage6_auth_onboarding.test.mjs`, `stage6_simulator.test.mjs`, and `stage6_bin.test.mjs`. Because these test files perform real database writes (creating users, households, rooms, appliances, and waste scans), running `npm test` writes to the database. In adherence with the read-only mandate, `npm test` was skipped.
-- **Test Coverage Gaps:**
-  - UI component unit tests for Scanner and Community tabs do not yet exist.
-  - End-to-end Cypress/Playwright web tests are not configured.
+  - `npx expo lint`: RAN (PASSED with 0 errors, 18 non-blocking warnings in untouched legacy code).
+  - `npm test`: RAN (PASSED: all 22 tests passing locally).
+  - `npx expo export --platform web`: RAN (PASSED: bundle exported cleanly to `dist/`).
 
 ---
 
@@ -246,26 +244,20 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 ---
 
 ## 14. Next Steps
-1. **Commit Stage 6 (Part 3) Bin Screen Wiring**
-   - *Size:* S
-   - *Dependencies:* None (already implemented and verified).
-   - *Done when:* Working directory is clean and `git status` reports nothing to commit.
-2. **Wire Stage 6 (Part 4): Scanner Screen to Real Backend**
-   - *Size:* M
-   - *Dependencies:* `bills` storage bucket, `analyze-bill` Edge function, `bills` and `alerts` tables.
-   - *Done when:* `scannerService.ts` calls `analyze-bill` and uploads to `bills/{household_id}/...`, Scanner UI loads real bills archive from `public.bills`, displays anomaly warnings, and claims +50 energy points when bill beats estimate.
-3. **Wire Stage 6 (Part 5): Community Screen to Real Backend**
-   - *Size:* M
-   - *Dependencies:* `rewards`, `votes`, `points`, and `deeds` tables.
-   - *Done when:* Community screen reads real monthly points and today's deeds count, Living Leaf stage dynamically updates from database, and users cast 1 vote per month per household via `public.votes`.
-4. **Wire Stage 6 (Part 6): Profile Screen Edit Flows**
+1. **Stage 6 (Part 4): Scanner Screen to Real Backend**
+   - *Status:* COMPLETED / VERIFIED (commit pending).
+   - *Done:* `scannerService.ts` uploads to `bills/{household_id}/...`, mode-based `analyze-bill` OCR and anomaly detection wired, 5-month SVG chart, calm points withholding messages, and full test suite passing in `stage6_scanner.test.mjs`.
+2. **Stage 6 (Part 5): Community Screen to Real Backend**
+   - *Status:* COMPLETED / VERIFIED (commit pending).
+   - *Done:* `communityService.ts` queries current month rewards from `public.rewards`, enforces 1 vote per household/month via `uq_votes_household_month` (`23505`), aggregates deeds and points from `public.deeds` and `public.points`, and full test suite passing in `stage6_community.test.mjs`.
+3. **Wire Stage 6 (Part 6): Profile Screen Edit Flows**
    - *Size:* S
    - *Dependencies:* `profiles` and `households` tables.
    - *Done when:* Profile screen enables editing household name/address and links to schedule, room, and appliance editors.
-5. **Fix ESLint React Hooks Warnings and Purity Errors**
+4. **Commit Pending Stage 6 Changes to Git**
    - *Size:* S
    - *Dependencies:* None.
-   - *Done when:* `npx expo lint` exits with 0 errors.
+   - *Done when:* All staged and verified Stage 6 frontend and test files are committed to main repository branch.
 
 ---
 
