@@ -10,7 +10,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Recycle,
   Camera,
@@ -33,12 +33,13 @@ import {
 } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
 import { fetchBinState, type BinState } from '@/lib/services/binService';
-import { useFocusEffect } from 'expo-router';
+import { useUnreadNotifications } from '@/lib/services/notificationService';
 
 export default function BinHomeScreen() {
   const router = useRouter();
   const { session } = useAuthSession();
   const householdId = session.profile?.household_id;
+  const { hasUnread } = useUnreadNotifications(householdId);
 
   const [binState, setBinState] = useState<BinState | null>(null);
 
@@ -70,7 +71,7 @@ export default function BinHomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* No title bar — bell pill only (page_refined.md 1.1) */}
-      <Header variant="bell-only" />
+      <Header variant="bell-only" hasUnread={hasUnread} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

@@ -360,7 +360,7 @@ export interface Database {
         Row: {
           id: string;
           household_id: string;
-          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready' | 'routine_reminder' | 'appliance_reminder';
           title: string;
           message: string;
           is_read: boolean;
@@ -371,7 +371,7 @@ export interface Database {
         Insert: {
           id?: string;
           household_id: string;
-          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          type: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready' | 'routine_reminder' | 'appliance_reminder';
           title: string;
           message: string;
           is_read?: boolean;
@@ -381,7 +381,7 @@ export interface Database {
         };
         Update: {
           household_id?: string;
-          type?: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready';
+          type?: 'bill_alert' | 'voting_open' | 'month_result' | 'reward_ready' | 'routine_reminder' | 'appliance_reminder';
           title?: string;
           message?: string;
           is_read?: boolean;
@@ -668,6 +668,12 @@ export interface Database {
           p_street?: string | null;
         };
         Returns: string;
+      };
+      sync_routine_appliance_notifications: {
+        Args: {
+          p_household_id?: string | null;
+        };
+        Returns: number;
       };
     };
     Enums: {

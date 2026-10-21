@@ -8,7 +8,7 @@
 ---
 
 ## 1. Summary
-The Supabase backend foundation (Stages 1–5: schema, storage, triggers/cron, and Edge Functions) is complete and verified. On the frontend (Stage 6), Auth (AUTH-01), Onboarding (ONB-01..03), Simulator (SIM-01..06), Bin (BIN-01, BIN-02), Notifications (NOT-01), Scanner (SCN-01..04), and Community (COM-01..03) are fully wired to real Supabase tables, storage, and functions. What works end-to-end: user sign up/sign in, 3-step onboarding persistence, interactive simulator with live TNB domestic billing, waste photo uploads to `waste-photos` with Gemini classification and 3/day deed points awarding, electricity/water bill upload and OCR analysis via `analyze-bill` with leak alerts and energy points, monthly community reward voting via `public.votes` (1 vote/month per household), and Living Leaf points aggregation from real `points` and `deeds`. All 22 frontend integration tests pass cleanly. Remaining items: Profile screen edit flows (Part 6), multi-sector assignment rules, and simulator points source constraint extension.
+The Supabase backend foundation (Stages 1–5: schema, storage, triggers/cron, and Edge Functions) is complete and verified. On the frontend (Stage 6), Auth (AUTH-01), Onboarding (ONB-01..03), Simulator (SIM-01..06), Bin (BIN-01, BIN-02), Notifications (NOT-01), Scanner (SCN-01..04), Community (COM-01..03), and Profile (PRO-01) are fully wired to real Supabase tables, storage, and functions. What works end-to-end: user sign up/sign in, demo one-click login with rich seed data, 3-step onboarding persistence, interactive simulator with live TNB domestic billing, waste photo uploads to `waste-photos` with Gemini classification and 3/day deed points awarding, electricity/water bill upload and OCR analysis via `analyze-bill` with leak alerts and energy points, monthly community reward voting via `public.votes` (1 vote/month per household), Living Leaf points aggregation from real `points` and `deeds`, and real Profile/Household query and edit persistence with dynamic unread notification badges. All 24 frontend integration tests pass cleanly. Stage 6 is 100% complete.
 
 ---
 
@@ -137,7 +137,7 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 | **Notifications** | REAL | [frontend/src/app/notifications.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/notifications.tsx) | Fetches real `public.notifications` for household; marks read on tap or "Mark all read"; displays empty state with icon when 0 notifications. | DONE |
 | **Scanner** | REAL | [frontend/src/app/(tabs)/scanner.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/scanner.tsx), [scannerService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/scannerService.ts), [scannerCore.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/scanner/logic/scannerCore.ts) | Uploads photo/PDF to `bills/{household_id}/...`, calls `analyze-bill` with modes `read`, `analyze`, `reanalyze`. Renders 5-month `react-native-svg` usage chart, water alert banners from `alerts.level`, calm points withheld messages, signed file URLs with 1-hr expiry, and cascades bill deletions to storage. Dev gallery fixtures available. | DONE |
 | **Community** | REAL | [frontend/src/app/(tabs)/community.tsx](file:///c:/laragon/www/Simeplify/frontend/src/app/(tabs)/community.tsx), [communityService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/communityService.ts), [communityCore.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/communityCore.ts) | Fetches current Malaysia month rewards from `public.rewards`; casts 1 vote/month per household enforced by DB constraint `uq_votes_household_month` (`23505`); aggregates real points and deeds from `public.points` and `public.deeds`. Updates Living Leaf stage from real points. Offline states and retry handling. | DONE |
-| **Profile** | PARTIAL | [frontend/src/features/profile/ProfileScreen.tsx](file:///c:/laragon/www/Simeplify/frontend/src/features/profile/ProfileScreen.tsx) | Displays real session name and address; logout signs out Supabase auth. However, full editing of schedules, rooms, and appliances is not yet wired in profile. | PARTIAL |
+| **Profile** | REAL | [frontend/src/features/profile/ProfileScreen.tsx](file:///c:/laragon/www/Simeplify/frontend/src/features/profile/ProfileScreen.tsx), [profileService.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/profileService.ts), [profileCore.ts](file:///c:/laragon/www/Simeplify/frontend/src/lib/services/profileCore.ts) | Fetches real `public.profiles`, `public.households`, and dynamic unread notifications count (> 0 displays tan/amber indicator dot); lightweight bottom sheet edit flow for name and address; `signOut` clears active session and redirects to login. | DONE |
 
 ### Mock Artifacts Remaining in `src/lib`
 - [frontend/src/features/scanner/fixtures/devFixtures.ts](file:///c:/laragon/www/Simeplify/frontend/src/features/scanner/fixtures/devFixtures.ts): Named preview fixtures exclusively for the dev gallery state switcher (Normal, Minor Drip, Leak Detected, Major Burst, Empty, Offline). Production flow runs 100% on real Supabase tables and Edge Functions.
@@ -175,10 +175,12 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
   - `frontend/tests/stage6_bin.test.mjs` (Bin storage & Edge Function integration test)
   - `frontend/tests/stage6_scanner.test.mjs` (Scanner storage, analyze-bill OCR, leak detection, and points withholding)
   - `frontend/tests/stage6_community.test.mjs` (Community rewards, 1-vote limit, deeds/points aggregation, and RLS isolation)
+  - `frontend/tests/demo_login_seed.test.mjs` (Demo user seed, login, and full module state verification)
+  - `frontend/tests/stage6_profile.test.mjs` (Profile & household fetch/update, unread notifications count, security locks, sign out)
 - **Tests Executed in Verification:**
   - `npx tsc --noEmit`: RAN (PASSED with 0 errors).
   - `npx expo lint`: RAN (PASSED with 0 errors, 18 non-blocking warnings in untouched legacy code).
-  - `npm test`: RAN (PASSED: all 22 tests passing locally).
+  - `npm test`: RAN (PASSED: all 24 tests passing locally).
   - `npx expo export --platform web`: RAN (PASSED: bundle exported cleanly to `dist/`).
 
 ---
@@ -245,15 +247,18 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 
 ## 14. Next Steps
 1. **Stage 6 (Part 4): Scanner Screen to Real Backend**
-   - *Status:* COMPLETED / VERIFIED (commit pending).
+   - *Status:* COMPLETED / VERIFIED.
    - *Done:* `scannerService.ts` uploads to `bills/{household_id}/...`, mode-based `analyze-bill` OCR and anomaly detection wired, 5-month SVG chart, calm points withholding messages, and full test suite passing in `stage6_scanner.test.mjs`.
 2. **Stage 6 (Part 5): Community Screen to Real Backend**
-   - *Status:* COMPLETED / VERIFIED (commit pending).
+   - *Status:* COMPLETED / VERIFIED.
    - *Done:* `communityService.ts` queries current month rewards from `public.rewards`, enforces 1 vote per household/month via `uq_votes_household_month` (`23505`), aggregates deeds and points from `public.deeds` and `public.points`, and full test suite passing in `stage6_community.test.mjs`.
-3. **Wire Stage 6 (Part 6): Profile Screen Edit Flows**
-   - *Size:* S
-   - *Dependencies:* `profiles` and `households` tables.
-   - *Done when:* Profile screen enables editing household name/address and links to schedule, room, and appliance editors.
+3. **Stage 6 (Part 6): Profile Screen & Global Smart Appliance Notification Engine**
+   - *Status:* COMPLETED / VERIFIED.
+   - *Done:*
+     - Created migration `20261021000001_routine_appliance_notifications.sql`: expanded `public.notifications` type check with `'routine_reminder'` and `'appliance_reminder'`; implemented `public.sync_routine_appliance_notifications()` with pre-sleep lights shutoff reminders, routine-transition AC and active appliance shutoff reminders, and pre-away departure checklist; hooked automated triggers on `day_blocks` and `schedules`.
+     - Integrated shared notification service (`notificationCore.ts`, `notificationService.ts`) with unread badge hook across all headers: Simulator, Bin, Community, Scanner, Profile.
+     - Preserved exact minimalist UI layout of `ProfileScreen.tsx` (top-right bell with unread dot, 3D character avatar card, profile name and address pill `{street}, {city}, {state}`, and Log out button with edit bottom sheet).
+     - Verified with `frontend/tests/stage6_profile_and_notifications.test.mjs` and all 25 test suites passing in `npm test`.
 4. **Commit Pending Stage 6 Changes to Git**
    - *Size:* S
    - *Dependencies:* None.

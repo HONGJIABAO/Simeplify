@@ -9,14 +9,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, AlertTriangle, Gift, Vote, FileText, CheckCheck } from 'lucide-react-native';
+import { ArrowLeft, Bell, AlertTriangle, Gift, Vote, FileText, CheckCheck, Moon, Power } from 'lucide-react-native';
 import { useAuthSession } from '@/lib/authSession';
 import {
   fetchNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   type NotificationRow,
-} from '@/lib/services/simulatorService';
+} from '@/lib/services/notificationService';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -50,6 +50,9 @@ export default function NotificationsScreen() {
         prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n))
       );
     }
+    if (item.linked_path) {
+      router.push(item.linked_path as any);
+    }
   };
 
   const handleMarkAllRead = async () => {
@@ -68,6 +71,10 @@ export default function NotificationsScreen() {
         return <FileText size={18} color="#566549" strokeWidth={1.75} />;
       case 'reward_ready':
         return <Gift size={18} color="#e6c39b" strokeWidth={1.75} />;
+      case 'routine_reminder':
+        return <Moon size={18} color="#a97a4a" strokeWidth={1.75} />;
+      case 'appliance_reminder':
+        return <Power size={18} color="#a97a4a" strokeWidth={1.75} />;
       default:
         return <Bell size={18} color="#78716c" strokeWidth={1.75} />;
     }

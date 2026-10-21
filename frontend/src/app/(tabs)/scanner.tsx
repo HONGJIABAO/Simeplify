@@ -35,6 +35,7 @@ import { BillDetailSheet } from '@/components/scanner/BillDetailSheet';
 
 // Data & Services
 import { useAuthSession } from '@/lib/authSession';
+import { useUnreadNotifications } from '@/lib/services/notificationService';
 import {
   type Bill,
   type BillAnalysis,
@@ -148,6 +149,7 @@ export default function ScannerScreen() {
   const { showToast } = useToast();
   const { session } = useAuthSession();
   const householdId = session.profile?.household_id;
+  const { hasUnread } = useUnreadNotifications(householdId);
 
   // Real Data States
   const [bills, setBills] = useState<Bill[]>([]);
@@ -422,7 +424,7 @@ export default function ScannerScreen() {
         variant="page-title-block"
         title="Bill analyzer"
         subtitle="Track monthly utility trends, detect leaks, and get AI tips."
-        hasUnread={false}
+        hasUnread={hasUnread}
       />
 
       <ScrollView

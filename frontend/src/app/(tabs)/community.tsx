@@ -18,6 +18,7 @@ import {
   isCommunityOfflineError,
   type CommunityState,
 } from '@/lib/services/communityService';
+import { useUnreadNotifications } from '@/lib/services/notificationService';
 
 type LoadState = 'loading' | 'ready' | 'error' | 'offline';
 
@@ -26,6 +27,7 @@ export default function CommunityScreen() {
   const { showToast } = useToast();
   const { session } = useAuthSession();
   const householdId = session.profile?.household_id;
+  const { hasUnread } = useUnreadNotifications(householdId);
   const [community, setCommunity] = useState<CommunityState | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [message, setMessage] = useState('');
@@ -96,7 +98,10 @@ export default function CommunityScreen() {
             onPress={() => router.push('/notifications')}
             style={({ pressed }) => [styles.bellButton, pressed && styles.pressed]}
           >
-            <Bell size={22} color="#292524" strokeWidth={1.7} />
+            <View style={styles.bellIconContainer}>
+              <Bell size={22} color="#292524" strokeWidth={1.7} />
+              {hasUnread ? <View style={styles.unreadDot} /> : null}
+            </View>
           </Pressable>
         </View>
 
@@ -160,6 +165,20 @@ const styles = StyleSheet.create({
     borderColor: '#E7E5E4',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bellIconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#a97a4a',
   },
   pressed: { opacity: 0.72 },
   scrollContent: {
