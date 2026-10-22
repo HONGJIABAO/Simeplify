@@ -52,12 +52,12 @@ interface DefaultRoomSeed {
 const DEFAULT_ROOM_SEEDS: DefaultRoomSeed[] = [
   { floor: 1, slot: 'A', type: 'living', name: 'Living room', isSetUp: true },
   { floor: 1, slot: 'B', type: 'kitchen', name: 'Kitchen', isSetUp: true },
-  { floor: 1, slot: 'C', type: 'bathroom', name: 'Downstairs Bath', isSetUp: true },
-  { floor: 1, slot: 'D', type: 'bathroom', name: '', isSetUp: false },
+  { floor: 1, slot: 'C', type: 'bathroom', name: 'Laundry Room', isSetUp: true },
+  { floor: 1, slot: 'D', type: 'bathroom', name: 'Bathroom', isSetUp: true },
   { floor: 2, slot: 'A', type: 'bedroom', name: 'Master bedroom', isSetUp: true },
   { floor: 2, slot: 'B', type: 'bedroom', name: 'Study & Guest', isSetUp: true },
-  { floor: 2, slot: 'C', type: 'bathroom', name: 'Upstairs Bath', isSetUp: true },
-  { floor: 2, slot: 'D', type: 'bathroom', name: '', isSetUp: false },
+  { floor: 2, slot: 'C', type: 'bathroom', name: 'Work Room', isSetUp: true },
+  { floor: 2, slot: 'D', type: 'bathroom', name: 'Bathroom', isSetUp: true },
 ];
 
 export function createDefaultRooms(setupAllFloor2: boolean = false): StoredRoom[] {
@@ -104,7 +104,7 @@ const LEGACY_ROOM_ID_MAP: Record<string, string> = {
   living: 'f1-A',
   kitchen: 'f1-B',
   bedroom: 'f2-A',
-  bathroom: 'f1-C',
+  bathroom: 'f1-D',
 };
 
 export function migrateRoomId(roomId: string): string {

@@ -32,7 +32,6 @@ export function Room({
   onPress,
 }: RoomProps) {
   const theme = ROOM_TYPE_SETTINGS[room.type];
-  const [darkOpacity] = useState(() => new Animated.Value(room.isSetUp ? 0 : 0.45));
   const [reduceMotion, setReduceMotion] = useState(false);
   const [isMouseOver, setIsMouseOver] = useState(false);
   const [isLongPressActive, setIsLongPressActive] = useState(false);
@@ -46,15 +45,6 @@ export function Room({
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    Animated.timing(darkOpacity, {
-      toValue: room.isSetUp ? 0 : 0.45,
-      duration: reduceMotion ? 0 : 500,
-      easing: Easing.inOut(Easing.ease),
-      useNativeDriver: true,
-    }).start();
-  }, [darkOpacity, reduceMotion, room.isSetUp]);
 
   useEffect(() => {
     Animated.timing(tagOpacity, {
@@ -147,9 +137,6 @@ export function Room({
         {wallLines}
       </Svg>
 
-      {isLightOn && room.isSetUp && <View pointerEvents="none" style={styles.roomLightLayer} />}
-      <Animated.View pointerEvents="none" style={[styles.darkLayer, { opacity: darkOpacity }]} />
-
       {/* Dark rooms show a small round + button (48px) in the center */}
       {!room.isSetUp && (
         <View pointerEvents="none" style={styles.centerPlusButton}>
@@ -182,8 +169,6 @@ const styles = StyleSheet.create({
   depthStrip: { position: 'absolute', top: 4, left: 4, right: 4, height: 5, opacity: 0.9 },
   hoveredBorder: { borderColor: '#D4A373', borderWidth: 3 },
   pressed: { opacity: 0.88 },
-  roomLightLayer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(246, 232, 216, 0.34)' },
-  darkLayer: { ...StyleSheet.absoluteFill, backgroundColor: '#57534E', zIndex: 8 },
   centerPlusButton: {
     position: 'absolute',
     left: '50%',

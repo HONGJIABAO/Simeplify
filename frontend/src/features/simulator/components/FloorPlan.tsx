@@ -28,7 +28,6 @@ import { getFloorSpriteSizes } from '../logic/spriteSizing';
 import {
   footprintOverlapArea,
   getDoorKeepOuts,
-  getFixedItemDimensions,
   getItemLocalFootprint,
   INNER_FLOOR_RECT,
   isFootprintInside,
@@ -337,8 +336,7 @@ export function FloorPlan({
         {floorItems.map((item) => {
           const room = floorRooms.find((candidate) => candidate.id === item.roomId);
           if (!room) return null;
-          const roomItems = floorItems.filter((candidate) => candidate.roomId === room.id);
-          const dimensions = getFixedItemDimensions(item, room, roomItems, width, height);
+          const uniformItemSize = spriteSizes.item;
           const isFurniture = item.category === 'Furniture';
           const isOn = !isFurniture && (activeApplianceIds.includes(item.id) || item.alwaysOn || item.isOn);
           return (
@@ -347,8 +345,8 @@ export function FloorPlan({
               item={item}
               canvasWidth={width}
               canvasHeight={height}
-              itemWidth={dimensions.width}
-              itemHeight={dimensions.height}
+              itemWidth={uniformItemSize}
+              itemHeight={uniformItemSize}
               labelFontSize={spriteSizes.labelFont}
               zoomScale={settledZoom}
               compactLabel={labelOverlaps.get(floor)?.has(item.id) ?? false}

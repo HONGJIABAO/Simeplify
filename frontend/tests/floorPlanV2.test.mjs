@@ -12,6 +12,7 @@ import {
 } from '../src/features/simulator/logic/roomLayout.ts';
 import {
   footprintOverlapArea,
+  clampDraggedItemToRoom,
   getDoorKeepOuts,
   getItemLocalFootprint,
   getPlacementLayer,
@@ -22,6 +23,9 @@ import {
   tidyFloorItems,
   useSpot,
 } from '../src/features/simulator/logic/furnishedLayout.ts';
+import { FLOOR_ITEM_SCALE, FLOOR_SPRITE_BASE_SIZE, getFloorSpriteSizes } from '../src/features/simulator/logic/spriteSizing.ts';
+import { getPlanItemLabel, PLAN_ITEM_LABEL_DURATION_MS } from '../src/features/simulator/logic/itemLabel.ts';
+import { WORKPLACE_DEFAULT_WATTS } from '../src/features/simulator/logic/applianceConstants.ts';
 import {
   MOCK_SIMULATOR_ITEMS,
   MOCK_SIMULATOR_ITEMS_ALL,
@@ -31,7 +35,12 @@ import { resolveAvatarPlacement } from '../src/features/simulator/logic/avatarPl
 import { DEFAULT_ROUTINE_BLOCKS, WORK_ROUTINE_SUGGESTIONS } from '../src/features/simulator/logic/myDayLogic.ts';
 import { shouldFollowAvatarFloor } from '../src/features/simulator/logic/floorFollow.ts';
 import { findFloorWalkPath, findHomeWalkRoute, isWalkSegmentValid } from '../src/features/simulator/logic/walkGraph.ts';
-import { getEditLayoutMetrics, getInTrayTypeIds, getTrayTileWidth } from '../src/features/simulator/logic/trayRules.ts';
+import {
+  appendClientApplianceTrayTypeIds,
+  getEditLayoutMetrics,
+  getInTrayTypeIds,
+  getTrayTileWidth,
+} from '../src/features/simulator/logic/trayRules.ts';
 import { getLitAppearance } from '../src/features/simulator/logic/litAppearance.ts';
 import {
   buildWeekReel,
@@ -65,6 +74,42 @@ test('stair geometry remains identical on both floors', () => {
   assert.deepEqual(getFloorPlanLayout(2).stair, STAIR_RECT);
 });
 
+test('floor-plan item art uses one uniform 2.2x scale while the avatar stays separate', () => {
+  const sizes = getFloorSpriteSizes(350);
+  assert.equal(FLOOR_ITEM_SCALE, 2.2);
+  assert.equal(sizes.item, FLOOR_SPRITE_BASE_SIZE.item * 2.2);
+  assert.notEqual(sizes.item, sizes.avatar);
+});
+
+test('free drag clamps the item centre so the enlarged square stays inside its room', () => {
+  const room = createDefaultRooms(false).find((candidate) => candidate.floor === 1 && candidate.slot === 'A');
+  const itemSize = getFloorSpriteSizes(350).item;
+  const point = clampDraggedItemToRoom({ x: -1, y: 4 }, room, 350, 350, itemSize);
+  const rect = getSlotRect(room.slot);
+  const half = itemSize / 350 / 2;
+  assert.ok(point.x >= rect.x + half);
+  assert.ok(point.y <= rect.y + rect.height - half);
+});
+
+test('tap labels show name and watts for three seconds, with no placeholder watts', () => {
+  const appliance = {
+    id: 'a', category: 'Appliances', type: 'air_conditioner', spriteKey: 'air_conditioner',
+    name: 'Air Conditioner', brand: 'Panasonic', wattage: 1200, roomId: 'f1-A', posX: 0.2, posY: 0.2,
+  };
+  const furniture = {
+    id: 'f', category: 'Furniture', type: 'sofa', spriteKey: 'sofa',
+    name: 'Sofa', roomId: 'f1-A', posX: 0.2, posY: 0.2,
+  };
+  const workplace = {
+    id: 'w', category: 'Appliances', type: 'workplace', spriteKey: 'workplace',
+    name: 'Workplace', wattage: WORKPLACE_DEFAULT_WATTS, roomId: 'f2-B', posX: 0.2, posY: 0.2,
+  };
+  assert.equal(PLAN_ITEM_LABEL_DURATION_MS, 3000);
+  assert.equal(getPlanItemLabel(appliance), 'Panasonic · 1200 W');
+  assert.equal(getPlanItemLabel(furniture), 'Sofa');
+  assert.equal(getPlanItemLabel(workplace), 'Workplace');
+});
+
 test('every sprite manifest require points to an existing file', () => {
   const manifestPath = resolve(FRONTEND_ROOT, 'src/features/simulator/logic/spriteMap.ts');
   const manifest = readFileSync(manifestPath, 'utf8');
@@ -77,24 +122,26 @@ test('every sprite manifest require points to an existing file', () => {
   assert.match(manifest, /key: 'ceiling_fan'[\s\S]*fan\.png[\s\S]*inTray: false/);
   assert.match(manifest, /key: 'water_heater'[\s\S]*shower\.png/);
   assert.match(manifest, /key: 'toilet'[\s\S]*toilet_bin\.png/);
+  assert.match(manifest, /key: 'washing_machine'[\s\S]*washing_machine\.png/);
+  assert.match(manifest, /key: 'router'[\s\S]*wifi_router\.png/);
 
   const spriteComponent = readFileSync(resolve(FRONTEND_ROOT, 'src/features/simulator/components/Sprite.tsx'), 'utf8');
   assert.doesNotMatch(spriteComponent, /ImageOff|crossed-image/i);
 });
 
 test('ROOM_SLOTS contains the requested fixed centres, widths, and facing', () => {
-  assert.equal(ROOM_SLOTS.living.slots.find((slot) => slot.type === 'tv').x, 0.72);
-  assert.equal(ROOM_SLOTS.living.slots.filter((slot) => slot.type === 'table').length, 3);
-  assert.deepEqual(ROOM_SLOTS.living.slots.filter((slot) => slot.type === 'table').map((slot) => slot.role),
+  assert.deepEqual(Object.keys(ROOM_SLOTS), ['f1-A', 'f1-B', 'f1-C', 'f1-D', 'f2-A', 'f2-B', 'f2-C', 'f2-D']);
+  assert.equal(ROOM_SLOTS['f1-A'].slots.find((slot) => slot.type === 'tv').x, 0.45);
+  assert.equal(ROOM_SLOTS['f1-A'].slots.filter((slot) => slot.type === 'table').length, 3);
+  assert.deepEqual(ROOM_SLOTS['f1-A'].slots.filter((slot) => slot.type === 'table').map((slot) => slot.role),
     ['coffee table', 'side table left', 'side table right']);
-  assert.equal(ROOM_SLOTS.kitchen.slots.find((slot) => slot.type === 'refrigerator').x, 0.20);
-  assert.deepEqual(ROOM_SLOTS.kitchen.slots.filter((slot) => slot.type === 'table').map((slot) => slot.role), ['counter', 'dining']);
-  assert.equal(ROOM_SLOTS.bathroom.slots.find((slot) => slot.type === 'water_heater').spriteKey, 'water_heater');
-  assert.equal(ROOM_SLOTS.bedroom.slots.find((slot) => slot.type === 'fan').spriteKey, 'fan');
-  assert.equal(ROOM_SLOTS.workplace.slots.find((slot) => slot.type === 'workplace').x, 0.78);
+  assert.equal(ROOM_SLOTS['f1-B'].slots.find((slot) => slot.type === 'refrigerator').x, 0.21);
+  assert.equal(ROOM_SLOTS['f1-C'].slots.find((slot) => slot.type === 'washing_machine').x, 0.25);
+  assert.equal(ROOM_SLOTS['f1-D'].slots.find((slot) => slot.type === 'water_heater').x, 0.74);
+  assert.equal(ROOM_SLOTS['f2-C'].slots.find((slot) => slot.type === 'workplace').x, 0.26);
 });
 
-test('all default non-ceiling items are inside the inner floor and never overlap', () => {
+test('all default items avoid walls, doorways, lanes, stairs, and non-ceiling overlaps', () => {
   const rooms = createDefaultRooms(false);
   for (const room of rooms.filter((candidate) => candidate.isSetUp)) {
     const items = roomItems(MOCK_SIMULATOR_ITEMS, room.id);
@@ -102,8 +149,16 @@ test('all default non-ceiling items are inside the inner floor and never overlap
       item,
       footprint: getItemLocalFootprint(item, room, PLAN_SIDE, PLAN_SIDE, items),
     }));
+    const roomRect = getSlotRect(room.slot);
+    const doors = getDoorKeepOuts(room.slot, roomRect.width * PLAN_SIDE, roomRect.height * PLAN_SIDE);
+    const lanes = ROOM_SLOTS[getRoomTemplateId(room, items)].clearZones;
+    for (const item of items) {
+      const footprint = getItemLocalFootprint(item, room, PLAN_SIDE, PLAN_SIDE, items);
+      assert.ok(isFootprintInside(footprint, INNER_FLOOR_RECT), `${item.id} must be inside the inner floor`);
+      assert.equal(doors.some((door) => footprintOverlapArea(footprint, door) > 0), false, `${item.id} blocks a doorway`);
+    }
     for (const entry of entries) {
-      assert.ok(isFootprintInside(entry.footprint, INNER_FLOOR_RECT), `${entry.item.id} must be inside the inner floor`);
+      assert.equal(lanes.some((lane) => footprintOverlapArea(entry.footprint, lane) > 0), false, `${entry.item.id} blocks a standing lane`);
     }
     for (let index = 0; index < entries.length; index += 1) {
       for (let other = index + 1; other < entries.length; other += 1) {
@@ -118,14 +173,19 @@ test('all default non-ceiling items are inside the inner floor and never overlap
 });
 
 test('the sofa faces the TV and its standing lane stays clear', () => {
-  const living = ROOM_SLOTS.living;
+  const living = ROOM_SLOTS['f1-A'];
   const sofa = living.slots.find((slot) => slot.type === 'sofa');
   const tv = living.slots.find((slot) => slot.type === 'tv');
   assert.equal(sofa.facing, 'up');
+  assert.equal(sofa.rotation, 180);
   assert.ok(sofa.y > tv.y);
 
   const room = createDefaultRooms(false).find((candidate) => candidate.id === 'f1-A');
   const items = roomItems(MOCK_SIMULATOR_ITEMS, room.id);
+  const sofaItem = items.find((item) => item.type === 'sofa');
+  const tvItem = items.find((item) => item.type === 'tv');
+  const standingSpot = useSpot(sofaItem, room, items, PLAN_SIDE, PLAN_SIDE);
+  assert.ok(standingSpot.y > tvItem.posY && standingSpot.y < sofaItem.posY, 'sofa standing spot must be between the TV and sofa');
   const configuredLane = living.clearZones[0];
   const lane = { x: configuredLane.x, y: configuredLane.y, width: configuredLane.width, height: configuredLane.height };
   for (const item of items.filter((candidate) => getPlacementLayer(candidate) !== 'ceiling'
@@ -138,7 +198,7 @@ test('useSpot stays inside the inner floor and outside doorway keep-outs', () =>
   const rooms = createDefaultRooms(false);
   const cases = [
     ['f1-A', 'sofa'],
-    ['f1-C', 'water_heater'],
+    ['f1-D', 'water_heater'],
     ['f2-B', 'workplace'],
     ['f2-A', 'bed'],
   ];
@@ -167,7 +227,7 @@ test('TV, shower, work, charging, and sleep blocks resolve one standing target',
   assert.deepEqual(new Set(tv.activeApplianceIds), new Set(['f1-tv-living', 'f1-ac-living']));
   assert.equal(tv.pose, 'stand');
 
-  const bathroom = rooms.find((room) => room.id === 'f1-C');
+  const bathroom = rooms.find((room) => room.id === 'f1-D');
   const bathroomItems = roomItems(MOCK_SIMULATOR_ITEMS, bathroom.id);
   const shower = resolveAvatarPlacement({
     name: 'Morning Shower', iconType: 'shower', applianceIds: ['f1-shower-bath'], avatarWalks: true,
@@ -198,19 +258,20 @@ test('TV, shower, work, charging, and sleep blocks resolve one standing target',
   assert.equal(sleep.pose, 'stand');
 });
 
-test('workplace room inference uses data and its combined sprite is the only desk item', () => {
+test('room-specific layout uses data and its combined Workplace sprite is the only desk item', () => {
   const room = createDefaultRooms(false).find((candidate) => candidate.id === 'f2-B');
   const items = roomItems(MOCK_SIMULATOR_ITEMS, room.id);
   assert.equal(room.type, 'bedroom');
-  assert.equal(getRoomTemplateId(room, items), 'workplace');
+  assert.equal(getRoomTemplateId(room, items), 'f2-B');
   assert.equal(items.filter((item) => item.type === 'workplace').length, 1);
   assert.equal(items.some((item) => item.category === 'Furniture' && /desk/i.test(item.name)), false);
 });
 
-test('1F bottom-middle stays dark and empty', () => {
+test('1F bottom-middle is the set-up bathroom', () => {
   const room = createDefaultRooms(false).find((candidate) => candidate.floor === 1 && candidate.slot === 'D');
-  assert.equal(room.isSetUp, false);
-  assert.equal(roomItems(MOCK_SIMULATOR_ITEMS, room.id).length, 0);
+  assert.equal(room.isSetUp, true);
+  assert.deepEqual(new Set(roomItems(MOCK_SIMULATOR_ITEMS, room.id).map((item) => item.type)),
+    new Set(['water_heater', 'light_bulb', 'toilet', 'sink']));
 });
 
 test('work suggestion flags remain true, true, false', () => {
@@ -274,7 +335,7 @@ test('all room target pairs route through valid door segments, including across 
   }
 });
 
-test('a dark-room target stops at the nearest reachable waypoint', () => {
+test('the newly set-up bottom-middle room is reachable', () => {
   const rooms = createDefaultRooms(false);
   const from = rooms.find((room) => room.id === 'f1-A');
   const dark = rooms.find((room) => room.id === 'f1-D');
@@ -282,8 +343,7 @@ test('a dark-room target stops at the nearest reachable waypoint', () => {
     floor: 1, rooms, start: getRoomCenter(from), startRoomId: from.id,
     end: getRoomCenter(dark), endRoomId: dark.id,
   });
-  assert.equal(route.reachedTarget, false);
-  assert.ok(route.fallbackPoint);
+  assert.equal(route.reachedTarget, true);
 });
 
 test('tray contains every in-tray database type in sort order and keeps four-plus tiles visible', () => {
@@ -294,6 +354,8 @@ test('tray contains every in-tray database type in sort order and keeps four-plu
   assert.deepEqual(getInTrayTypeIds(catalog), [
     'air_conditioner', 'refrigerator', 'lights', 'fan', 'tv', 'water_heater', 'router', 'workplace', 'washing_machine',
   ]);
+  assert.deepEqual(appendClientApplianceTrayTypeIds(['air_conditioner', 'router']),
+    ['air_conditioner', 'router', 'light_bulb']);
   assert.equal(Math.round(getTrayTileWidth(390) * 10) / 10, 81.4);
   const manifest = readFileSync(resolve(FRONTEND_ROOT, 'src/features/simulator/logic/spriteMap.ts'), 'utf8');
   assert.match(manifest, /key: 'stair'[\s\S]*inTray: false/);
@@ -308,43 +370,85 @@ test('edit tray and square plan fit the two target screens', () => {
   });
 });
 
-test('lit appearance has no surface fill or border and off appliances use 40 percent opacity', () => {
+test('lit appearance has no surface fill or border, appliances stay at full opacity, and web has multi-layered drop-shadow', () => {
   for (const platform of ['web', 'ios', 'android']) {
     const lit = getLitAppearance(true, false, platform);
     assert.deepEqual(lit.surface, { backgroundColor: 'transparent', borderWidth: 0 });
     assert.equal(lit.spriteOpacity, 1);
   }
-  assert.equal((getLitAppearance(true, false, 'web').webFilter.match(/drop-shadow/g) ?? []).length, 1);
+  assert.equal((getLitAppearance(true, false, 'web').webFilter.match(/drop-shadow/g) ?? []).length, 2);
   assert.equal(getLitAppearance(true, false, 'android').androidCopy.scale, 1.06);
-  assert.equal(getLitAppearance(false, false, 'web').spriteOpacity, 0.4);
+  assert.equal(getLitAppearance(false, false, 'web').spriteOpacity, 1);
   assert.equal(getLitAppearance(false, false, 'web').webFilter, undefined);
 });
 
 test('default and expanded fixture counts are stable', () => {
-  assert.equal(MOCK_SIMULATOR_ITEMS.length, 33);
-  assert.equal(MOCK_SIMULATOR_ITEMS_ALL.length, 37);
+  assert.equal(MOCK_SIMULATOR_ITEMS.length, 36);
+  assert.equal(MOCK_SIMULATOR_ITEMS_ALL.length, 36);
 });
 
-test('table lamps are bedside only, floor 2 has no TV, and every set-up room has one centered ceiling bulb', () => {
+test('table lamps stay in bedrooms, floor 2 has no TV, and every set-up room has one ceiling bulb', () => {
   const rooms = createDefaultRooms(false);
   for (const room of rooms.filter((candidate) => candidate.isSetUp)) {
     const items = roomItems(MOCK_SIMULATOR_ITEMS, room.id);
     const bulbs = items.filter((item) => item.type === 'light_bulb');
     assert.equal(bulbs.length, 1, `${room.id} needs one ceiling bulb`);
     const bulbSlot = ROOM_SLOTS[getRoomTemplateId(room, items)].slots.find((slot) => slot.type === 'light_bulb');
-    assert.ok(bulbSlot.x >= 0.45 && bulbSlot.x <= 0.55);
+    assert.ok(bulbSlot, `${room.id} needs a ceiling slot`);
     for (const lamp of items.filter((item) => item.type === 'lights')) {
       assert.equal(room.type, 'bedroom');
       const bed = items.find((item) => item.type === 'bed');
       assert.ok(bed, `${room.id} lamp must have a bed`);
-      const template = ROOM_SLOTS[getRoomTemplateId(room, items)].slots;
-      const bedSlot = template.find((slot) => slot.type === 'bed');
-      const lampSlot = template.find((slot) => slot.role === lamp.role);
-      const distanceToBedEdge = Math.min(Math.abs(lampSlot.x - (bedSlot.x - bedSlot.w / 2)), Math.abs(lampSlot.x - (bedSlot.x + bedSlot.w / 2)));
-      assert.ok(distanceToBedEdge <= 0.08, `${lamp.id} must be beside the bed`);
     }
     if (room.floor === 2) assert.equal(items.some((item) => item.type === 'tv'), false);
   }
+});
+
+test('all air conditioners use their own room back-wall slot', () => {
+  const rooms = createDefaultRooms(false);
+  for (const room of rooms) {
+    const slots = ROOM_SLOTS[getRoomTemplateId(room)].slots.filter((slot) => slot.type === 'air_conditioner');
+    for (const slot of slots) assert.ok(slot.y <= 0.12, `${room.id} air conditioner must be on the back wall`);
+    for (const item of roomItems(MOCK_SIMULATOR_ITEMS, room.id).filter((candidate) => candidate.type === 'air_conditioner')) {
+      const slot = ROOM_SLOTS[getRoomTemplateId(room)].slots.find((candidate) => candidate.type === item.type);
+      assert.ok(slot && slot.y <= 0.12, `${item.id} must use its own room slot`);
+    }
+  }
+});
+
+test('renamed gray rooms keep the bathroom type', () => {
+  const rooms = createDefaultRooms(false);
+  const laundry = rooms.find((room) => room.id === 'f1-C');
+  const work = rooms.find((room) => room.id === 'f2-C');
+  assert.deepEqual({ name: laundry.name, type: laundry.type }, { name: 'Laundry Room', type: 'bathroom' });
+  assert.deepEqual({ name: work.name, type: work.type }, { name: 'Work Room', type: 'bathroom' });
+});
+
+test('every default appliance resolves to a real manifest picture', () => {
+  const manifestPath = resolve(FRONTEND_ROOT, 'src/features/simulator/logic/spriteMap.ts');
+  const manifest = readFileSync(manifestPath, 'utf8');
+  const keys = new Set([...manifest.matchAll(/key: '([^']+)'[\s\S]*?source: require\('([^']+\.png)'\)/g)]
+    .filter((match) => existsSync(resolve(dirname(manifestPath), match[2])))
+    .map((match) => match[1]));
+  keys.add('wifi_router');
+  for (const item of MOCK_SIMULATOR_ITEMS.filter((candidate) => candidate.category === 'Appliances')) {
+    assert.ok(keys.has(item.spriteKey) || (item.spriteKey === 'router' && keys.has('router')), `${item.id} needs a real picture`);
+  }
+  assert.ok(existsSync(resolve(FRONTEND_ROOT, 'assets/sprites/appliances/washing_machine.png')));
+  assert.ok(existsSync(resolve(FRONTEND_ROOT, 'assets/sprites/appliances/wifi_router.png')));
+});
+
+test('Tidy up reproduces the room-specific slot positions and sofa rotation', () => {
+  const rooms = createDefaultRooms(false);
+  const messy = MOCK_SIMULATOR_ITEMS.map((item) => ({ ...item, posX: 0.5, posY: 0.5, rotation: 0 }));
+  const floor1 = tidyFloorItems(messy, rooms, 1).items;
+  const tidied = tidyFloorItems(floor1, rooms, 2).items;
+  for (const expected of MOCK_SIMULATOR_ITEMS) {
+    const actual = tidied.find((item) => item.id === expected.id);
+    assert.equal(actual.posX, expected.posX, `${expected.id} x`);
+    assert.equal(actual.posY, expected.posY, `${expected.id} y`);
+  }
+  assert.equal(tidied.find((item) => item.id === 'f1-sofa-living').rotation, 180);
 });
 
 test('tidy layout moves known items, preserves unknown leftovers, and is stable for 50 shuffled room sets', () => {

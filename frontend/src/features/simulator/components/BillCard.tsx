@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Bell, CalendarCheck, CalendarDays, FastForward, Gauge, LayoutGrid, Square } from 'lucide-react-native';
+import { CalendarCheck, CalendarDays, FastForward, Gauge, Square } from 'lucide-react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { BellPill } from '@/components/layout/BellPill';
 
 export type FastForwardPeriod = '1M' | '6M' | '1Y';
 
@@ -88,24 +89,15 @@ export function BillCard({
         <View style={styles.timeRow}>
           <CalendarDays size={12} color="#78716C" strokeWidth={1.5} />
           <Text style={styles.timeText}>{simulatedDateStr}</Text>
-          {fastForwardSavingsRm != null && <Text style={styles.savingsText}>· Save RM {fastForwardSavingsRm}</Text>}
         </View>
         </Pressable>
 
         {/* ── Right: notification and schedule buttons ─────────────────── */}
         <View style={styles.buttonStack}>
-        {/* Bell Button */}
-        <Pressable
-          style={styles.roundButton}
-          onPress={onPressBell}
-          accessibilityRole="button"
-          accessibilityLabel="Notifications"
-        >
-          <Bell size={18} color="#292524" strokeWidth={1.5} />
-          {hasUnreadNotifications && <View style={styles.bellDot} />}
-        </Pressable>
+          {/* Bell Button (matching Bin page unified pill) */}
+          <BellPill hasUnread={hasUnreadNotifications} onPress={onPressBell} />
 
-        {/* Calendar Check Button */}
+          {/* Calendar Check Button */}
         <Pressable
           style={styles.roundButton}
           onPress={onPressCalendar}
@@ -132,11 +124,6 @@ export function BillCard({
               {isEditMode ? 'Done' : 'Edit'}
             </Text>
           </Pressable>
-          {isEditMode && onTidyUp && <Pressable style={styles.tidyButton} onPress={onTidyUp}
-            accessibilityRole="button" accessibilityLabel="Tidy up items on this floor">
-            <LayoutGrid size={16} color="#566549" strokeWidth={1.6} />
-            <Text style={styles.tidyButtonText}>Tidy up</Text>
-          </Pressable>}
         </View> : <View style={styles.editButtonPlaceholder} />}
 
         {/* Fast-forward Button + period menu that grows to the left */}
@@ -300,15 +287,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F0ECE4',
     position: 'relative',
-  },
-  bellDot: {
-    position: 'absolute',
-    top: 9,
-    right: 10,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#C87D55',
   },
   fastForwardButton: {
     backgroundColor: '#1E1E1E',

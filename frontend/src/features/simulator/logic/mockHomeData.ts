@@ -48,6 +48,7 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   // 1F A · Living room. Repeated table sprites have explicit roles.
   appliance('f1-tv-living', 'f1-A', 'tv', 'Samsung TV', 90, { brand: 'Samsung' }),
   appliance('f1-ac-living', 'f1-A', 'air_conditioner', 'Panasonic Air Conditioner', 1200, { brand: 'Panasonic', hoursPerDay: 8 }),
+  appliance('f1-router-living', 'f1-A', 'router', 'TP-Link Wi-Fi Router', 15, { brand: 'TP-Link', hoursPerDay: 24, alwaysOn: true }),
   furniture('f1-sofa-living', 'f1-A', 'sofa', 'Sofa'),
   furniture('f1-coffee-living', 'f1-A', 'table', 'Coffee Table', 'coffee table'),
   furniture('f1-side-left-living', 'f1-A', 'table', 'Left Side Table', 'side table left'),
@@ -61,11 +62,14 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   furniture('f1-table-kitchen', 'f1-B', 'table', 'Dining Table', 'dining'),
   appliance('f1-bulb-b', 'f1-B', 'light_bulb', 'Kitchen light', 9),
 
-  // 1F C · Bathroom. 1F D deliberately has no items.
-  furniture('f1-toilet-bath', 'f1-C', 'toilet', 'Toilet'),
-  furniture('f1-sink-bath', 'f1-C', 'sink', 'Sink'),
-  appliance('f1-shower-bath', 'f1-C', 'water_heater', 'Ariston Water Heater', 3500, { brand: 'Ariston', hoursPerDay: 1 }),
-  appliance('f1-bulb-c', 'f1-C', 'light_bulb', 'Downstairs bathroom light', 9),
+  // 1F C · Laundry Room. The washing-machine catalog has no placed row yet.
+  appliance('f1-bulb-c', 'f1-C', 'light_bulb', 'Laundry room light', 9),
+
+  // 1F D · Bathroom. Existing bathroom items moved here; one new ceiling bulb.
+  furniture('f1-toilet-bath', 'f1-D', 'toilet', 'Toilet'),
+  furniture('f1-sink-bath', 'f1-D', 'sink', 'Sink'),
+  appliance('f1-shower-bath', 'f1-D', 'water_heater', 'Ariston Water Heater', 3500, { brand: 'Ariston', hoursPerDay: 1 }),
+  appliance('f1-bulb-d', 'f1-D', 'light_bulb', 'Downstairs bathroom light', 9),
 
   // 2F A · Bedroom.
   furniture('f2-bed-master', 'f2-A', 'bed', 'Bed'),
@@ -84,19 +88,17 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   appliance('f2-fan-study', 'f2-B', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
   appliance('f2-bulb-b', 'f2-B', 'light_bulb', 'Study light', 9),
 
-  // 2F C · Upstairs bathroom.
-  furniture('f2-toilet-bath', 'f2-C', 'toilet', 'Toilet'),
-  furniture('f2-sink-bath', 'f2-C', 'sink', 'Sink'),
-  appliance('f2-shower-bath', 'f2-C', 'water_heater', 'Panasonic Water Heater', 3500, { brand: 'Panasonic', hoursPerDay: 1 }),
-  appliance('f2-bulb-c', 'f2-C', 'light_bulb', 'Upstairs bathroom light', 9),
+  // 2F C · Work Room. No separate Workplace/air-conditioner rows exist here.
+  appliance('f2-bulb-c', 'f2-C', 'light_bulb', 'Work room light', 9),
+
+  // 2F D · Bathroom. Existing upstairs bathroom items moved here.
+  furniture('f2-toilet-bath', 'f2-D', 'toilet', 'Toilet'),
+  furniture('f2-sink-bath', 'f2-D', 'sink', 'Sink'),
+  appliance('f2-shower-bath', 'f2-D', 'water_heater', 'Panasonic Water Heater', 3500, { brand: 'Panasonic', hoursPerDay: 1 }),
+  appliance('f2-bulb-d', 'f2-D', 'light_bulb', 'Upstairs bathroom light', 9),
 ];
 
-const EXTRA_ITEMS: FixtureItem[] = [
-  furniture('f2-toilet-bath2', 'f2-D', 'toilet', 'Toilet'),
-  furniture('f2-sink-bath2', 'f2-D', 'sink', 'Sink'),
-  appliance('f2-shower-bath2', 'f2-D', 'water_heater', 'Water Heater', 3500, { hoursPerDay: 1 }),
-  appliance('f2-bulb-d', 'f2-D', 'light_bulb', 'Bathroom 2 light', 9),
-];
+const EXTRA_ITEMS: FixtureItem[] = [];
 
 function materialize(items: FixtureItem[], setupAllFloor2 = false): StoredPlacedItem[] {
   const rooms = createDefaultRooms(setupAllFloor2);
@@ -123,4 +125,4 @@ export const RAW_SPEC_FURNITURE = MOCK_SIMULATOR_ITEMS_ALL
   .filter((item) => item.category === 'Furniture').map(toRaw);
 
 /** Types intentionally absent because no matching local picture exists. */
-export const SKIPPED_ITEM_TYPES = ['rug', 'plant', 'wardrobe', 'bedside_table', 'kitchen_counter', 'router'] as const;
+export const SKIPPED_ITEM_TYPES = ['rug', 'plant', 'wardrobe', 'bedside_table', 'kitchen_counter'] as const;

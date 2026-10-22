@@ -1,9 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell } from 'lucide-react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
+import { Header } from '@/components/Header';
 import { useToast } from '@/components/Toast';
 import {
   CommunityDashboard,
@@ -90,20 +90,8 @@ export default function CommunityScreen() {
   return (
     <View style={styles.outer}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <View style={styles.topRow}>
-          <View />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open notifications"
-            onPress={() => router.push('/notifications')}
-            style={({ pressed }) => [styles.bellButton, pressed && styles.pressed]}
-          >
-            <View style={styles.bellIconContainer}>
-              <Bell size={22} color="#292524" strokeWidth={1.7} />
-              {hasUnread ? <View style={styles.unreadDot} /> : null}
-            </View>
-          </Pressable>
-        </View>
+        {/* No title bar — bell pill only matching BinHomeScreen (S5.1) */}
+        <Header variant="bell-only" hasUnread={hasUnread} />
 
         {loadState === 'loading' && <CommunityLoading />}
         {(loadState === 'error' || loadState === 'offline') && (
@@ -149,38 +137,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: Platform.OS === 'web' ? 4 : 0,
   },
-  topRow: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  bellButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bellIconContainer: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#a97a4a',
-  },
-  pressed: { opacity: 0.72 },
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 112,

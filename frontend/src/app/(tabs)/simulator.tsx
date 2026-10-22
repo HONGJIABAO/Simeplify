@@ -29,16 +29,19 @@ import {
   formatTimeMinutes, Point,
 } from '@/features/simulator/logic/SimulationEngine';
 import { resolveAvatarPlacement } from '@/features/simulator/logic/avatarPlace';
-import { getRoomSlotDefinition, getSlotPlanPoint, tidyFloorItems } from '@/features/simulator/logic/furnishedLayout';
+import { clampDraggedItemToRoom, getRoomSlotDefinition, getSlotPlanPoint, tidyFloorItems } from '@/features/simulator/logic/furnishedLayout';
 import { SpriteItemDef } from '@/features/simulator/logic/spriteMap';
+import { PLAN_ITEM_LABEL_DURATION_MS } from '@/features/simulator/logic/itemLabel';
+import { getFloorSpriteSizes } from '@/features/simulator/logic/spriteSizing';
 import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms } from '@/features/simulator/logic/roomData';
-import { containsPoint, FloorNumber, getFloorPlanLayout, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
+import { containsPoint, FloorNumber, getFloorPlanLayout, getSlotRect, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
 import { shouldFollowAvatarFloor } from '@/features/simulator/logic/floorFollow';
 import { AVATAR_PLAN_SPEED_PER_SECOND, findHomeWalkRoute } from '@/features/simulator/logic/walkGraph';
 import { buildWeekReel, getReducedMotionSummary, getReelSavings, getReelTargetDate, type WeekReelSegment } from '@/features/simulator/logic/weekReel';
 import { calcTotalSavings } from '@/features/simulator/logic/fastForward';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
+import { useUnreadNotifications } from '@/lib/services/notificationService';
 import {
   fetchSimulatorState,
   saveRoom,
@@ -103,11 +106,13 @@ export default function SimulatorScreen() {
   });
   const { session } = useAuthSession();
   const householdId = session.profile?.household_id;
+  const { hasUnread: liveHasUnread } = useUnreadNotifications(householdId);
 
   const [applianceTypes, setApplianceTypes] = useState<ApplianceTypeRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [activeTariff, setActiveTariff] = useState<TariffRateRow | null>(null);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+  const hasUnreadNotifications = liveHasUnread || unreadNotificationsCount > 0;
 
   const [avatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() =>
     session.gender === 'boy' || initialSimulation?.avatarVariant === 'avatar_boy' || initialSimulation?.avatarVariant === 'boy'
@@ -162,6 +167,7 @@ export default function SimulatorScreen() {
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const itemLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedPendingItem, setSelectedPendingItem] = useState<SpriteItemDef | null>(null);
   const [applianceSheetVisible, setApplianceSheetVisible] = useState(false);
   const [editingAppliance, setEditingAppliance] = useState<StoredPlacedItem | null>(null);
@@ -200,6 +206,7 @@ export default function SimulatorScreen() {
   }, []);
   useEffect(() => () => {
     if (placementMessageTimerRef.current) clearTimeout(placementMessageTimerRef.current);
+    if (itemLabelTimerRef.current) clearTimeout(itemLabelTimerRef.current);
   }, []);
   const measureFloorPlan = useCallback(() => {
     (floorPlanRef.current as any)?.measureInWindow((x: number, y: number, width: number, height: number) => {
@@ -243,6 +250,8 @@ export default function SimulatorScreen() {
   const [isWeekReelPlaying, setIsWeekReelPlaying] = useState(false);
   const [weekReelView, setWeekReelView] = useState<{ segment: WeekReelSegment; savingsRm: number } | null>(null);
   const [reducedWeekSummary, setReducedWeekSummary] = useState<ReturnType<typeof getReducedMotionSummary> | null>(null);
+  const [animatedBillRm, setAnimatedBillRm] = useState<number | null>(null);
+  const monthlyBillRmRef = useRef<number>(0);
 
   const installAvatarRoute = useCallback((
     points: Point[],
@@ -266,6 +275,9 @@ export default function SimulatorScreen() {
     setIsWeekReelPlaying(false);
     setWeekReelView(null);
     setReducedWeekSummary(null);
+    const baseBill = monthlyBillRmRef.current;
+    const targetMax = Math.max(237, Math.round(baseBill * 2.2));
+    setAnimatedBillRm(targetMax);
     if (!run) return;
     avatarTargetRef.current = null;
     avatarPathQueueRef.current = [];
@@ -356,9 +368,14 @@ export default function SimulatorScreen() {
       const savingsRm = getReelSavings(run.totalSavingsRm, run.index, segmentProgress);
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
       setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, overallProgress));
+      const baseBill = monthlyBillRmRef.current;
+      const targetMax = Math.max(237, Math.round(baseBill * 2.2));
+      const tickingBill = Math.round(baseBill + (targetMax - baseBill) * overallProgress);
+      setAnimatedBillRm(tickingBill);
       if (segmentProgress < 1) return;
       if (run.index === run.segments.length - 1) {
         run.completing = true;
+        setAnimatedBillRm(targetMax);
         setWeekReelView({ segment: run.segments[run.index], savingsRm: run.totalSavingsRm });
         setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, 1));
         reelCompletionTimerRef.current = setTimeout(stopWeekReel, reduceMotion ? 0 : 700);
@@ -512,6 +529,12 @@ export default function SimulatorScreen() {
     });
   }, [items, applianceTypes, schedules, routineBlocks, session.household, activeTariff]);
 
+  useEffect(() => {
+    monthlyBillRmRef.current = monthlyBillRm;
+  }, [monthlyBillRm]);
+
+  const displayBillRm = animatedBillRm ?? monthlyBillRm;
+
   const simulatedDateStr = useMemo(() => simulatedDateTime.toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kuala_Lumpur',
   }), [simulatedDateTime]);
@@ -525,10 +548,13 @@ export default function SimulatorScreen() {
     if (isWeekReelPlaying || reducedWeekSummary) { stopWeekReel(); return; }
     const segments = buildWeekReel(routineBlocks);
     const totalSavingsRm = calcTotalSavings(CURRENT_MONTHLY_SAVINGS_RM, selectedFastForward);
+    const targetMax = Math.max(237, Math.round(monthlyBillRm * 2.2));
     if (reduceMotion) {
       setReducedWeekSummary(getReducedMotionSummary(routineBlocks, totalSavingsRm));
+      setAnimatedBillRm(targetMax);
       return;
     }
+    setAnimatedBillRm(monthlyBillRm);
     const durations: number[] = [];
     let expectedFloor = avatarState.currentFloor;
     for (const segment of segments) {
@@ -565,23 +591,35 @@ export default function SimulatorScreen() {
     const slot = getRoomSlotDefinition(item, room, roomItems);
     return slot ? getSlotPlanPoint(room, slot) : null;
   };
-  const placeItem = (itemDef: SpriteItemDef, targetRoom: StoredRoom, _point: Point) => {
+  const calculateFallbackPlacementPoint = (targetRoom: StoredRoom): Point => {
+    const roomRect = getSlotRect(targetRoom.slot);
+    const existingInRoom = items.filter((candidate) => candidate.roomId === targetRoom.id);
+    const count = existingInRoom.length;
+    const col = count % 3;
+    const row = Math.floor(count / 3) % 3;
+    const offsetX = 0.28 + col * 0.22;
+    const offsetY = 0.30 + row * 0.22;
+    return {
+      x: Math.max(0.08, Math.min(0.92, roomRect.x + roomRect.width * offsetX)),
+      y: Math.max(0.08, Math.min(0.92, roomRect.y + roomRect.height * offsetY)),
+    };
+  };
+
+  const placeItem = (itemDef: SpriteItemDef, targetRoom: StoredRoom, point?: Point) => {
     const fixed = getFixedPlacementPoint({ type: itemDef.key, spriteKey: itemDef.key }, targetRoom);
-    if (!fixed) {
-      showToast(`${itemDef.label} has no slot in this room`, 'info');
-      return;
-    }
+    const placementPoint = fixed ?? (point && point.x > 0 && point.y > 0 ? point : calculateFallbackPlacementPoint(targetRoom));
+
     if (itemDef.category === 'Furniture') {
       setItems((previous) => [...previous, {
         id: `furn_${Date.now()}`, category: 'Furniture', type: itemDef.key, spriteKey: itemDef.key,
-        name: itemDef.label, roomId: targetRoom.id, posX: fixed.x, posY: fixed.y,
+        name: itemDef.label, roomId: targetRoom.id, posX: placementPoint.x, posY: placementPoint.y,
       }]);
       showToast(`Placed ${itemDef.label}`, 'success');
       return;
     }
     const pending: StoredPlacedItem = {
       id: `pending_${Date.now()}`, category: 'Appliances', type: itemDef.key, spriteKey: itemDef.key,
-      name: itemDef.fullName, roomId: targetRoom.id, posX: fixed.x, posY: fixed.y,
+      name: itemDef.fullName, roomId: targetRoom.id, posX: placementPoint.x, posY: placementPoint.y,
       brand: '', model: '', quantity: 1, wattage: itemDef.defaultWattage,
       stars: itemDef.hasStarRating === false ? undefined : 3, hoursPerDay: itemDef.defaultHours,
       alwaysOn: itemDef.alwaysOn ?? false, isOn: false,
@@ -616,19 +654,22 @@ export default function SimulatorScreen() {
     if (pendingRoomAction?.kind === 'new') placeItem(pendingRoomAction.itemDef, setUpRoom, pendingRoomAction.point);
     if (pendingRoomAction?.kind === 'move') {
       const movedItem = items.find((it) => it.id === pendingRoomAction.itemId);
-      const fixed = movedItem ? getFixedPlacementPoint(movedItem, setUpRoom) : null;
-      if (!fixed) {
-        showToast('This item has no slot in that room', 'info');
-        setPendingRoomAction(null);
-        return;
-      }
+      const planWidth = floorRectRef.current?.width ?? 350;
+      const planHeight = floorRectRef.current?.height ?? planWidth;
+      const resolvedPoint = clampDraggedItemToRoom(
+        pendingRoomAction.point,
+        setUpRoom,
+        planWidth,
+        planHeight,
+        getFloorSpriteSizes(planWidth).item
+      );
       setItems((previous) => previous.map((item) => item.id === pendingRoomAction.itemId
-        ? { ...item, ...fixed, roomId } : item));
+        ? { ...item, ...resolvedPoint, roomId } : item));
       if (movedItem?.category === 'Appliances' && !pendingRoomAction.itemId.startsWith('pending_') && !pendingRoomAction.itemId.startsWith('mock_')) {
         updateAppliance(pendingRoomAction.itemId, {
           roomId,
-          posX: fixed.x,
-          posY: fixed.y,
+          posX: resolvedPoint.x,
+          posY: resolvedPoint.y,
         }).catch((err) => console.error('Failed to update moved appliance in Supabase:', err));
       }
     }
@@ -680,8 +721,18 @@ export default function SimulatorScreen() {
       stopWeekReel();
       return;
     }
-    setSelectedItemId(item.id);
-    if (!isEditMode) return;
+    if (!isEditMode) {
+      if (itemLabelTimerRef.current) clearTimeout(itemLabelTimerRef.current);
+      setSelectedItemId(item.id);
+      itemLabelTimerRef.current = setTimeout(() => {
+        setSelectedItemId((current) => current === item.id ? null : current);
+      }, PLAN_ITEM_LABEL_DURATION_MS);
+      return;
+    }
+    if (selectedItemId !== item.id) {
+      setSelectedItemId(item.id);
+      return;
+    }
     if (item.category === 'Appliances') { setEditingAppliance(item); setApplianceSheetVisible(true); }
     else { setEditingFurniture(item); setFurnitureSheetVisible(true); }
   };
@@ -708,16 +759,23 @@ export default function SimulatorScreen() {
     }
     const item = items.find((candidate) => candidate.id === itemId);
     if (!item) return;
-    const fixed = getFixedPlacementPoint(item, target.room);
-    if (!fixed) { showToast('This item has no slot in that room', 'info'); return; }
-    setItems((value) => value.map((item) => item.id === itemId
-      ? { ...item, ...fixed, roomId: target.room.id } : item));
+    const planWidth = floorRectRef.current?.width ?? 350;
+    const planHeight = floorRectRef.current?.height ?? planWidth;
+    const resolvedPoint = clampDraggedItemToRoom(
+      point,
+      target.room,
+      planWidth,
+      planHeight,
+      getFloorSpriteSizes(planWidth).item
+    );
+    setItems((value) => value.map((it) => it.id === itemId
+      ? { ...it, ...resolvedPoint, roomId: target.room.id } : it));
 
     if (item?.category === 'Appliances' && !itemId.startsWith('pending_') && !itemId.startsWith('mock_')) {
       updateAppliance(itemId, {
         roomId: target.room.id,
-        posX: fixed.x,
-        posY: fixed.y,
+        posX: resolvedPoint.x,
+        posY: resolvedPoint.y,
       }).catch((err) => console.error('Failed to update appliance position in Supabase:', err));
     }
   };
@@ -816,15 +874,17 @@ export default function SimulatorScreen() {
   return <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
     <View style={styles.mobileShell}>
       <View style={styles.mainContainer}>
-        <BillCard monthlyBillRm={monthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
+        <BillCard monthlyBillRm={displayBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
           activeFastForward={selectedFastForward}
           isFastForwardPlaying={isWeekReelPlaying || Boolean(reducedWeekSummary)}
           fastForwardSavingsRm={weekReelView?.savingsRm ?? (reducedWeekSummary ? reducedWeekSummary.finalSavingsRm : null)}
           fastForwardDisabled={isEditMode}
           isEditMode={isEditMode}
-          hasUnreadNotifications={unreadNotificationsCount > 0}
+          hasUnreadNotifications={hasUnreadNotifications}
           onToggleEdit={() => {
             if (isWeekReelPlaying) stopWeekReel();
+            setAnimatedBillRm(null);
+            if (itemLabelTimerRef.current) clearTimeout(itemLabelTimerRef.current);
             setIsEditMode((value) => !value);
             setSelectedItemId(null);
             setSelectedPendingItem(null);
@@ -870,7 +930,7 @@ export default function SimulatorScreen() {
         <View
           style={[
             styles.floorPlanArea,
-            { paddingBottom: isEditMode ? 214 : tabBarClearance },
+            { paddingBottom: isEditMode ? 256 : tabBarClearance },
           ]}
           onTouchStart={() => {
             if (isWeekReelPlaying) stopWeekReel();
@@ -975,13 +1035,13 @@ const styles = StyleSheet.create({
   currentTaskLabel: { fontFamily: 'SourceSans3_400Regular', fontSize: 12, lineHeight: 16, color: '#57534E' },
   currentTaskName: { fontFamily: 'Lora_500Medium', fontSize: 18, lineHeight: 23, color: '#292524', letterSpacing: -0.2 },
   currentTaskTime: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549', marginLeft: 10 },
-  editTrayOverlay: { position: 'absolute', left: 0, right: 0, bottom: 64, zIndex: 40, height: 150, maxHeight: '22%', overflow: 'hidden' },
-  placementPill: { position: 'absolute', left: 32, right: 32, bottom: 222, zIndex: 42, minHeight: 40, borderRadius: 999,
+  editTrayOverlay: { position: 'absolute', left: 0, right: 0, bottom: 64, zIndex: 40, height: 184 },
+  placementPill: { position: 'absolute', left: 32, right: 32, bottom: 256, zIndex: 42, minHeight: 40, borderRadius: 999,
     paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
     backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#D9DED2' },
   placementPillText: { flexShrink: 1, fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549', textAlign: 'center' },
   placementPillError: { color: '#A65A43' },
-  undoTidyPill: { position: 'absolute', alignSelf: 'center', bottom: 222, zIndex: 43, minHeight: 48, borderRadius: 24,
+  undoTidyPill: { position: 'absolute', alignSelf: 'center', bottom: 256, zIndex: 43, minHeight: 48, borderRadius: 24,
     paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
     backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
   undoTidyText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },

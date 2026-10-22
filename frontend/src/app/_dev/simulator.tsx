@@ -117,6 +117,9 @@ type DemoState =
   | 'room-tags-default'
   | 'room-tags-hovered'
   | 'room-tags-edit-mode'
+  | 'floor-items-2-2x'
+  | 'item-label-tapped'
+  | 'edit-selected-drag'
   // Furnished Mock States
   | 'home-furnished-floor-1'
   | 'home-furnished-floor-2'
@@ -173,6 +176,9 @@ const STATE_GROUPS = [
       { id: 'room-tags-default' as DemoState, label: 'Room tags — hidden by default' },
       { id: 'room-tags-hovered' as DemoState, label: 'Room tags — hovered / long press' },
       { id: 'room-tags-edit-mode' as DemoState, label: 'Room tags — Edit mode visible' },
+      { id: 'floor-items-2-2x' as DemoState, label: 'All floor items — uniform 2.2×' },
+      { id: 'item-label-tapped' as DemoState, label: 'Normal mode — tapped name + watts' },
+      { id: 'edit-selected-drag' as DemoState, label: 'Edit mode — tap once, then drag' },
     ],
   },
   {
@@ -285,6 +291,7 @@ function TwoFloorPlanPreview({
   routeScenario,
   messy = false,
   isAvatarAway = false,
+  initialSelectedItemId = null,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -298,14 +305,22 @@ function TwoFloorPlanPreview({
   routeScenario?: 'doorway' | 'unreachable';
   messy?: boolean;
   isAvatarAway?: boolean;
+  initialSelectedItemId?: string | null;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(initialSelectedItemId);
   const floorRef = useRef<View>(null);
   const rooms = setupAllRooms ? createDefaultRooms(true) : MOCK_SIMULATOR_ROOMS;
   const baseItems = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
-  const items = messy ? baseItems.map((item, index) => item.roomId === 'f1-A'
+  const initialItems = messy ? baseItems.map((item, index) => item.roomId === 'f1-A'
     ? { ...item, posX: 0.18 + (index % 3) * 0.025, posY: 0.34 + (index % 2) * 0.02 }
     : item) : baseItems;
+  const [items, setItems] = useState(initialItems);
+  useEffect(() => {
+    if (isEditMode || !selectedItemId) return;
+    const timer = setTimeout(() => setSelectedItemId(null), 3000);
+    return () => clearTimeout(timer);
+  }, [isEditMode, selectedItemId]);
   const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A' : avatarScenario === 'shower' ? 'f1-C' : avatarScenario === 'workplace' ? 'f2-B' : null;
   const scenarioRoom = rooms.find((room) => room.id === scenarioRoomId);
   const scenarioItems = items.filter((item) => item.roomId === scenarioRoomId);
@@ -358,13 +373,14 @@ function TwoFloorPlanPreview({
         activeApplianceIds={activeApplianceIds ?? scenarioPlacement?.activeApplianceIds ?? ['f1-fridge-kitchen', 'f1-ac-living']}
         activeRoomLightIds={[]}
         isEditMode={isEditMode}
-        selectedItemId={null}
+        selectedItemId={selectedItemId}
         hoveredRoomId={hoveredRoomId}
         onRoomPress={() => {}}
-        onSelectItem={() => {}}
+        onSelectItem={(item) => setSelectedItemId(item.id)}
         onDeleteItem={() => {}}
         onRotateItem={() => {}}
-        onMoveItemEnd={() => {}}
+        onMoveItemEnd={(itemId, posX, posY) => setItems((current) => current.map((item) =>
+          item.id === itemId ? { ...item, posX, posY } : item))}
         floorPlanRef={floorRef}
         onLayout={() => {}}
         debugLayout={debugLayout}
@@ -474,6 +490,7 @@ export default function SimulatorGallery() {
           activeState === 'square-plan-default' || activeState === 'square-plan-shrunk' ||
           activeState === 'glow-on' || activeState === 'glow-off' ||
           activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode' ||
+          activeState === 'floor-items-2-2x' || activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ||
           activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' ||
           activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' ||
           activeState === 'living-room-layout' || activeState === 'kitchen-layout' || activeState === 'bathroom-layout' ||
@@ -485,7 +502,8 @@ export default function SimulatorGallery() {
             key={activeState}
             initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' ? 2 : 1}
             residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ? 2 : 1}
-            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'floor-follow-edit-mode'}
+            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'floor-follow-edit-mode' || activeState === 'edit-selected-drag'}
+            initialSelectedItemId={activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ? 'f1-ac-living' : null}
             activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace'
               ? undefined
               : activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}

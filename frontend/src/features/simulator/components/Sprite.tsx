@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
-import { getSpriteSource, SPRITE_MAP } from '../logic/spriteMap';
+import { getSpriteSource } from '../logic/spriteMap';
 import { ITEM_IMAGE_META } from '../logic/furnishedLayout';
 
 interface SpriteProps {
@@ -13,18 +13,26 @@ interface SpriteProps {
   style?: ImageStyle;
   containerStyle?: ViewStyle;
   cropTransparent?: boolean;
+  resizeMode?: 'contain' | 'cover' | 'fill' | 'scale-down' | 'none';
 }
 
-export function Sprite({ type, size = 44, width, height, style, containerStyle, cropTransparent = false }: SpriteProps) {
+export function Sprite({
+  type,
+  size = 44,
+  width,
+  height,
+  style,
+  containerStyle,
+  cropTransparent = false,
+  resizeMode = 'contain',
+}: SpriteProps) {
   const source = getSpriteSource(type);
   if (!source) {
     return null;
   }
 
-  const itemDef = SPRITE_MAP[type];
-  const longestSide = itemDef ? Math.max(itemDef.baseWidth, itemDef.baseHeight) : size;
-  const targetW = width ?? (itemDef ? (itemDef.baseWidth / longestSide) * size : size);
-  const targetH = height ?? (itemDef ? (itemDef.baseHeight / longestSide) * size : size);
+  const targetW = width ?? size;
+  const targetH = height ?? size;
   // Metro returns a module value for a static require. On web, resolving that
   // value first avoids expo-image receiving an opaque module and drawing an
   // empty box while avatar sprites happen to be served from cache.
@@ -33,12 +41,20 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle, 
     : undefined;
   const imageSource = resolvedWebUri ? { uri: resolvedWebUri } : source;
   const cropMeta = cropTransparent ? ITEM_IMAGE_META[type] : undefined;
-  const croppedCanvasWidth = cropMeta && width
-    ? width * cropMeta.canvasWidth / cropMeta.contentWidth
-    : targetW;
-  const croppedCanvasHeight = cropMeta && height
-    ? height * cropMeta.canvasHeight / cropMeta.contentHeight
-    : targetH;
+  // Use one scale for both axes. The previous independent width/height scales
+  // changed the canvas aspect ratio on web, so expo-image's `contain` pass
+  // added another offset and the painted pixels could land outside the crop.
+  const cropScale = cropMeta
+    ? Math.min(targetW / cropMeta.contentWidth, targetH / cropMeta.contentHeight)
+    : 1;
+  const croppedCanvasWidth = cropMeta ? cropMeta.canvasWidth * cropScale : targetW;
+  const croppedCanvasHeight = cropMeta ? cropMeta.canvasHeight * cropScale : targetH;
+  const cropLeft = cropMeta
+    ? (targetW - cropMeta.contentWidth * cropScale) / 2 - cropMeta.contentX * cropScale
+    : 0;
+  const cropTop = cropMeta
+    ? (targetH - cropMeta.contentHeight * cropScale) / 2 - cropMeta.contentY * cropScale
+    : 0;
 
   return (
     <View
@@ -52,7 +68,7 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle, 
     >
       <Image
         source={imageSource as any}
-        contentFit="contain"
+        contentFit={resizeMode as any}
         transition={0}
         cachePolicy="memory-disk"
         style={[
@@ -61,10 +77,10 @@ export function Sprite({ type, size = 44, width, height, style, containerStyle, 
             width: croppedCanvasWidth,
             height: croppedCanvasHeight,
           },
-          cropMeta && width && height ? {
+          cropMeta ? {
             position: 'absolute',
-            left: -cropMeta.contentX * width / cropMeta.contentWidth,
-            top: -cropMeta.contentY * height / cropMeta.contentHeight,
+            left: cropLeft,
+            top: cropTop,
           } : undefined,
           style,
         ]}

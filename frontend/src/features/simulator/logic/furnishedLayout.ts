@@ -15,7 +15,7 @@ export const DOOR_KEEP_OUT_SIDE_MARGIN = 0.06;
 const FIXED_SLOT_SAFE_SCALE = 0.95;
 
 export type Facing = 'up' | 'down' | 'left' | 'right';
-export type RoomTemplateId = 'living' | 'kitchen' | 'bathroom' | 'bedroom' | 'workplace';
+export type RoomTemplateId = 'f1-A' | 'f1-B' | 'f1-C' | 'f1-D' | 'f2-A' | 'f2-B' | 'f2-C' | 'f2-D';
 export type RoomSide = 'top' | 'right' | 'bottom' | 'left';
 
 export interface RoomSlotDefinition {
@@ -27,6 +27,7 @@ export interface RoomSlotDefinition {
   facing?: Facing;
   layer?: 'ceiling' | 'floor';
   role?: string;
+  rotation?: number;
 }
 
 export interface RoomTemplateDefinition {
@@ -36,61 +37,106 @@ export interface RoomTemplateDefinition {
 
 type LayoutItemIdentity = Pick<StoredPlacedItem, 'type' | 'spriteKey'> & Pick<Partial<StoredPlacedItem>, 'id' | 'role'>;
 
-/** Single source of truth for every fixed room item position and size. */
+const ITEM_SLOT_WIDTHS = {
+  air_conditioner: 0.18,
+  bed: 0.24,
+  fan: 0.08,
+  light_bulb: 0.07,
+  lights: 0.06,
+  refrigerator: 0.15,
+  router: 0.10,
+  sink: 0.09,
+  sofa: 0.24,
+  table: 0.12,
+  toilet: 0.09,
+  tv: 0.15,
+  washing_machine: 0.14,
+  water_heater: 0.12,
+  workplace: 0.18,
+} as const;
+
+/** Single source of truth for every default room item position and size. */
 export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
-  living: {
+  'f1-A': {
     slots: [
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.32, y: 0.07, w: 0.20, facing: 'down' },
-      { type: 'tv', spriteKey: 'tv', x: 0.72, y: 0.14, w: 0.22, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.56, w: 0.20, role: 'coffee table' },
-      { type: 'sofa', spriteKey: 'sofa', x: 0.50, y: 0.75, w: 0.32, facing: 'up' },
-      { type: 'table', spriteKey: 'table', x: 0.22, y: 0.74, w: 0.13, role: 'side table left' },
-      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.74, w: 0.13, role: 'side table right' },
-      { type: 'fan', spriteKey: 'fan', x: 0.90, y: 0.48, w: 0.10 },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.17, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'tv', spriteKey: 'tv', x: 0.45, y: 0.10, w: ITEM_SLOT_WIDTHS.tv, facing: 'down' },
+      { type: 'router', spriteKey: 'router', x: 0.84, y: 0.08, w: ITEM_SLOT_WIDTHS.router, facing: 'down' },
+      { type: 'table', spriteKey: 'table', x: 0.47, y: 0.40, w: ITEM_SLOT_WIDTHS.table, role: 'coffee table' },
+      { type: 'sofa', spriteKey: 'sofa', x: 0.47, y: 0.62, w: ITEM_SLOT_WIDTHS.sofa, facing: 'up', rotation: 180 },
+      { type: 'table', spriteKey: 'table', x: 0.22, y: 0.74, w: ITEM_SLOT_WIDTHS.table, role: 'side table left' },
+      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.74, w: ITEM_SLOT_WIDTHS.table, role: 'side table right' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.47, y: 0.78, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'fan', spriteKey: 'fan', x: 0.14, y: 0.86, w: ITEM_SLOT_WIDTHS.fan },
     ],
-    clearZones: [{ x: 0.43, y: 0.30, width: 0.14, height: 0.16 }],
+    clearZones: [{ x: 0.58, y: 0.36, width: 0.10, height: 0.18 }],
   },
-  kitchen: {
+  'f1-B': {
     slots: [
-      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.20, y: 0.16, w: 0.20, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.16, w: 0.26, facing: 'down', role: 'counter' },
-      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.70, w: 0.30, role: 'dining' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
+      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.21, y: 0.15, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.72, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.16, w: ITEM_SLOT_WIDTHS.table, facing: 'down', role: 'counter' },
+      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.70, w: ITEM_SLOT_WIDTHS.table, role: 'dining' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.40, y: 0.55, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.52, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
     ],
     clearZones: [{ x: 0.43, y: 0.25, width: 0.14, height: 0.28 }],
   },
-  bathroom: {
+  'f1-C': {
     slots: [
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.76, y: 0.14, w: 0.16, facing: 'down' },
-      { type: 'sink', spriteKey: 'sink', x: 0.34, y: 0.64, w: 0.13, facing: 'up' },
-      { type: 'toilet', spriteKey: 'toilet', x: 0.66, y: 0.64, w: 0.13, facing: 'up' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
+      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.25, y: 0.14, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.58, y: 0.52, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ],
-    clearZones: [{ x: 0.43, y: 0.26, width: 0.14, height: 0.26 }],
+    clearZones: [],
   },
-  bedroom: {
+  'f1-D': {
     slots: [
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.24, y: 0.07, w: 0.20, facing: 'down' },
-      { type: 'bed', spriteKey: 'bed', x: 0.50, y: 0.30, w: 0.34, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.27, y: 0.38, w: 0.07, role: 'bedside left' },
-      { type: 'lights', spriteKey: 'lights', x: 0.73, y: 0.38, w: 0.07, role: 'bedside right' },
-      { type: 'fan', spriteKey: 'fan', x: 0.85, y: 0.78, w: 0.11 },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.74, y: 0.12, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.52, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'toilet', spriteKey: 'toilet', x: 0.22, y: 0.78, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
+      { type: 'sink', spriteKey: 'sink', x: 0.82, y: 0.78, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
     ],
-    clearZones: [{ x: 0.43, y: 0.52, width: 0.14, height: 0.40 }],
+    clearZones: [],
   },
-  workplace: {
+  'f2-A': {
     slots: [
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.07, w: 0.18, facing: 'down' },
-      { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.30, w: 0.28, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.16, y: 0.38, w: 0.06, role: 'bedside left' },
-      { type: 'lights', spriteKey: 'lights', x: 0.56, y: 0.38, w: 0.06, role: 'bedside right' },
-      { type: 'workplace', spriteKey: 'workplace', x: 0.78, y: 0.26, w: 0.25, facing: 'down' },
-      { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.80, w: 0.10 },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.45, w: 0.10, layer: 'ceiling' },
+      { type: 'bed', spriteKey: 'bed', x: 0.25, y: 0.22, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.57, y: 0.12, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside left' },
+      { type: 'lights', spriteKey: 'lights', x: 0.68, y: 0.12, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.82, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.60, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'fan', spriteKey: 'fan', x: 0.85, y: 0.78, w: ITEM_SLOT_WIDTHS.fan },
+    ],
+    clearZones: [{ x: 0.44, y: 0.68, width: 0.12, height: 0.24 }],
+  },
+  'f2-B': {
+    slots: [
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.30, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.16, y: 0.38, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside left' },
+      { type: 'lights', spriteKey: 'lights', x: 0.56, y: 0.38, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'workplace', spriteKey: 'workplace', x: 0.78, y: 0.26, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
+      { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.80, w: ITEM_SLOT_WIDTHS.fan },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.48, y: 0.60, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ],
     clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
+  },
+  'f2-C': {
+    slots: [
+      { type: 'workplace', spriteKey: 'workplace', x: 0.26, y: 0.12, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.70, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.50, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+    ],
+    clearZones: [],
+  },
+  'f2-D': {
+    slots: [
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.40, y: 0.12, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.58, y: 0.42, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'toilet', spriteKey: 'toilet', x: 0.26, y: 0.77, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
+      { type: 'sink', spriteKey: 'sink', x: 0.83, y: 0.78, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
+    ],
+    clearZones: [],
   },
 };
 
@@ -113,6 +159,9 @@ export const ITEM_IMAGE_META: Record<string, {
   table: { canvasWidth: 520, canvasHeight: 388, contentX: 129, contentY: 116, contentWidth: 262, contentHeight: 161 },
   sink: { canvasWidth: 520, canvasHeight: 388, contentX: 194, contentY: 101, contentWidth: 133, contentHeight: 200 },
   toilet: { canvasWidth: 520, canvasHeight: 388, contentX: 193, contentY: 91, contentWidth: 134, contentHeight: 216 },
+  washing_machine: { canvasWidth: 520, canvasHeight: 388, contentX: 164, contentY: 71, contentWidth: 205, contentHeight: 256 },
+  wifi_router: { canvasWidth: 520, canvasHeight: 388, contentX: 137, contentY: 108, contentWidth: 244, contentHeight: 169 },
+  router: { canvasWidth: 520, canvasHeight: 388, contentX: 137, contentY: 108, contentWidth: 244, contentHeight: 169 },
 };
 
 export const ROOM_DOOR_RATIOS: Record<RoomSlot, Partial<Record<RoomSide, number>>> = {
@@ -125,6 +174,7 @@ export const ROOM_DOOR_RATIOS: Record<RoomSlot, Partial<Record<RoomSide, number>
 const TYPE_ALIASES: Record<string, string> = {
   aircon: 'air_conditioner', fridge: 'refrigerator', light: 'lights',
   stand_fan: 'fan', shower: 'water_heater', toilet_bin: 'toilet',
+  wifi_router: 'router',
 };
 
 function canonicalItemType(item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>): string {
@@ -132,20 +182,17 @@ function canonicalItemType(item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>): 
 }
 
 export function getRoomTemplateId(
-  room: Pick<StoredRoom, 'type'>,
-  roomItems: readonly Pick<StoredPlacedItem, 'type' | 'spriteKey'>[] = []
+  room: Pick<StoredRoom, 'id' | 'name' | 'floor' | 'slot'>,
+  _roomItems: readonly Pick<StoredPlacedItem, 'type' | 'spriteKey'>[] = []
 ): RoomTemplateId {
-  // The schema has no workplace room type. Its existing Study & Guest room is
-  // stored as bedroom, so the combined Workplace item selects this template.
-  if (room.type === 'bedroom' && roomItems.some((item) => canonicalItemType(item) === 'workplace')) {
-    return 'workplace';
-  }
-  return room.type;
+  const direct = room.id as RoomTemplateId;
+  if (ROOM_SLOTS[direct]) return direct;
+  return `f${room.floor}-${room.slot}` as RoomTemplateId;
 }
 
 export function getRoomSlotDefinition(
   item: LayoutItemIdentity,
-  room: Pick<StoredRoom, 'type'>,
+  room: Pick<StoredRoom, 'id' | 'name' | 'floor' | 'slot'>,
   roomItems: readonly LayoutItemIdentity[] = []
 ): RoomSlotDefinition | undefined {
   const type = canonicalItemType(item);
@@ -178,7 +225,8 @@ export function layoutItemsInRooms(items: StoredPlacedItem[], rooms: StoredRoom[
     const slot = getRoomSlotDefinition(item, room, roomItems);
     if (!slot) return [];
     const point = getSlotPlanPoint(room, slot);
-    return [{ ...item, posX: point.x, posY: point.y }];
+    return [{ ...item, posX: point.x, posY: point.y,
+      ...(slot.rotation !== undefined ? { rotation: slot.rotation } : {}) }];
   });
 }
 
@@ -199,7 +247,8 @@ export function tidyFloorItems(items: StoredPlacedItem[], rooms: StoredRoom[], f
     const slot = getRoomSlotDefinition(item, room, roomItems);
     if (!slot) { leftovers.push(item); return item; }
     const point = getSlotPlanPoint(room, slot);
-    const placed = { ...item, posX: point.x, posY: point.y };
+    const placed = { ...item, posX: point.x, posY: point.y,
+      ...(slot.rotation !== undefined ? { rotation: slot.rotation } : {}) };
     if (Math.abs(placed.posX - item.posX) > 0.0001 || Math.abs(placed.posY - item.posY) > 0.0001) moved.push(placed);
     return placed;
   });
@@ -208,7 +257,7 @@ export function tidyFloorItems(items: StoredPlacedItem[], rooms: StoredRoom[], f
 
 export function getFixedItemDimensions(
   item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>,
-  room: Pick<StoredRoom, 'type' | 'slot'>,
+  room: Pick<StoredRoom, 'id' | 'name' | 'floor' | 'slot'>,
   roomItems: readonly Pick<StoredPlacedItem, 'type' | 'spriteKey'>[],
   planWidth: number,
   planHeight: number
@@ -240,7 +289,7 @@ export interface ItemFootprint extends FractionRect { anchorX: number; anchorY: 
 
 export function getItemLocalFootprint(
   item: StoredPlacedItem,
-  room: Pick<StoredRoom, 'type' | 'slot'>,
+  room: Pick<StoredRoom, 'id' | 'name' | 'floor' | 'slot'>,
   planWidth = 390,
   planHeight = 390,
   roomItems: readonly StoredPlacedItem[] = [item]
@@ -301,6 +350,29 @@ function pointInRect(point: { x: number; y: number }, rect: FractionRect, paddin
 function clampPointToInner(point: { x: number; y: number }) {
   return { x: Math.max(INNER_FLOOR_RECT.x, Math.min(INNER_FLOOR_RECT.x + INNER_FLOOR_RECT.width, point.x)),
     y: Math.max(INNER_FLOOR_RECT.y, Math.min(INNER_FLOOR_RECT.y + INNER_FLOOR_RECT.height, point.y)) };
+}
+
+/** Keeps a freely dragged square item fully inside its room and off the walls. */
+export function clampDraggedItemToRoom(
+  point: { x: number; y: number },
+  room: Pick<StoredRoom, 'slot'>,
+  planWidth: number,
+  planHeight: number,
+  itemSize: number
+) {
+  const roomRect = getSlotRect(room.slot);
+  const halfX = itemSize / Math.max(1, planWidth) / 2;
+  const halfY = itemSize / Math.max(1, planHeight) / 2;
+  const wallPaddingX = 4 / Math.max(1, planWidth);
+  const wallPaddingY = 4 / Math.max(1, planHeight);
+  const minX = roomRect.x + halfX + wallPaddingX;
+  const maxX = roomRect.x + roomRect.width - halfX - wallPaddingX;
+  const minY = roomRect.y + halfY + wallPaddingY;
+  const maxY = roomRect.y + roomRect.height - halfY - wallPaddingY;
+  return {
+    x: minX <= maxX ? Math.max(minX, Math.min(maxX, point.x)) : roomRect.x + roomRect.width / 2,
+    y: minY <= maxY ? Math.max(minY, Math.min(maxY, point.y)) : roomRect.y + roomRect.height / 2,
+  };
 }
 
 /** Return the one standing point in front of an interactive item. */

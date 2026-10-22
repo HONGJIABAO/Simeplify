@@ -14,6 +14,8 @@ import { RotateCw, X } from 'lucide-react-native';
 import { Sprite } from './Sprite';
 import { StoredPlacedItem } from '../logic/storage';
 import { getLitAppearance, type GlowPlatform } from '../logic/litAppearance';
+import { getPlanItemAccessibilityLabel, getPlanItemLabel } from '../logic/itemLabel';
+import { FLOOR_ITEM_SCALE, FLOOR_SPRITE_BASE_SIZE } from '../logic/spriteSizing';
 
 interface PlacedItemProps {
   item: StoredPlacedItem;
@@ -53,15 +55,12 @@ export function PlacedItem({
   onMoveEnd,
 }: PlacedItemProps) {
   const isFurniture = item.category === 'Furniture';
-  const width = itemWidth ?? itemSize ?? 48;
-  const height = itemHeight ?? itemSize ?? 48;
+  const UNIFORM_ITEM_SIZE = FLOOR_SPRITE_BASE_SIZE.item * FLOOR_ITEM_SCALE;
+  const width = itemWidth ?? itemSize ?? UNIFORM_ITEM_SIZE;
+  const height = itemHeight ?? itemSize ?? UNIFORM_ITEM_SIZE;
   const labelWidth = isSelected ? 148 : compactLabel ? 72 : 120;
-  const shouldShowLabel = isEditMode || isSelected;
-  const visibleLabel = !shouldShowLabel
-    ? ''
-    : compactLabel && !isSelected
-      ? (isFurniture ? '' : `${item.wattage ?? 0} W`)
-      : item.name;
+  const shouldShowLabel = isSelected;
+  const visibleLabel = shouldShowLabel ? getPlanItemLabel(item) : '';
 
   const [reduceMotion, setReduceMotion] = useState(false);
   const [glowAnim] = useState(() => new Animated.Value(isOn ? 1 : 0));
@@ -100,12 +99,11 @@ export function PlacedItem({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => isEditMode,
+        // First tap selects the item. Only an already-selected item owns the
+        // next gesture, so scrolling/tapping the plan does not start a move.
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gesture) =>
-          isEditMode && (Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4),
-        onPanResponderGrant: () => {
-          onSelect(item);
-        },
+          isEditMode && isSelected && (Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4),
         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
           useNativeDriver: false,
         }),
@@ -124,7 +122,7 @@ export function PlacedItem({
           pan.setValue({ x: 0, y: 0 });
         },
       }),
-    [isEditMode, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
+    [isEditMode, isSelected, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
   );
 
   const isCeilingLayer = item.type === 'light_bulb' || item.spriteKey === 'light_bulb';
@@ -158,7 +156,7 @@ export function PlacedItem({
       <Pressable
         onPress={() => onSelect(item)}
         accessibilityRole="button"
-        accessibilityLabel={`${item.name}${isOn ? ', turned on' : ', turned off'}`}
+        accessibilityLabel={`${getPlanItemAccessibilityLabel(item)}${isOn ? ', turned on' : ', turned off'}`}
         hitSlop={{
           top: verticalSlop,
           bottom: verticalSlop,
@@ -171,36 +169,59 @@ export function PlacedItem({
           appearance.surface,
         ]}
       >
-        {/* Android fallback glow: scaled warm tinted copy behind sprite */}
-        {Platform.OS === 'android' && isOn && !isFurniture && (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              styles.pictureOnly,
-              {
-                opacity: glowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, appearance.androidCopy?.opacity ?? 0],
-                }),
-                transform: [{ scale: appearance.androidCopy?.scale ?? 1 }],
-              },
-            ]}
-          >
-            <Sprite
-              type={item.spriteKey || item.type}
-              width={width}
-              height={height}
-              cropTransparent
-              style={{ tintColor: appearance.androidCopy?.tintColor }}
-              containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
-            />
-          </Animated.View>
+        {/* Native / Cross-Platform fallback glow: 1-2 scaled, tinted silhouette copies behind main sprite */}
+        {Platform.OS !== 'web' && isOn && !isFurniture && (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                styles.pictureOnly,
+                {
+                  opacity: glowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 0.45],
+                  }),
+                  transform: [{ scale: 1.12 }],
+                },
+              ]}
+            >
+              <Sprite
+                type={item.spriteKey || item.type}
+                width={width}
+                height={height}
+                cropTransparent
+                style={{ tintColor: '#FFF3C4' }}
+                containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
+              />
+            </Animated.View>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                styles.pictureOnly,
+                {
+                  opacity: glowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 0.65],
+                  }),
+                  transform: [{ scale: 1.06 }],
+                },
+              ]}
+            >
+              <Sprite
+                type={item.spriteKey || item.type}
+                width={width}
+                height={height}
+                cropTransparent
+                style={{ tintColor: '#FFF3C4' }}
+                containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
+              />
+            </Animated.View>
+          </>
         )}
 
-        <Animated.View pointerEvents="none" style={[styles.pictureOnly, appearance.iosShadow, appearance.iosShadow ? {
-          shadowOpacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] }),
-        } : undefined]}>
+        <View pointerEvents="none" style={styles.pictureOnly}>
           <Sprite
             type={item.spriteKey || item.type}
             width={width}
@@ -215,16 +236,7 @@ export function PlacedItem({
             } as any)}
             containerStyle={{ transform: [{ rotate: `${item.rotation ?? 0}deg` }] }}
           />
-        </Animated.View>
-
-        {/* Small sage on-dot on top-right of lit appliance */}
-        {isOn && !isFurniture && (
-          <View
-            accessibilityLabel="On"
-            pointerEvents="none"
-            style={styles.onDot}
-          />
-        )}
+        </View>
 
         {/* Selected outline handles in edit mode */}
         {isSelected && isEditMode && (
@@ -301,18 +313,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
-  },
-  onDot: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#8B9D77',
-    borderWidth: 1.2,
-    borderColor: '#FAF6F1',
-    zIndex: 20,
   },
   handleDot: {
     position: 'absolute',

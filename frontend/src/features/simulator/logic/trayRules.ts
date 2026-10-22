@@ -5,10 +5,20 @@ export interface TrayCatalogRow {
   sort_order: number;
 }
 
+export const CLIENT_APPLIANCE_TRAY_TYPE_IDS = ['light_bulb'] as const;
+
+export function appendClientApplianceTrayTypeIds(ids: readonly string[]): string[] {
+  const merged = [...ids];
+  for (const typeId of CLIENT_APPLIANCE_TRAY_TYPE_IDS) {
+    if (!merged.includes(typeId)) merged.push(typeId);
+  }
+  return merged;
+}
+
 export function getInTrayTypeIds(rows: readonly TrayCatalogRow[]): string[] {
   return [...rows]
-    .filter((row) => row.in_tray)
-    .sort((left, right) => left.sort_order - right.sort_order)
+    .filter((row) => row.in_tray !== false)
+    .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
     .map((row) => row.id);
 }
 

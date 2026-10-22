@@ -184,15 +184,19 @@ export function getItemDimensions(
   };
 }
 
+/** Floor-plan item art is intentionally uniform. Tray art has its own sizing. */
+export const FLOOR_ITEM_SCALE = 2.2;
 export const FLOOR_SPRITE_BASE_SIZE = {
-  appliance: 48,
-  furniture: 66,
+  item: 24,
+  appliance: 24,
+  furniture: 24,
   avatar: 66,
 } as const;
 
 export function getFloorSpriteSizes(planWidth: number) {
   const visualScale = Math.max(0.92, Math.min(1.25, planWidth / 350));
   return {
+    item: FLOOR_SPRITE_BASE_SIZE.item * FLOOR_ITEM_SCALE * visualScale,
     appliance: FLOOR_SPRITE_BASE_SIZE.appliance * visualScale,
     furniture: FLOOR_SPRITE_BASE_SIZE.furniture * visualScale,
     avatar: Math.max(60, Math.min(72, FLOOR_SPRITE_BASE_SIZE.avatar * visualScale)),

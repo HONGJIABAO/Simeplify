@@ -54,7 +54,7 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
   assert.equal(household.address_city, 'Subang Jaya');
   assert.equal(household.residents_count, 3);
 
-  // 4. Rooms Verification (6 configured, 2 unconfigured = 8 total)
+  // 4. Rooms Verification (all eight product-layout rooms configured)
   const { data: rooms, error: roomsError } = await client
     .from('rooms')
     .select('*')
@@ -63,9 +63,9 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
   assert.equal(roomsError, null, `Rooms query error: ${roomsError?.message}`);
   assert.equal(rooms.length, 8, `Expected 8 rooms, got ${rooms.length}`);
   const configuredRooms = rooms.filter((r) => r.is_set_up);
-  assert.equal(configuredRooms.length, 6, `Expected 6 configured rooms, got ${configuredRooms.length}`);
+  assert.equal(configuredRooms.length, 8, `Expected 8 configured rooms, got ${configuredRooms.length}`);
 
-  // 5. Appliances Verification (17 placed appliances)
+  // 5. Appliances Verification (17 existing rows + 4 new ceiling bulbs)
   const { data: appliances, error: appliancesError } = await client
     .from('appliances')
     .select('*')
@@ -75,7 +75,7 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
     );
 
   assert.equal(appliancesError, null, `Appliances query error: ${appliancesError?.message}`);
-  assert.equal(appliances.length, 17, `Expected 17 appliances, got ${appliances.length}`);
+  assert.equal(appliances.length, 21, `Expected 21 appliances, got ${appliances.length}`);
 
   // 6. Day Blocks Verification (5 blocks)
   const { data: blocks, error: blocksError } = await client
