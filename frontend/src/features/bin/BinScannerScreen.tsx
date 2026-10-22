@@ -46,11 +46,13 @@ import {
   RotateCcw,
   AlertCircle,
   RefreshCw,
+  Check,
 } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
 import { MiniCard } from '@/components/MiniCard';
 import { Header } from '@/components/Header';
+import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
 import { classifyWasteWithGemini, type GeminiWasteResult } from '@/lib/services/geminiService';
 import { uploadAndScanWaste } from '@/lib/services/binService';
@@ -130,6 +132,8 @@ export default function BinScannerScreen() {
   const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
   const [result, setResult] = useState<GeminiWasteResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const { showToast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
@@ -365,21 +369,25 @@ export default function BinScannerScreen() {
     }
   };
 
-  // Navigate to full result route
-  const handleViewFullResult = () => {
-    if (!result) return;
-    router.push({
-      pathname: '/bin/result' as any,
-      params: {
-        binType: result.binType,
-        itemName: result.identifiedItem,
-        material: result.material,
-        confidence: result.confidence.toString(),
-        tips: result.disposalTip,
-        isRecyclable: result.isRecyclable ? 'true' : 'false',
-        imageUri: imageUri || undefined,
-      },
-    });
+  // Handle "I threw it" disposal confirmation
+  const handleConfirmDisposal = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      if (result?.isRecyclable) {
+        showToast('+10 points', 'success');
+      } else {
+        showToast('Item sorted into General waste', 'info');
+      }
+
+      setTimeout(() => {
+        router.replace('/(tabs)/bin' as any);
+      }, 600);
+    } catch {
+      showToast('Could not record disposal. Please try again.', 'error');
+      setIsSubmitting(false);
+    }
   };
 
   // =========================================================================
@@ -655,12 +663,13 @@ export default function BinScannerScreen() {
             {/* Action buttons */}
             <View style={styles.resultActions}>
               <Button
-                variant="primary"
-                onPress={handleViewFullResult}
-                leftIcon={<Recycle size={18} color="#fafaf9" strokeWidth={1.5} />}
+                variant="accent"
+                onPress={handleConfirmDisposal}
+                loading={isSubmitting}
+                leftIcon={<Check size={18} color="#292524" strokeWidth={2} />}
                 style={styles.fullWidthBtn}
               >
-                Confirm disposal
+                {result.isRecyclable ? 'I threw it (+10 pts)' : 'I threw it'}
               </Button>
               <Button
                 variant="secondary"
