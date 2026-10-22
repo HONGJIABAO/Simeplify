@@ -114,10 +114,10 @@ export default function SimulatorScreen() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
   const hasUnreadNotifications = liveHasUnread || unreadNotificationsCount > 0;
 
-  const [avatarVariant] = useState<'avatar_girl' | 'avatar_boy'>(() =>
-    session.gender === 'boy' || initialSimulation?.avatarVariant === 'avatar_boy' || initialSimulation?.avatarVariant === 'boy'
-      ? 'avatar_boy' : 'avatar_girl'
-  );
+  const avatarVariant: 'avatar_girl' | 'avatar_boy' =
+    session.gender === 'boy' || (!session.gender && (initialSimulation?.avatarVariant === 'avatar_boy' || initialSimulation?.avatarVariant === 'boy'))
+      ? 'avatar_boy'
+      : 'avatar_girl';
 
   // Fetch real household state from Supabase
   useEffect(() => {

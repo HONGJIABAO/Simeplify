@@ -1,16 +1,22 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Receipt, Camera, UploadCloud } from 'lucide-react-native';
+import { Receipt, Camera, UploadCloud, PenLine } from 'lucide-react-native';
 import { Card } from '../Card';
 import { Button } from '../Button';
 
 export interface UploadCardProps {
   onTakePhoto: () => void;
   onUploadPdf: () => void;
+  onManualInput?: () => void;
   isReading?: boolean;
 }
 
-export function UploadCard({ onTakePhoto, onUploadPdf, isReading = false }: UploadCardProps) {
+export function UploadCard({
+  onTakePhoto,
+  onUploadPdf,
+  onManualInput,
+  isReading = false,
+}: UploadCardProps) {
   return (
     <Card style={styles.card}>
       <View style={styles.centerContainer}>
@@ -21,7 +27,7 @@ export function UploadCard({ onTakePhoto, onUploadPdf, isReading = false }: Uplo
 
         <Text style={styles.title}>Upload utility bill</Text>
         <Text style={styles.subtitle}>
-          TNB electricity and Air Selangor water bills (PDF or photo)
+          TNB electricity and Air Selangor water bills (scan or manual entry)
         </Text>
       </View>
 
@@ -47,6 +53,19 @@ export function UploadCard({ onTakePhoto, onUploadPdf, isReading = false }: Uplo
           Upload PDF
         </Button>
       </View>
+
+      {/* Manual Entry Button */}
+      {onManualInput && (
+        <Button
+          variant="secondary"
+          leftIcon={<PenLine size={16} color="#57534e" strokeWidth={1.5} />}
+          onPress={onManualInput}
+          disabled={isReading}
+          style={styles.manualButton}
+        >
+          Enter bill manually
+        </Button>
+      )}
     </Card>
   );
 }
@@ -93,5 +112,13 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     paddingHorizontal: 12,
+  },
+  manualButton: {
+    width: '100%',
+    marginTop: 10,
+    backgroundColor: '#f5f2eb',
+    borderColor: '#e7e2d7',
+    borderWidth: 1,
+    height: 44,
   },
 });

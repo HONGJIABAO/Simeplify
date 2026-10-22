@@ -237,31 +237,50 @@ export default function LoginScreen() {
             )}
           </View>
 
-          {/* Quick Demo Credentials Card */}
+          {/* Quick Login Credentials Card */}
           <View style={styles.demoBox}>
             <View style={styles.demoHeaderRow}>
               <View style={styles.demoDot} />
-              <Text style={styles.demoHeading}>Demo Account (Mei Ling Tan)</Text>
+              <Text style={styles.demoHeading}>Quick Login Accounts</Text>
             </View>
             <Text style={styles.demoText}>
-              Email: <Text style={styles.demoCode}>meiling.tan@example.com</Text>
+              Email: <Text style={styles.demoCode}>ykengwei@gmail.com</Text>
               {'\n'}Password: <Text style={styles.demoCode}>password123</Text>
             </Text>
-            <Pressable
-              onPress={() => {
-                setEmail('meiling.tan@example.com');
-                setPassword('password123');
-                setHasError(false);
-              }}
-              style={({ pressed }) => [
-                styles.fillButton,
-                pressed && styles.fillButtonPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Fill Mei Ling's credentials"
-            >
-              <Text style={styles.fillButtonText}>⚡ Tap to auto-fill Mei Ling&apos;s login</Text>
-            </Pressable>
+            <View style={{ gap: 8 }}>
+              <Pressable
+                onPress={() => {
+                  setEmail('ykengwei@gmail.com');
+                  setPassword('password123');
+                  setHasError(false);
+                }}
+                style={({ pressed }) => [
+                  styles.fillButton,
+                  pressed && styles.fillButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Fill Keng Wei's credentials"
+              >
+                <Text style={styles.fillButtonText}>⚡ Tap to auto-fill Keng Wei&apos;s login</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setEmail('meiling.tan@example.com');
+                  setPassword('password123');
+                  setHasError(false);
+                }}
+                style={({ pressed }) => [
+                  styles.fillButton,
+                  { backgroundColor: '#f0eee9', borderColor: '#d6d3d1' },
+                  pressed && styles.fillButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Fill Mei Ling's credentials"
+              >
+                <Text style={[styles.fillButtonText, { color: '#57534e' }]}>Tap for Mei Ling (Demo account)</Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* Primary Log In Button */}

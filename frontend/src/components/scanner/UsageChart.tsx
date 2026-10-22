@@ -38,10 +38,10 @@ export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: Usage
       <Card style={styles.card}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Monthly usage</Text>
-          <Text style={styles.subtitle}>Past 5 billing cycles</Text>
+          <Text style={styles.subtitle}>Past 6 billing cycles</Text>
         </View>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Upload your bills to visualize 5-month consumption trends.</Text>
+          <Text style={styles.emptyText}>Upload your bills to visualize 6-month consumption trends.</Text>
         </View>
       </Card>
     );
@@ -70,7 +70,7 @@ export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: Usage
       {/* Title block */}
       <View style={styles.titleRow}>
         <Text style={styles.title}>Monthly usage</Text>
-        <Text style={styles.subtitle}>Past 5 billing cycles</Text>
+        <Text style={styles.subtitle}>Past 6 billing cycles</Text>
       </View>
 
       {/* Filter row placed on its own row under title (page_refined.md S7.1) */}

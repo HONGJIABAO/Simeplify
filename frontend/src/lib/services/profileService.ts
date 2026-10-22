@@ -33,9 +33,21 @@ export async function updateProfileAndHousehold(
 ): Promise<void> {
   await updateProfileAndHouseholdWithClient(supabase, userId, householdId, params);
 
+  // If gender is provided, persist to Supabase auth metadata
+  if (params.gender) {
+    try {
+      await supabase.auth.updateUser({
+        data: { gender: params.gender },
+      });
+    } catch (err) {
+      console.warn('Failed to update gender in Supabase auth:', err);
+    }
+  }
+
   // Update active auth session in memory
   updateAuthSession({
     ...(params.name !== undefined ? { name: params.name } : {}),
+    ...(params.gender !== undefined ? { gender: params.gender } : {}),
     ...(params.street !== undefined ? { street: params.street } : {}),
     ...(params.city !== undefined ? { city: params.city } : {}),
     ...(params.state !== undefined ? { state: params.state } : {}),

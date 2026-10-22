@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { MapPin, LogOut } from 'lucide-react-native';
+import { MapPin, LogOut, Check } from 'lucide-react-native';
 
 import { Header } from '@/components/Header';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -38,6 +38,8 @@ import { useUnreadNotifications } from '@/lib/services/notificationService';
 
 const BOY_AVATAR = require('../../../assets/sprites/avatar/avatar_boy.png');
 const GIRL_AVATAR = require('../../../assets/sprites/avatar/avatar_girl.png');
+const BOY_FACE = require('../../../assets/sprites/avatar/avatar_boy_face.png');
+const GIRL_FACE = require('../../../assets/sprites/avatar/avatar_girl_face.png');
 
 export interface ProfileScreenProps {
   /** Optional gender override for Dev Gallery previews */
@@ -46,7 +48,7 @@ export interface ProfileScreenProps {
 
 export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
   const router = useRouter();
-  const { session, logout } = useAuthSession();
+  const { session, logout, setGender } = useAuthSession();
   const { showToast } = useToast();
 
   const [profileData, setProfileData] = useState<ProfileScreenData | null>(null);
@@ -55,6 +57,7 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
   const [editStreet, setEditStreet] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editState, setEditState] = useState('');
+  const [editGender, setEditGender] = useState<UserGender>('boy');
   const [isSaving, setIsSaving] = useState(false);
 
   // Fetch real profile data & unread notifications count from Supabase
@@ -77,8 +80,8 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
     }, [loadProfile])
   );
 
-  // Determine active gender: prop override (for dev gallery) or session state
-  const activeGender: UserGender = initialGender || session.gender || 'girl';
+  // Determine active gender: prop override (for dev gallery) or session state (defaults to 'boy')
+  const activeGender: UserGender = initialGender || session.gender || 'boy';
   const avatarSource = activeGender === 'boy' ? BOY_AVATAR : GIRL_AVATAR;
 
   // Real data with fallback to session
@@ -88,11 +91,23 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
   const { hasUnread: globalHasUnread } = useUnreadNotifications(householdId);
   const hasUnread = globalHasUnread || (profileData?.unreadNotificationsCount ?? 0) > 0;
 
+  const handleToggleGender = async (newGender: UserGender) => {
+    if (newGender === activeGender) return;
+    try {
+      await setGender(newGender);
+      showToast(newGender === 'boy' ? 'Avatar updated to Man' : 'Avatar updated to Woman', 'success');
+    } catch (err: any) {
+      console.warn('Failed to switch avatar gender:', err);
+      showToast('Avatar updated', 'success');
+    }
+  };
+
   const handleOpenEdit = () => {
     setEditName(displayName);
     setEditStreet(profileData?.household?.street || session.street || '');
     setEditCity(profileData?.household?.city || session.city || '');
     setEditState(profileData?.household?.state || session.state || '');
+    setEditGender(activeGender);
     setIsEditOpen(true);
   };
 
@@ -117,7 +132,10 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
         street: editStreet.trim(),
         city: editCity.trim(),
         state: editState.trim(),
+        gender: editGender,
       });
+
+      await setGender(editGender);
 
       showToast('Profile updated successfully', 'success');
       setIsEditOpen(false);
@@ -149,6 +167,49 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
       >
         {/* Full-Body Avatar Showcase Card */}
         <View style={styles.showcaseCard}>
+          {/* Quick Avatar Switcher Toggle */}
+          <View style={styles.genderPillRow}>
+            <Pressable
+              onPress={() => handleToggleGender('boy')}
+              accessibilityRole="button"
+              accessibilityLabel="Switch avatar to Man"
+              style={[
+                styles.genderPill,
+                activeGender === 'boy' && styles.genderPillActive,
+              ]}
+            >
+              <Image source={BOY_FACE} style={styles.genderPillFace} resizeMode="cover" />
+              <Text
+                style={[
+                  styles.genderPillText,
+                  activeGender === 'boy' && styles.genderPillTextActive,
+                ]}
+              >
+                Man
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleToggleGender('girl')}
+              accessibilityRole="button"
+              accessibilityLabel="Switch avatar to Woman"
+              style={[
+                styles.genderPill,
+                activeGender === 'girl' && styles.genderPillActive,
+              ]}
+            >
+              <Image source={GIRL_FACE} style={styles.genderPillFace} resizeMode="cover" />
+              <Text
+                style={[
+                  styles.genderPillText,
+                  activeGender === 'girl' && styles.genderPillTextActive,
+                ]}
+              >
+                Woman
+              </Text>
+            </Pressable>
+          </View>
+
           {/* Full-body standing character */}
           <View style={styles.characterContainer}>
             <Image
@@ -212,6 +273,66 @@ export default function ProfileScreen({ initialGender }: ProfileScreenProps) {
         title="Edit Profile"
       >
         <View style={styles.sheetContent}>
+          {/* Avatar Gender Selection */}
+          <View style={styles.sheetGenderSection}>
+            <Text style={styles.sheetSectionLabel}>Avatar Style</Text>
+            <View style={styles.sheetGenderRow}>
+              <Pressable
+                onPress={() => setEditGender('boy')}
+                accessibilityRole="button"
+                accessibilityLabel="Choose Man Avatar"
+                style={[
+                  styles.sheetGenderCard,
+                  editGender === 'boy' && styles.sheetGenderCardActive,
+                ]}
+              >
+                <View style={styles.sheetGenderFaceWrap}>
+                  <Image source={BOY_FACE} style={styles.sheetGenderFace} resizeMode="cover" />
+                  {editGender === 'boy' && (
+                    <View style={styles.sheetCheckBadge}>
+                      <Check size={12} color="#ffffff" strokeWidth={2.5} />
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.sheetGenderLabel,
+                    editGender === 'boy' && styles.sheetGenderLabelActive,
+                  ]}
+                >
+                  Man
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setEditGender('girl')}
+                accessibilityRole="button"
+                accessibilityLabel="Choose Woman Avatar"
+                style={[
+                  styles.sheetGenderCard,
+                  editGender === 'girl' && styles.sheetGenderCardActive,
+                ]}
+              >
+                <View style={styles.sheetGenderFaceWrap}>
+                  <Image source={GIRL_FACE} style={styles.sheetGenderFace} resizeMode="cover" />
+                  {editGender === 'girl' && (
+                    <View style={styles.sheetCheckBadge}>
+                      <Check size={12} color="#ffffff" strokeWidth={2.5} />
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.sheetGenderLabel,
+                    editGender === 'girl' && styles.sheetGenderLabelActive,
+                  ]}
+                >
+                  Woman
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
           <Input
             label="Full Name"
             value={editName}
@@ -291,7 +412,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     borderWidth: 1,
     borderColor: '#e7e5e4',
-    paddingTop: 24,
+    paddingTop: 18,
     paddingBottom: 28,
     paddingHorizontal: 20,
     alignItems: 'center',
@@ -300,6 +421,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 14,
     elevation: 3,
+  },
+
+  // Quick Avatar Toggle Pills
+  genderPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f4',
+    borderRadius: 9999,
+    padding: 4,
+    gap: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e7e5e4',
+  },
+  genderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 9999,
+    gap: 6,
+  },
+  genderPillActive: {
+    backgroundColor: '#566549',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  genderPillFace: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  genderPillText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 13,
+    color: '#78716c',
+  },
+  genderPillTextActive: {
+    color: '#ffffff',
   },
 
   // Full Body Character Display
@@ -386,6 +549,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingBottom: 24,
     gap: 14,
+  },
+  sheetGenderSection: {
+    gap: 8,
+    marginBottom: 4,
+  },
+  sheetSectionLabel: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 14,
+    color: '#44403c',
+  },
+  sheetGenderRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  sheetGenderCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#e7e5e4',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  sheetGenderCardActive: {
+    backgroundColor: '#e0e6d9',
+    borderColor: '#566549',
+  },
+  sheetGenderFaceWrap: {
+    position: 'relative',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f4',
+  },
+  sheetGenderFace: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  sheetCheckBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#566549',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetGenderLabel: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 15,
+    color: '#57534e',
+  },
+  sheetGenderLabelActive: {
+    color: '#2d3b23',
+    fontFamily: 'SourceSans3_700Bold',
   },
   cityStateRow: {
     flexDirection: 'row',

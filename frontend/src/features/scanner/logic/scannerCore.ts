@@ -142,9 +142,9 @@ export function buildUsageChartData(bills: Bill[]): MonthlyChartDataPoint[] {
   }
 
   const sortedMonths = Array.from(monthMap.keys()).sort();
-  const last5 = sortedMonths.slice(-5);
+  const recentMonths = sortedMonths.slice(-6);
 
-  return last5.map((monthKey) => {
+  return recentMonths.map((monthKey) => {
     const pair = monthMap.get(monthKey)!;
     const elecBill = pair.electricity;
     const waterBill = pair.water;

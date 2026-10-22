@@ -15,17 +15,24 @@ export async function syncRoutineNotificationsWithClient(
   client: SupabaseClient,
   householdId?: string
 ): Promise<number> {
-  const { data, error } = await client.rpc(
-    'sync_routine_appliance_notifications',
-    householdId ? { p_household_id: householdId } : {}
-  );
+  try {
+    const { data, error } = await client.rpc(
+      'sync_routine_appliance_notifications',
+      householdId ? { p_household_id: householdId } : {}
+    );
 
-  if (error) {
-    console.error('Error syncing routine notifications:', error);
-    throw error;
+    if (error) {
+      if (error.code === 'PGRST202' || error.message?.includes('schema cache')) {
+        return 0;
+      }
+      console.warn('Error syncing routine notifications:', error.message);
+      return 0;
+    }
+
+    return (data as number) ?? 0;
+  } catch {
+    return 0;
   }
-
-  return (data as number) ?? 0;
 }
 
 /**

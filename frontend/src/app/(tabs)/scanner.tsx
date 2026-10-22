@@ -32,6 +32,7 @@ import { UsageChart, type ChartFilter } from '@/components/scanner/UsageChart';
 import { AIAnalysisCard, type AIAnalysisStatus } from '@/components/scanner/AIAnalysisCard';
 import { CheckAndCorrectSheet, type CheckAndCorrectInitialValues } from '@/components/scanner/CheckAndCorrectSheet';
 import { BillDetailSheet } from '@/components/scanner/BillDetailSheet';
+import { BillCameraModal } from '@/components/scanner/BillCameraModal';
 
 // Data & Services
 import { useAuthSession } from '@/lib/authSession';
@@ -55,20 +56,21 @@ import {
 import { type WaterAlertLevel } from '@/lib/waterLevel';
 import { formatMoney, formatUsage } from '@/lib/formatters';
 
-// Dev Gallery Fixtures
+// Dev Gallery Fixtures (Past 6 Months: May 2026 to Oct 2026)
 const FIXTURE_NORMAL_BILLS: Bill[] = [
+  // October 2026
   {
-    id: 'fix-elec-oct',
+    id: 'fix-elec-2026-10',
     household_id: 'mock-hh',
-    file_path: 'mock-hh/elec_oct.pdf',
+    file_path: 'mock-hh/elec_2026_10.pdf',
     type: 'electricity',
     billing_month: '2026-10-01',
-    usage: 340,
-    amount: 151.05,
+    usage: 350,
+    amount: 89.20,
     analysis: {
-      summary: 'Electricity consumption matches normal seasonal baseline (340 kWh vs 525 kWh estimate).',
-      estimate_kwh: 525,
-      comparison: { mom_change_pct: -3.0, avg_3m_diff: -15, streak: '2 months down' },
+      summary: 'Outstanding energy conservation! Usage is 7.9% lower than last month and beats your Simulator estimate.',
+      estimate_kwh: 375,
+      comparison: { mom_change_pct: -7.9, avg_3m_diff: -25, streak: '3 months down' },
       tips: ['Maintain daytime AC setting at 25°C with ceiling fan.'],
       footer_disclaimer: 'Based on your bills only. Your real usage may differ.',
     },
@@ -78,18 +80,159 @@ const FIXTURE_NORMAL_BILLS: Bill[] = [
     alertLevel: 'normal',
   },
   {
-    id: 'fix-water-oct',
+    id: 'fix-water-2026-10',
     household_id: 'mock-hh',
-    file_path: 'mock-hh/water_oct.pdf',
+    file_path: 'mock-hh/water_2026_10.pdf',
     type: 'water',
     billing_month: '2026-10-01',
-    usage: 18,
-    amount: 32.5,
+    usage: 15,
+    amount: 12.60,
     analysis: {
-      summary: 'Water volume is within normal domestic limits for 3 residents.',
-      comparison: { mom_change_pct: 0, avg_3m_diff: 0, streak: 'Steady' },
-      tips: ['Continue practicing 5-minute showers.'],
+      summary: 'Water volume is within normal domestic limits for 3 residents (15 m³).',
+      comparison: { mom_change_pct: -6.25, avg_3m_diff: -1, streak: 'Steady' },
+      tips: ['Keep up the short shower habit.'],
     },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'Air Selangor',
+    alertLevel: 'normal',
+  },
+  // September 2026
+  {
+    id: 'fix-elec-2026-09',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/elec_2026_09.pdf',
+    type: 'electricity',
+    billing_month: '2026-09-01',
+    usage: 380,
+    amount: 100.40,
+    analysis: {
+      summary: 'Great energy savings. Usage is 3.8% lower than August.',
+      comparison: { mom_change_pct: -3.8 },
+      tips: ['Clean AC air filters regularly.'],
+    },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'TNB',
+    alertLevel: 'normal',
+  },
+  {
+    id: 'fix-water-2026-09',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/water_2026_09.pdf',
+    type: 'water',
+    billing_month: '2026-09-01',
+    usage: 16,
+    amount: 13.50,
+    analysis: { summary: 'Usage steady with August.' },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'Air Selangor',
+    alertLevel: 'normal',
+  },
+  // August 2026
+  {
+    id: 'fix-elec-2026-08',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/elec_2026_08.pdf',
+    type: 'electricity',
+    billing_month: '2026-08-01',
+    usage: 395,
+    amount: 106.10,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'TNB',
+    alertLevel: 'normal',
+  },
+  {
+    id: 'fix-water-2026-08',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/water_2026_08.pdf',
+    type: 'water',
+    billing_month: '2026-08-01',
+    usage: 16,
+    amount: 13.50,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'Air Selangor',
+    alertLevel: 'normal',
+  },
+  // July 2026
+  {
+    id: 'fix-elec-2026-07',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/elec_2026_07.pdf',
+    type: 'electricity',
+    billing_month: '2026-07-01',
+    usage: 415,
+    amount: 113.70,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'TNB',
+    alertLevel: 'normal',
+  },
+  {
+    id: 'fix-water-2026-07',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/water_2026_07.pdf',
+    type: 'water',
+    billing_month: '2026-07-01',
+    usage: 17,
+    amount: 14.30,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'Air Selangor',
+    alertLevel: 'normal',
+  },
+  // June 2026
+  {
+    id: 'fix-elec-2026-06',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/elec_2026_06.pdf',
+    type: 'electricity',
+    billing_month: '2026-06-01',
+    usage: 430,
+    amount: 119.80,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'TNB',
+    alertLevel: 'normal',
+  },
+  {
+    id: 'fix-water-2026-06',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/water_2026_06.pdf',
+    type: 'water',
+    billing_month: '2026-06-01',
+    usage: 18,
+    amount: 15.20,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'Air Selangor',
+    alertLevel: 'normal',
+  },
+  // May 2026
+  {
+    id: 'fix-elec-2026-05',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/elec_2026_05.pdf',
+    type: 'electricity',
+    billing_month: '2026-05-01',
+    usage: 420,
+    amount: 115.50,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    provider: 'TNB',
+    alertLevel: 'normal',
+  },
+  {
+    id: 'fix-water-2026-05',
+    household_id: 'mock-hh',
+    file_path: 'mock-hh/water_2026_05.pdf',
+    type: 'water',
+    billing_month: '2026-05-01',
+    usage: 17,
+    amount: 14.30,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     provider: 'Air Selangor',
@@ -97,34 +240,36 @@ const FIXTURE_NORMAL_BILLS: Bill[] = [
   },
 ];
 
+// Fixture with Abnormal Water Bill Spike (+112% surge / leak detected)
 const FIXTURE_LEAK_BILLS: Bill[] = [
+  FIXTURE_NORMAL_BILLS[0],
   {
-    ...FIXTURE_NORMAL_BILLS[0],
-  },
-  {
-    id: 'fix-water-leak',
+    id: 'fix-water-2026-10-leak',
     household_id: 'mock-hh',
-    file_path: 'mock-hh/water_leak.pdf',
+    file_path: 'mock-hh/water_2026_10_leak.pdf',
     type: 'water',
     billing_month: '2026-10-01',
-    usage: 18,
-    amount: 80.0,
+    usage: 34,
+    amount: 68.50,
     analysis: {
-      summary: 'Water consumption surged +48% vs previous month. Potential leak detected.',
-      comparison: { mom_change_pct: 48, avg_3m_diff: 6, streak: 'Surge' },
-      tips: ['Inspect downstairs toilet cistern seal for silent flapper leak.', 'Check outdoor garden hose bib for slow seepage.'],
+      summary: 'Water consumption surged +112% vs previous month (34 m³ vs 16 m³). Potential leak detected.',
+      comparison: { mom_change_pct: 112.5, avg_3m_diff: 18, streak: 'Sudden spike' },
+      tips: [
+        'Inspect downstairs toilet cistern seal for silent flapper leak.',
+        'Check outdoor garden hose bib for slow seepage.',
+        'Close all taps and verify if water meter dial continues spinning.',
+      ],
     },
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     provider: 'Air Selangor',
     alertLevel: 'leak_detected',
   },
+  ...FIXTURE_NORMAL_BILLS.slice(2),
 ];
 
 const FIXTURE_MAJOR_BILLS: Bill[] = [
-  {
-    ...FIXTURE_NORMAL_BILLS[0],
-  },
+  FIXTURE_NORMAL_BILLS[0],
   {
     id: 'fix-water-major',
     household_id: 'mock-hh',
@@ -134,8 +279,8 @@ const FIXTURE_MAJOR_BILLS: Bill[] = [
     usage: 40,
     amount: 195.0,
     analysis: {
-      summary: 'Water consumption doubled (+122%). Potential major pipe burst or valve failure.',
-      comparison: { mom_change_pct: 122, avg_3m_diff: 24, streak: 'Severe spike' },
+      summary: 'Water consumption doubled (+150%). Potential major pipe burst or valve failure.',
+      comparison: { mom_change_pct: 150, avg_3m_diff: 24, streak: 'Severe spike' },
       tips: ['Inspect main water meter for continuous movement while taps are off.', 'Consider closing the main stopcock valve.'],
     },
     created_at: new Date().toISOString(),
@@ -143,6 +288,7 @@ const FIXTURE_MAJOR_BILLS: Bill[] = [
     provider: 'Air Selangor',
     alertLevel: 'major_pipe_burst',
   },
+  ...FIXTURE_NORMAL_BILLS.slice(2),
 ];
 
 export default function ScannerScreen() {
@@ -179,6 +325,9 @@ export default function ScannerScreen() {
 
   // In-memory read token ref (never written to DB or storage, per AGENT.md)
   const inMemoryReadTokenRef = useRef<string | undefined>(undefined);
+
+  // Camera scanner modal state
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
 
   // Dev state gallery toggle
   const [showDevControls, setShowDevControls] = useState(false);
@@ -241,6 +390,60 @@ export default function ScannerScreen() {
       loadData();
     }, [loadData])
   );
+
+  // Add Bill Flow: 1. Camera Scan complete with Example or Photo
+  const handleScanFromCamera = async (data: {
+    billType: 'electricity' | 'water';
+    provider: string;
+    billingMonth: string;
+    usage: number;
+    amount: number;
+    isAbnormal?: boolean;
+    anomalyMessage?: string;
+  }) => {
+    setIsCameraModalOpen(false);
+    setIsCheckSheetOpen(true);
+    setIsReadingBill(false);
+    setReadingFailed(false);
+    setCurrentFileName(`${data.provider.toLowerCase().replace(/\s+/g, '_')}_${data.billingMonth}.pdf`);
+    setCurrentFilePath(`${householdId || 'demo'}/${data.provider.toLowerCase().replace(/\s+/g, '_')}_${data.billingMonth}.pdf`);
+
+    setInitialSheetValues({
+      billType: data.billType,
+      provider: data.provider,
+      billingMonth: data.billingMonth,
+      usage: data.usage,
+      amount: data.amount,
+    });
+
+    if (householdId) {
+      const { exists } = await checkBillExists(householdId, data.billType, data.billingMonth);
+      setAlreadySavedMonth(exists);
+    }
+
+    if (data.isAbnormal) {
+      showToast(data.anomalyMessage || 'Abnormal water usage surge detected in statement!', 'warning');
+    } else {
+      showToast(`Scanned ${data.provider} bill successfully! Please verify numbers.`, 'success');
+    }
+  };
+
+  // Manual Bill Input: Open sheet directly with empty/default fields without upload/scan
+  const handleManualInput = () => {
+    setCurrentFileName('manual_statement.pdf');
+    setCurrentFilePath(`${householdId || 'local'}/manual_${Date.now()}.pdf`);
+    setInitialSheetValues({
+      billType: 'electricity',
+      provider: 'TNB',
+      billingMonth: '2026-10-01',
+      usage: 0,
+      amount: 0,
+    });
+    setReadingFailed(false);
+    setIsReadingBill(false);
+    setAlreadySavedMonth(false);
+    setIsCheckSheetOpen(true);
+  };
 
   // Add Bill Flow: 1. Pick/Upload -> 2. Read -> 3. Check & Correct Sheet
   const handleInitiateScan = (type: 'photo' | 'pdf') => {
@@ -441,8 +644,9 @@ export default function ScannerScreen() {
           <>
             {/* 1. Upload Card */}
             <UploadCard
-              onTakePhoto={() => handleInitiateScan('photo')}
+              onTakePhoto={() => setIsCameraModalOpen(true)}
               onUploadPdf={() => handleInitiateScan('pdf')}
+              onManualInput={handleManualInput}
               isReading={isReadingBill}
             />
 
@@ -459,8 +663,9 @@ export default function ScannerScreen() {
           <>
             {/* 1. Upload Card (Take photo / Upload PDF) */}
             <UploadCard
-              onTakePhoto={() => handleInitiateScan('photo')}
+              onTakePhoto={() => setIsCameraModalOpen(true)}
               onUploadPdf={() => handleInitiateScan('pdf')}
+              onManualInput={handleManualInput}
               isReading={isReadingBill}
             />
 
@@ -722,6 +927,15 @@ export default function ScannerScreen() {
         onDelete={(id, path) => handleDeleteBill(id, path)}
         onAnalyzeAgain={handleReanalyze}
         isReanalyzing={isReanalyzing}
+      />
+
+      {/* Bill Camera & Example Testing Modal */}
+      <BillCameraModal
+        visible={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onScanComplete={handleScanFromCamera}
+        onUploadFile={() => handleInitiateScan('pdf')}
+        onManualInput={handleManualInput}
       />
     </SafeAreaView>
   );

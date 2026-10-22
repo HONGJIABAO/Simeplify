@@ -55,7 +55,7 @@ export const INITIAL_AUTH_SESSION: AuthSession = {
   household: null,
   name: '',
   email: '',
-  gender: 'girl',
+  gender: 'boy',
   state: '',
   city: '',
   street: '',
@@ -156,7 +156,7 @@ export async function refreshSession(): Promise<AuthSession> {
     const { profile, household } = await fetchUserData(user);
 
     const userMetadata = user.user_metadata || {};
-    const gender: UserGender = (userMetadata.gender as UserGender) || 'girl';
+    const gender: UserGender = (userMetadata.gender as UserGender) || 'boy';
     const name = profile?.name || userMetadata.name || userMetadata.full_name || user.email?.split('@')[0] || '';
     const email = profile?.email || user.email || '';
 
@@ -240,6 +240,29 @@ export function updateAuthSession(updates: Partial<AuthSession>): void {
     ...(addressDisplay !== undefined ? { addressDisplay } : {}),
   };
   notifyListeners();
+
+  // If gender is explicitly updated and user is logged in, sync to Supabase user metadata
+  if (updates.gender && currentSession.user) {
+    void supabase.auth.updateUser({
+      data: { gender: updates.gender },
+    }).catch((err) => {
+      console.warn('Failed to sync gender to Supabase auth metadata:', err);
+    });
+  }
+}
+
+/** Explicitly change the user avatar gender and persist to Supabase Auth */
+export async function setUserGender(gender: UserGender): Promise<void> {
+  updateAuthSession({ gender });
+  if (currentSession.user) {
+    try {
+      await supabase.auth.updateUser({
+        data: { gender },
+      });
+    } catch (err) {
+      console.warn('Failed to persist gender to Supabase:', err);
+    }
+  }
 }
 
 /** Sign in with email and password via Supabase */
@@ -278,7 +301,7 @@ export async function signUp(
     options: {
       data: {
         name: metadata?.name || '',
-        gender: metadata?.gender || 'girl',
+        gender: metadata?.gender || 'boy',
         state: metadata?.state || '',
         city: metadata?.city || '',
         street: metadata?.street || '',
@@ -313,6 +336,7 @@ export async function logoutAuthSession(): Promise<void> {
 export function useAuthSession(): {
   session: AuthSession;
   updateSession: (updates: Partial<AuthSession>) => void;
+  setGender: (gender: UserGender) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthSession>;
   signIn: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
@@ -349,9 +373,14 @@ export function useAuthSession(): {
     return await refreshSession();
   }, []);
 
+  const setGender = useCallback(async (gender: UserGender) => {
+    await setUserGender(gender);
+  }, []);
+
   return {
     session,
     updateSession: updateAuthSession,
+    setGender,
     logout,
     refresh,
     signIn,

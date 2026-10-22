@@ -37,6 +37,7 @@ export interface UpdateProfileParams {
   street?: string;
   city?: string;
   state?: string;
+  gender?: 'boy' | 'girl';
 }
 
 /**
