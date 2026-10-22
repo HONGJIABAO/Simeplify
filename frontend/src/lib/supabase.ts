@@ -18,7 +18,7 @@ export const SUPABASE_ANON_KEY =
   DEFAULT_SUPABASE_ANON_KEY;
 
 // Cross-platform storage adapter for Expo Web and Native
-const authStorage = {
+export const authStorage = {
   getItem: async (key: string): Promise<string | null> => {
     try {
       if (Platform.OS === 'web') {

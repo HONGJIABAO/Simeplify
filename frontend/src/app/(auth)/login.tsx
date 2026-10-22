@@ -83,7 +83,11 @@ export default function LoginScreen() {
       const { user, error } = await signIn(email.trim(), password.trim());
       if (error || !user) {
         setHasError(true);
-        setErrorMessage(error?.message || 'Email or password is wrong.');
+        const rawMsg = error?.message || 'Email or password is wrong.';
+        const displayMsg = rawMsg.toLowerCase().includes('failed to fetch')
+          ? 'Cannot connect to server. Please use the Demo Account or check your connection.'
+          : rawMsg;
+        setErrorMessage(displayMsg);
         setIsLoading(false);
         return;
       }
@@ -96,7 +100,11 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       setHasError(true);
-      setErrorMessage(err?.message || 'Email or password is wrong.');
+      const rawMsg = err?.message || 'Email or password is wrong.';
+      const displayMsg = rawMsg.toLowerCase().includes('failed to fetch')
+        ? 'Cannot connect to server. Please use the Demo Account or check your connection.'
+        : rawMsg;
+      setErrorMessage(displayMsg);
     } finally {
       setIsLoading(false);
     }
