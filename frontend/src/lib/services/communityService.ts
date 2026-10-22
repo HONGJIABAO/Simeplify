@@ -13,7 +13,10 @@ export function isCommunityOfflineError(error: unknown): boolean {
   return (
     message.includes('failed to fetch') ||
     message.includes('network request failed') ||
-    message.includes('networkerror')
+    message.includes('networkerror') ||
+    message.includes('fetch failed') ||
+    message.includes('connection refused') ||
+    message.includes('econnrefused')
   );
 }
 
