@@ -47,6 +47,7 @@ import { Header } from '@/components/Header';
 import { MiniCard } from '@/components/MiniCard';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
+import { useAuthSession } from '@/lib/authSession';
 import {
   type BinType,
   type ClassifyWasteResult,
@@ -54,7 +55,7 @@ import {
   mockDeedsToday,
   getBinInfo,
 } from '@/lib/mockData';
-import { confirmDisposal } from '@/lib/services/binService';
+import { confirmDisposal, fetchBinState } from '@/lib/services/binService';
 import { LEAF_DAILY_DEED_CAP } from '@/lib/flags';
 
 const cartonImage = require('../../../assets/images/plain_carton_box.png');
@@ -110,30 +111,74 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
 
 export default function BinScanResultScreen() {
   const router = useRouter();
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
+
   const params = useLocalSearchParams<{
     binType?: string;
     state?: string;
     imageUri?: string;
     itemName?: string;
+    material?: string;
+    confidence?: string;
+    tips?: string;
+    tip?: string;
+    isRecyclable?: string;
+    pointsAwarded?: string;
+    dailyLimitReached?: string;
+    scanId?: string;
   }>();
 
   const { showToast } = useToast();
 
   const requestedBin = (params.binType as BinType) || 'paper';
   const baseResult = mockScanResults[requestedBin] || mockScanResults.paper;
-  const initialResult = params.itemName
-    ? { ...baseResult, itemName: params.itemName }
-    : baseResult;
+
+  const initialConfidence = params.confidence ? parseFloat(params.confidence) : baseResult.confidence;
+  const initialRecyclable = params.isRecyclable !== undefined
+    ? params.isRecyclable === 'true'
+    : (requestedBin !== 'general');
+  const initialTip = params.tips || params.tip || baseResult.tip;
+
+  const initialResult: ClassifyWasteResult = {
+    ...baseResult,
+    itemName: params.itemName || baseResult.itemName,
+    binType: requestedBin,
+    material: params.material || baseResult.material,
+    confidence: initialConfidence,
+    recyclable: initialRecyclable,
+    tip: initialTip,
+  };
+
+  const initialUiState = (params.state as any) ||
+    (initialConfidence < 0.6 ? 'low-confidence' : 'default');
 
   const [uiState, setUiState] = useState<'default' | 'low-confidence' | 'error' | 'loading'>(
-    (params.state as any) || 'default'
+    initialUiState
   );
   const [result, setResult] = useState<ClassifyWasteResult>(initialResult);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Deeds count for daily cap
-  const isDailyLimitReached =
-    params.state === 'daily-limit' || mockDeedsToday.count >= LEAF_DAILY_DEED_CAP;
+  // Deeds count for daily cap (initial from params/mock, refreshed from fetchBinState)
+  const [dailyLimitReached, setDailyLimitReached] = useState<boolean>(
+    params.dailyLimitReached === 'true' ||
+    params.state === 'daily-limit' ||
+    mockDeedsToday.count >= LEAF_DAILY_DEED_CAP
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    if (householdId) {
+      fetchBinState(householdId).then((st) => {
+        if (isMounted) {
+          setDailyLimitReached(st.dailyLimitReached);
+        }
+      }).catch(console.error);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [householdId]);
 
   const binInfo = getBinInfo(result.binType);
 
@@ -154,14 +199,26 @@ export default function BinScanResultScreen() {
     setIsSubmitting(true);
 
     try {
-      const outcome = await confirmDisposal('scan-auto', result.binType);
-
-      if (outcome.pointsAwarded > 0) {
-        showToast('+10 points', 'success');
-      } else if (outcome.dailyLimitReached && result.recyclable) {
-        showToast('Daily limit reached. 0 points today.', 'warning');
+      if (params.scanId) {
+        const confirmRes = await confirmDisposal(params.scanId, result.binType, householdId || undefined);
+        if (confirmRes.pointsAwarded > 0) {
+          showToast('+10 points', 'success');
+        } else if (confirmRes.alreadyConfirmed) {
+          showToast('Disposal already confirmed', 'info');
+        } else if (confirmRes.dailyLimitReached && result.recyclable) {
+          showToast('Daily limit reached. 0 points today.', 'warning');
+        } else {
+          showToast(confirmRes.message || 'Item sorted into General waste', 'info');
+        }
       } else {
-        showToast('Item sorted into General waste', 'info');
+        // Fallback for mock demo runs without real scanId
+        if (result.recyclable && !dailyLimitReached) {
+          showToast('+10 points', 'success');
+        } else if (result.recyclable && dailyLimitReached) {
+          showToast('Daily limit reached. 0 points today.', 'warning');
+        } else {
+          showToast('Item sorted into General waste', 'info');
+        }
       }
 
       // Navigate back to Bin home
@@ -265,7 +322,7 @@ export default function BinScanResultScreen() {
   // Determine button text and variant according to COM-03 / BIN-02 rules:
   // - If recyclable and not daily limit reached: "I threw it (+10 pts)", Accent variant
   // - If daily limit reached or general waste: "I threw it", Primary or Accent variant
-  const showPointsOnButton = result.recyclable && !isDailyLimitReached;
+  const showPointsOnButton = result.recyclable && !dailyLimitReached;
   const buttonText = showPointsOnButton ? 'I threw it (+10 pts)' : 'I threw it';
 
   return (

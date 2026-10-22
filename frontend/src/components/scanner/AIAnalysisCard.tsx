@@ -5,19 +5,23 @@ import { Card } from '../Card';
 import { MiniCard } from '../MiniCard';
 import { Skeleton } from '../Skeleton';
 import { Button } from '../Button';
-import { MOCK_AI_ANALYSIS } from '@/lib/mockData';
+import { type BillAnalysis } from '@/lib/services/scannerService';
 
 export type AIAnalysisStatus = 'loaded' | 'loading' | 'error' | 'first_bill';
 
 export interface AIAnalysisCardProps {
   status?: AIAnalysisStatus;
-  data?: typeof MOCK_AI_ANALYSIS;
+  analysis?: BillAnalysis | null;
+  billType?: 'electricity' | 'water';
+  billUsage?: number;
   onRetry?: () => void;
 }
 
 export function AIAnalysisCard({
   status = 'loaded',
-  data = MOCK_AI_ANALYSIS,
+  analysis,
+  billType,
+  billUsage,
   onRetry,
 }: AIAnalysisCardProps) {
   if (status === 'loading') {
@@ -29,14 +33,14 @@ export function AIAnalysisCard({
           </View>
           <Text style={styles.title}>AI Analysis</Text>
         </View>
-        <Text style={styles.loadingNote}>Analyzing your latest bill with EcoTwin AI...</Text>
+        <Text style={styles.loadingNote}>Analyzing your bill with EcoTwin AI...</Text>
         <View style={styles.skeletonGap}>
           <Skeleton height={20} width="90%" />
           <Skeleton height={20} width="70%" />
         </View>
         <View style={styles.metricRow}>
-          <Skeleton height={80} style={{ flex: 1, borderRadius: 20 }} />
-          <Skeleton height={80} style={{ flex: 1, borderRadius: 20 }} />
+          <Skeleton height={70} style={{ flex: 1, borderRadius: 20 }} />
+          <Skeleton height={70} style={{ flex: 1, borderRadius: 20 }} />
         </View>
       </Card>
     );
@@ -80,18 +84,25 @@ export function AIAnalysisCard({
         <Text style={styles.summaryCopy}>
           This is your first uploaded bill! A full comparative trend will appear once next month&apos;s statement is uploaded.
         </Text>
-        <MiniCard tone="subtle" style={styles.firstBillCard}>
-          <Text style={styles.firstBillText}>
-            Electricity is currently calibrated against your Simulator baseline (525 kWh est.). Water volume is within standard thresholds.
-          </Text>
-        </MiniCard>
+        {analysis?.estimate_kwh != null && (
+          <MiniCard tone="subtle" style={styles.firstBillCard}>
+            <Text style={styles.firstBillText}>
+              Calibrated against your Simulator baseline ({analysis.estimate_kwh} kWh est.).
+            </Text>
+          </MiniCard>
+        )}
       </Card>
     );
   }
 
+  const comparison = analysis?.comparison;
+  const hasEstimate = analysis?.estimate_kwh != null;
+  const momPct = comparison?.mom_change_pct;
+  const tips = analysis?.tips || [];
+
   return (
     <Card style={styles.card}>
-      {/* Header Row */}
+      {/* Header Row — NO Tariff Band A chip per Rule 8 & page_refined.md S7.1 */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.iconSprout}>
@@ -99,66 +110,73 @@ export function AIAnalysisCard({
           </View>
           <Text style={styles.title}>AI Analysis</Text>
         </View>
-
-        <View style={styles.tariffPill}>
-          <Text style={styles.tariffText}>Tariff Band A</Text>
-        </View>
       </View>
 
       {/* Summary Copy */}
-      <Text style={styles.summaryCopy}>{data.summary}</Text>
+      {analysis?.summary ? (
+        <Text style={styles.summaryCopy}>{analysis.summary}</Text>
+      ) : null}
 
-      {/* 2-Column Metric Nested Sub-Cards */}
-      <View style={styles.metricRow}>
-        {/* Left: Peak Electricity */}
-        <MiniCard tone="subtle" style={styles.metricCard}>
-          <Text style={styles.metricLabel}>Peak electricity</Text>
-          <View style={styles.valueRow}>
-            <Text style={styles.metricValue}>{data.peakElectricityKwh}</Text>
-            <Text style={styles.metricUnit}>kWh</Text>
-          </View>
-          <Text style={styles.elecChange}>↑ +{data.electricityChangePct}% vs last mo</Text>
-        </MiniCard>
+      {/* Comparison & Estimate Metrics */}
+      {(hasEstimate || typeof momPct === 'number' || comparison?.avg_3m_diff != null) && (
+        <View style={styles.metricRow}>
+          {/* Show server estimate ONLY from analysis.estimate_kwh (Rule 7) */}
+          {hasEstimate ? (
+            <MiniCard tone="subtle" style={styles.metricCard}>
+              <Text style={styles.metricLabel}>Simulator estimate</Text>
+              <View style={styles.valueRow}>
+                <Text style={styles.metricValue}>{analysis.estimate_kwh}</Text>
+                <Text style={styles.metricUnit}>kWh</Text>
+              </View>
+              {typeof billUsage === 'number' ? (
+                <Text style={billUsage < (analysis.estimate_kwh ?? 0) ? styles.metricPositive : styles.metricMuted}>
+                  {billUsage < (analysis.estimate_kwh ?? 0)
+                    ? `Actual is ${analysis.estimate_kwh! - billUsage} kWh lower`
+                    : `Actual is ${billUsage - analysis.estimate_kwh!} kWh higher`}
+                </Text>
+              ) : null}
+            </MiniCard>
+          ) : null}
 
-        {/* Right: Base Water */}
-        <MiniCard tone="subtle" style={styles.metricCard}>
-          <Text style={styles.metricLabel}>Base water</Text>
-          <View style={styles.valueRow}>
-            <Text style={styles.metricValue}>{data.baseWaterM3}</Text>
-            <Text style={styles.metricUnit}>m³</Text>
-          </View>
-          <Text style={styles.waterAnomaly}>↑ +{data.waterChangePct}% anomaly</Text>
-        </MiniCard>
-      </View>
+          {/* MoM / History comparison */}
+          {typeof momPct === 'number' ? (
+            <MiniCard tone="subtle" style={styles.metricCard}>
+              <Text style={styles.metricLabel}>vs Previous month</Text>
+              <View style={styles.valueRow}>
+                <Text style={styles.metricValue}>{momPct > 0 ? `+${momPct}` : momPct}</Text>
+                <Text style={styles.metricUnit}>%</Text>
+              </View>
+              <Text style={momPct > 20 ? styles.metricAlert : styles.metricMuted}>
+                {momPct > 20 ? 'Elevated usage' : 'Normal seasonal range'}
+              </Text>
+            </MiniCard>
+          ) : null}
+        </View>
+      )}
 
-      {/* TRY THIS NEXT Section */}
-      <View style={styles.tipsSection}>
-        <Text style={styles.tipsHeader}>TRY THIS NEXT</Text>
-
-        {/* Tip 1 */}
-        <MiniCard tone="subtle" style={styles.tipCard}>
-          <View style={styles.tipIconCircleLeaf}>
-            <Leaf size={16} color="#566549" strokeWidth={1.5} />
-          </View>
-          <Text style={styles.tipText}>
-            Set master bedroom AC timer to 26°C with ceiling fan assistance (
-            <Text style={styles.tipHighlight}>Save ~RM 35/mo</Text>).
-          </Text>
-        </MiniCard>
-
-        {/* Tip 2 */}
-        <MiniCard tone="subtle" style={styles.tipCard}>
-          <View style={styles.tipIconCircleDrop}>
-            <Droplets size={16} color="#b91c1c" strokeWidth={1.5} />
-          </View>
-          <Text style={styles.tipText}>
-            Inspect toilet cistern seal in downstairs guest bath for silent leak.
-          </Text>
-        </MiniCard>
-      </View>
+      {/* Try this next section (up to 3 tips from server analysis) */}
+      {tips.length > 0 && (
+        <View style={styles.tipsSection}>
+          <Text style={styles.tipsHeader}>TRY THIS NEXT</Text>
+          {tips.slice(0, 3).map((tipText, idx) => (
+            <MiniCard key={`tip-${idx}`} tone="subtle" style={styles.tipCard}>
+              <View style={billType === 'water' ? styles.tipIconCircleDrop : styles.tipIconCircleLeaf}>
+                {billType === 'water' ? (
+                  <Droplets size={16} color="#6f8260" strokeWidth={1.5} />
+                ) : (
+                  <Leaf size={16} color="#566549" strokeWidth={1.5} />
+                )}
+              </View>
+              <Text style={styles.tipText}>{tipText}</Text>
+            </MiniCard>
+          ))}
+        </View>
+      )}
 
       {/* Footer Disclaimer */}
-      <Text style={styles.footerNote}>{data.footerDisclaimer}</Text>
+      <Text style={styles.footerNote}>
+        {analysis?.footer_disclaimer || 'Based on your bills only. Your real usage may differ.'}
+      </Text>
     </Card>
   );
 }
@@ -192,17 +210,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#292524',
   },
-  tariffPill: {
-    backgroundColor: '#f4f1ea',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 9999,
-  },
-  tariffText: {
-    fontFamily: 'SourceSans3_400Regular',
-    fontSize: 12,
-    color: '#78716c',
-  },
   summaryCopy: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 14,
@@ -213,7 +220,7 @@ const styles = StyleSheet.create({
   metricRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   metricCard: {
     flex: 1,
@@ -241,15 +248,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#78716c',
   },
-  elecChange: {
+  metricPositive: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 12,
-    color: '#a46b2c', // warm amber
+    color: '#566549',
   },
-  waterAnomaly: {
+  metricAlert: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 12,
-    color: '#b91c1c', // alert red
+    color: '#8F5B14',
+  },
+  metricMuted: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#78716c',
   },
   tipsSection: {
     marginBottom: 16,
@@ -280,7 +292,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#f1f4ee',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -290,10 +302,6 @@ const styles = StyleSheet.create({
     color: '#292524',
     flex: 1,
     lineHeight: 18,
-  },
-  tipHighlight: {
-    fontFamily: 'SourceSans3_600SemiBold',
-    color: '#292524',
   },
   footerNote: {
     fontFamily: 'SourceSans3_400Regular',

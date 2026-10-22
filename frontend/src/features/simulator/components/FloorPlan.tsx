@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
-import { Hand } from 'lucide-react-native';
+import { DoorOpen, Hand, UserRound } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -9,21 +9,32 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import Svg, { Polyline } from 'react-native-svg';
 import { Room } from './Room';
 import { StairBlock } from './StairBlock';
 import { PlacedItem } from './PlacedItem';
 import { Avatar } from './Avatar';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
-import { AvatarSimulationState, Point } from '../logic/SimulationEngine';
+import { AvatarSimulationState } from '../logic/SimulationEngine';
+import type { Point } from '../logic/SimulationEngine';
 import { SpriteItemDef } from '../logic/spriteMap';
 import {
   calculateSquarePlanSide,
-  clampPointToRect,
   FloorNumber,
   getFloorPlanLayout,
   getSlotRect,
 } from '../logic/roomLayout';
-import { getFloorSpriteSizes, getItemDimensions } from '../logic/spriteSizing';
+import { getFloorSpriteSizes } from '../logic/spriteSizing';
+import {
+  footprintOverlapArea,
+  getDoorKeepOuts,
+  getItemLocalFootprint,
+  INNER_FLOOR_RECT,
+  isFootprintInside,
+  getRoomTemplateId,
+  ROOM_SLOTS,
+  sortItemsForRoom,
+} from '../logic/furnishedLayout';
 
 export interface FloorViewport {
   scale: number;
@@ -37,8 +48,9 @@ interface FloorPlanProps {
   currentFloor: FloorNumber;
   onFloorChange: (floor: FloorNumber) => void;
   avatarState: AvatarSimulationState;
-  walkPath?: Point[];
   avatarVariant: 'avatar_girl' | 'avatar_boy';
+  isAvatarAway?: boolean;
+  walkPath?: Point[];
   activeApplianceIds: string[];
   activeRoomLightIds: string[];
   isEditMode: boolean;
@@ -53,6 +65,7 @@ interface FloorPlanProps {
   onViewportChange?: (viewport: FloorViewport) => void;
   floorPlanRef: React.RefObject<any>;
   onLayout: (event: LayoutChangeEvent) => void;
+  debugLayout?: boolean;
 }
 
 export { calculateSquarePlanSide };
@@ -63,8 +76,9 @@ export function FloorPlan({
   currentFloor,
   onFloorChange,
   avatarState,
-  walkPath = [],
   avatarVariant,
+  isAvatarAway = false,
+  walkPath = [],
   activeApplianceIds,
   activeRoomLightIds,
   isEditMode,
@@ -78,6 +92,7 @@ export function FloorPlan({
   onViewportChange,
   floorPlanRef,
   onLayout,
+  debugLayout = false,
 }: FloorPlanProps) {
   const [containerSize, setContainerSize] = useState({ width: 350, height: 350 });
   const [settledZoom, setSettledZoom] = useState(1);
@@ -189,11 +204,14 @@ export function FloorPlan({
   }));
 
   const spriteSizes = getFloorSpriteSizes(width);
+  // Render persisted/session positions verbatim. Templates are applied only by
+  // fixtures and the explicit Tidy up action.
+  const arrangedItems = useMemo(() => items.filter((item) => rooms.some((room) => room.id === item.roomId && room.isSetUp)), [items, rooms]);
   const labelOverlaps = useMemo(() => {
     const perFloor = new Map<FloorNumber, Set<string>>([[1, new Set()], [2, new Set()]]);
     for (const floor of [1, 2] as const) {
       const floorRoomIds = new Set(rooms.filter((room) => room.floor === floor).map((room) => room.id));
-      const floorItems = items.filter((item) => floorRoomIds.has(item.roomId));
+      const floorItems = arrangedItems.filter((item) => floorRoomIds.has(item.roomId));
       for (let index = 0; index < floorItems.length; index += 1) {
         for (let other = index + 1; other < floorItems.length; other += 1) {
           const first = floorItems[index];
@@ -206,26 +224,26 @@ export function FloorPlan({
       }
     }
     return perFloor;
-  }, [height, items, rooms, width]);
+  }, [arrangedItems, height, rooms, width]);
 
   const renderFloor = (floor: FloorNumber) => {
     const layout = getFloorPlanLayout(floor);
     const floorRooms = rooms.filter((room) => room.floor === floor);
     const visibleRoomIds = new Set(floorRooms.filter((room) => room.isSetUp).map((room) => room.id));
-    const floorItems = items.filter((item) => visibleRoomIds.has(item.roomId));
-    const pathPoints = avatarState.currentFloor === floor && avatarState.isWalking
-      ? [{ x: avatarState.currentX, y: avatarState.currentY }, ...walkPath]
-      : [];
-    const sleepingBed = floorItems.find((item) =>
-      item.category === 'Furniture'
-      && (item.type === 'bed' || item.spriteKey === 'bed')
-      && item.roomId === avatarState.targetRoomId
-    );
-    const avatarHasReachedBed = !sleepingBed || Math.hypot(
-      avatarState.currentX - sleepingBed.posX,
-      avatarState.currentY - sleepingBed.posY
-    ) < 0.04;
-
+    const floorItems = sortItemsForRoom(arrangedItems.filter((item) => visibleRoomIds.has(item.roomId)));
+    const debugViolations: string[] = [];
+    if (debugLayout) {
+      for (const room of floorRooms.filter((candidate) => candidate.isSetUp)) {
+        const roomRect = getSlotRect(room.slot);
+        const roomItems = floorItems.filter((item) => item.roomId === room.id);
+        const keepOuts = getDoorKeepOuts(room.slot, roomRect.width * width, roomRect.height * height);
+        for (const item of roomItems) {
+          const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+          if (!isFootprintInside(footprint, INNER_FLOOR_RECT)) debugViolations.push(`${room.name}: ${item.name} outside inner floor`);
+          if (keepOuts.some((keepOut) => footprintOverlapArea(footprint, keepOut) > 0)) debugViolations.push(`${room.name}: ${item.name} in doorway`);
+        }
+      }
+    }
     return (
       <>
         <View style={[styles.planBase, { width, height }]} />
@@ -257,40 +275,78 @@ export function FloorPlan({
           onChangeFloor={onFloorChange}
         />
 
-        {pathPoints.slice(0, -1).map((point, index) => {
-          const next = pathPoints[index + 1];
-          const x1 = point.x * width;
-          const y1 = point.y * height;
-          const x2 = next.x * width;
-          const y2 = next.y * height;
-          const length = Math.hypot(x2 - x1, y2 - y1);
-          const angle = Math.atan2(y2 - y1, x2 - x1);
-          return <View key={`${index}-${x2}-${y2}`} pointerEvents="none" style={[styles.walkPath, { left: (x1 + x2) / 2 - length / 2, top: (y1 + y2) / 2 - 1.5, width: length, transform: [{ rotate: `${angle}rad` }] }]} />;
+        {debugLayout && floorRooms.map((room) => {
+          const rect = getSlotRect(room.slot);
+          const roomItems = floorItems.filter((item) => item.roomId === room.id);
+          const keepOuts = getDoorKeepOuts(room.slot, rect.width * width, rect.height * height);
+        const lanes = ROOM_SLOTS[getRoomTemplateId(room, roomItems)].clearZones;
+          return (
+            <React.Fragment key={`debug-${room.id}`}>
+              <View pointerEvents="none" style={[styles.debugInnerFloor, {
+                left: (rect.x + INNER_FLOOR_RECT.x * rect.width) * width,
+                top: (rect.y + INNER_FLOOR_RECT.y * rect.height) * height,
+                width: INNER_FLOOR_RECT.width * rect.width * width,
+                height: INNER_FLOOR_RECT.height * rect.height * height,
+              }]} />
+              {keepOuts.map((keepOut, index) => (
+                <View key={`${room.id}-door-${index}`} pointerEvents="none" style={[styles.debugDoorKeepOut, {
+                  left: (rect.x + keepOut.x * rect.width) * width,
+                  top: (rect.y + keepOut.y * rect.height) * height,
+                  width: keepOut.width * rect.width * width,
+                  height: keepOut.height * rect.height * height,
+                }]} />
+              ))}
+              {lanes.map((lane, index) => (
+                <View key={`${room.id}-lane-${index}`} pointerEvents="none" style={[styles.debugLane, {
+                  left: (rect.x + lane.x * rect.width) * width,
+                  top: (rect.y + lane.y * rect.height) * height,
+                  width: lane.width * rect.width * width,
+                  height: lane.height * rect.height * height,
+                }]} />
+              ))}
+              {roomItems.map((item) => {
+                const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+                return (
+                  <React.Fragment key={`${item.id}-footprint`}>
+                    <View pointerEvents="none" style={[styles.debugFootprint, {
+                      left: (rect.x + footprint.x * rect.width) * width,
+                      top: (rect.y + footprint.y * rect.height) * height,
+                      width: footprint.width * rect.width * width,
+                      height: footprint.height * rect.height * height,
+                    }]} />
+                    <View pointerEvents="none" style={[styles.debugAnchor, {
+                      left: (rect.x + footprint.anchorX * rect.width) * width - 3,
+                      top: (rect.y + footprint.anchorY * rect.height) * height - 3,
+                    }]} />
+                  </React.Fragment>
+                );
+              })}
+            </React.Fragment>
+          );
         })}
+
+        {debugLayout && (
+          <View pointerEvents="none" style={styles.debugViolationPanel}>
+            <Text style={styles.debugViolationText}>
+              {debugViolations.length === 0 ? '✓ No layout violations' : debugViolations.join('\n')}
+            </Text>
+          </View>
+        )}
 
         {floorItems.map((item) => {
           const room = floorRooms.find((candidate) => candidate.id === item.roomId);
           if (!room) return null;
-          const roomRect = getSlotRect(room.slot);
-          const roomPixelHeight = roomRect.height * height;
-          const roomPixelWidth = roomRect.width * width;
-          const dimensions = getItemDimensions(item.spriteKey || item.type, roomPixelHeight, roomPixelWidth);
-          const clampedPoint = clampPointToRect(
-            roomRect,
-            { x: item.posX, y: item.posY },
-            (dimensions.visibleWidth / 2) / width,
-            (dimensions.visibleHeight / 2) / height
-          );
+          const uniformItemSize = spriteSizes.item;
           const isFurniture = item.category === 'Furniture';
           const isOn = !isFurniture && (activeApplianceIds.includes(item.id) || item.alwaysOn || item.isOn);
           return (
             <PlacedItem
               key={item.id}
-              item={{ ...item, posX: clampedPoint.x, posY: clampedPoint.y }}
+              item={item}
               canvasWidth={width}
               canvasHeight={height}
-              itemWidth={dimensions.width}
-              itemHeight={dimensions.height}
+              itemWidth={uniformItemSize}
+              itemHeight={uniformItemSize}
               labelFontSize={spriteSizes.labelFont}
               zoomScale={settledZoom}
               compactLabel={labelOverlaps.get(floor)?.has(item.id) ?? false}
@@ -305,6 +361,21 @@ export function FloorPlan({
           );
         })}
 
+        {avatarState.currentFloor === floor && walkPath.length > 1 && (
+          <Svg pointerEvents="none" width={width} height={height} style={StyleSheet.absoluteFill}>
+            <Polyline
+              points={walkPath.map((point) => `${point.x * width},${point.y * height}`).join(' ')}
+              fill="none"
+              stroke="#8B9D77"
+              strokeWidth={2}
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.72}
+            />
+          </Svg>
+        )}
+
         <Avatar
           variant={avatarVariant}
           normX={avatarState.currentX}
@@ -313,18 +384,28 @@ export function FloorPlan({
           canvasHeight={height}
           facingLeft={avatarState.facingLeft}
           isWalking={avatarState.isWalking}
-          isSleeping={avatarState.isSleeping && !avatarState.isWalking && avatarHasReachedBed}
-          isSitting={avatarState.isSitting}
+          isSleeping={false}
+          isSitting={false}
           visible={avatarState.currentFloor === floor && !avatarState.isFloorTransitioning}
           reduceMotion={reduceMotion}
-          sleepRotation={sleepingBed?.rotation ?? 0}
+          sleepRotation={0}
           size={spriteSizes.avatar}
+          dimmed={isAvatarAway}
         />
+        {isAvatarAway && avatarState.currentFloor === floor && !avatarState.isFloorTransitioning && (
+          <View pointerEvents="none" style={[styles.awayTag, {
+            left: Math.max(4, avatarState.currentX * width - 30),
+            top: Math.max(4, avatarState.currentY * height - spriteSizes.avatar - 25),
+          }]}>
+            <DoorOpen size={13} color="#57534E" strokeWidth={1.6} />
+            <Text style={styles.awayTagText}>Away</Text>
+          </View>
+        )}
       </>
     );
   };
 
-  const homeHasAppliance = items.some((item) => {
+  const homeHasAppliance = arrangedItems.some((item) => {
     const room = rooms.find((candidate) => candidate.id === item.roomId);
     return item.category === 'Appliances' && room?.isSetUp;
   });
@@ -347,6 +428,12 @@ export function FloorPlan({
               <View pointerEvents="none" style={[styles.emptyPill, { right: Math.ceil(width * 0.14) + 14 }]}>
                 <Hand size={15} color="#57534E" strokeWidth={1.5} />
                 <Text style={styles.emptyPillText}>{isEditMode ? 'Nothing here yet. Drag an appliance from below.' : 'Nothing here yet. Tap Edit to add appliances.'}</Text>
+              </View>
+            )}
+            {avatarState.currentFloor !== currentFloor && (
+              <View pointerEvents="none" accessibilityRole="text" style={styles.residentFloorPill}>
+                <UserRound size={14} color="#566549" strokeWidth={1.5} />
+                <Text style={styles.residentFloorText}>Resident is on {avatarState.currentFloor}F</Text>
               </View>
             )}
           </View>
@@ -380,10 +467,71 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#EFEAD8',
   },
+  debugBackStrip: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#B85C38',
+    backgroundColor: 'rgba(184,92,56,0.12)',
+    zIndex: 300,
+  },
+  debugInnerFloor: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#566549',
+    zIndex: 301,
+  },
+  debugDoorKeepOut: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#A97A4A',
+    backgroundColor: 'rgba(212,163,115,0.24)',
+    zIndex: 302,
+  },
+  debugLane: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#7C8F68',
+    backgroundColor: 'rgba(139,157,119,0.16)',
+    zIndex: 302,
+  },
+  debugFootprint: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: '#57534E',
+    backgroundColor: 'rgba(87,83,78,0.08)',
+    zIndex: 303,
+  },
+  debugAnchor: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#B85C38',
+    zIndex: 304,
+  },
+  debugViolationPanel: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    borderColor: '#D6D3D1',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    zIndex: 400,
+  },
+  debugViolationText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
+  },
   zoomLayer: { ...StyleSheet.absoluteFill },
   floorLayer: { ...StyleSheet.absoluteFill },
   planBase: { position: 'absolute', top: 0, left: 0, backgroundColor: '#EFEAD8' },
-  walkPath: { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: 'rgba(86, 101, 73, 0.55)', zIndex: 15 },
   emptyPill: {
     position: 'absolute', bottom: 10, left: 10, right: 10, minHeight: 36,
     backgroundColor: '#FFFFFF', borderRadius: 9999, paddingVertical: 8,
@@ -394,4 +542,16 @@ const styles = StyleSheet.create({
     flexShrink: 1, fontFamily: 'SourceSans3_400Regular', fontSize: 12,
     lineHeight: 16, color: '#57534E', textAlign: 'center',
   },
+  residentFloorPill: {
+    position: 'absolute', top: 10, right: 10, minHeight: 32,
+    paddingHorizontal: 10, borderRadius: 9999, flexDirection: 'row', gap: 6,
+    alignItems: 'center', backgroundColor: '#E0E6D9', borderWidth: 1,
+    borderColor: '#C5D0B9', zIndex: 410,
+  },
+  residentFloorText: {
+    fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549',
+  },
+  awayTag: { position: 'absolute', minHeight: 22, paddingHorizontal: 7, borderRadius: 11, flexDirection: 'row',
+    alignItems: 'center', gap: 4, backgroundColor: '#E7E5E4', borderWidth: 1, borderColor: '#D6D3D1', zIndex: 360 },
+  awayTagText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#57534E' },
 });

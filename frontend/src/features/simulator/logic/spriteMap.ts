@@ -5,6 +5,8 @@
  */
 
 import { ImageSourcePropType } from 'react-native';
+import { WORKPLACE_DEFAULT_WATTS } from './applianceConstants';
+export { WORKPLACE_DEFAULT_WATTS } from './applianceConstants';
 
 export type SpriteCategory = 'Appliances' | 'Furniture' | 'Avatar';
 
@@ -34,9 +36,6 @@ export interface SpriteItemDef {
   baseWidth: number;
   baseHeight: number;
 }
-
-// TODO(open-item): Confirm the combined laptop and phone charging wattage.
-export const WORKPLACE_DEFAULT_WATTS = 80;
 
 export const APPLIANCE_SPRITES: SpriteItemDef[] = [
   {
@@ -107,7 +106,7 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     fullName: 'Ceiling Light',
     category: 'Appliances',
     source: require('../../../../assets/sprites/appliances/light_bulb.png'),
-    defaultWattage: 10,
+    defaultWattage: 9,
     defaultHours: 6,
     inTray: true,
     needsPerson: true,
@@ -130,6 +129,36 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     swapEligible: true,
     baseWidth: 44,
     baseHeight: 50,
+  },
+  {
+    key: 'fan',
+    label: 'Standing fan',
+    fullName: 'Standing Fan',
+    category: 'Appliances',
+    source: require('../../../../assets/sprites/appliances/stand_fan.png'),
+    defaultWattage: 55,
+    defaultHours: 6,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
+    baseWidth: 44,
+    baseHeight: 52,
+  },
+  {
+    key: 'ceiling_fan',
+    label: 'Ceiling fan',
+    fullName: 'Ceiling Fan',
+    category: 'Appliances',
+    source: require('../../../../assets/sprites/appliances/fan.png'),
+    defaultWattage: 55,
+    defaultHours: 6,
+    inTray: false,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
+    baseWidth: 52,
+    baseHeight: 52,
   },
   {
     key: 'workplace',
@@ -155,6 +184,37 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
     activityNames: ['working', 'studying'],
     baseWidth: 54,
     baseHeight: 44,
+  },
+  {
+    key: 'washing_machine',
+    label: 'Washing mach.',
+    fullName: 'Washing Machine',
+    category: 'Appliances',
+    source: require('../../../../assets/sprites/appliances/washing_machine.png'),
+    defaultWattage: 500,
+    defaultHours: 1,
+    inTray: true,
+    needsPerson: true,
+    hasStarRating: true,
+    swapEligible: true,
+    baseWidth: 44,
+    baseHeight: 52,
+  },
+  {
+    key: 'router',
+    label: 'Wi-Fi router',
+    fullName: 'Wi-Fi Router',
+    category: 'Appliances',
+    source: require('../../../../assets/sprites/appliances/wifi_router.png'),
+    defaultWattage: 15,
+    defaultHours: 24,
+    inTray: true,
+    needsPerson: false,
+    alwaysOn: true,
+    hasStarRating: false,
+    swapEligible: false,
+    baseWidth: 44,
+    baseHeight: 38,
   },
 ];
 
@@ -209,6 +269,18 @@ export const FURNITURE_SPRITES: SpriteItemDef[] = [
     baseHeight: 46,
   },
   {
+    key: 'toilet',
+    label: 'Toilet',
+    fullName: 'Toilet',
+    category: 'Furniture',
+    source: require('../../../../assets/sprites/furniture/toilet_bin.png'),
+    defaultWattage: 0,
+    defaultHours: 0,
+    inTray: true,
+    baseWidth: 44,
+    baseHeight: 50,
+  },
+  {
     key: 'stair',
     label: 'Stairs',
     fullName: 'Stairs',
@@ -255,6 +327,10 @@ export const SPRITE_MAP: Record<string, SpriteItemDef> = ALL_CATALOG_ITEMS.reduc
   },
   {} as Record<string, SpriteItemDef>
 );
+
+// Compatibility alias for older stored sprite keys. The product type remains
+// `router`; both keys use the one real wifi_router.png manifest entry above.
+SPRITE_MAP.wifi_router = SPRITE_MAP.router;
 
 /** Get image source safely for any sprite key */
 export function getSpriteSource(key: string): ImageSourcePropType | null {

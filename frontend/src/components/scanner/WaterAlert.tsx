@@ -4,26 +4,29 @@ import { AlertTriangle, AlertCircle, Droplets } from 'lucide-react-native';
 import { type WaterAlertLevel } from '@/lib/waterLevel';
 
 export interface WaterAlertProps {
-  level: WaterAlertLevel;
-  momPercent?: number;
+  level?: WaterAlertLevel;
+  momPercent?: number | null;
   monthName?: string;
 }
 
 export function WaterAlert({
-  level,
-  momPercent = 48,
-  monthName = 'Oct Statement',
+  level = 'normal',
+  momPercent,
+  monthName,
 }: WaterAlertProps) {
-  if (level === 'normal') {
+  if (!level || level === 'normal') {
     return null;
   }
+
+  const momText = typeof momPercent === 'number' && !isNaN(momPercent) ? `${momPercent > 0 ? '+' : ''}${Math.round(momPercent)}%` : null;
 
   if (level === 'minor_drip') {
     return (
       <View style={styles.minorDripContainer}>
         <Droplets size={18} color="#566549" strokeWidth={1.5} />
         <Text style={styles.minorDripText}>
-          Water usage is up {momPercent}% vs previous month. Check for minor drips or dripping taps.
+          {momText ? `Water usage is up ${momText} vs last month. ` : 'Water usage is elevated. '}
+          Check for minor drips or loose tap fittings.
         </Text>
       </View>
     );
@@ -39,16 +42,17 @@ export function WaterAlert({
             </View>
             <Text style={styles.majorTitle}>MAJOR PIPE BURST ALERT</Text>
           </View>
-          <Text style={styles.majorStatement}>{monthName}</Text>
+          {monthName ? <Text style={styles.majorStatement}>{monthName}</Text> : null}
         </View>
         <Text style={styles.majorBody}>
-          Water use doubled (+{momPercent}%). Check for a burst pipe and consider closing the main valve immediately.
+          {momText ? `Water use doubled (${momText}). ` : 'Extremely high water volume detected. '}
+          Check for a burst pipe and consider closing the main valve immediately.
         </Text>
       </View>
     );
   }
 
-  // level === 'leak_detected' (Matches screenshot exactly)
+  // level === 'leak_detected'
   return (
     <View style={styles.leakBanner}>
       <View style={styles.headerRow}>
@@ -58,18 +62,18 @@ export function WaterAlert({
           </View>
           <Text style={styles.leakTitle}>ANOMALY DETECTED</Text>
         </View>
-        <Text style={styles.leakStatement}>{monthName}</Text>
+        {monthName ? <Text style={styles.leakStatement}>{monthName}</Text> : null}
       </View>
 
       <Text style={styles.leakBody}>
-        Water bill up {momPercent}% vs September. Check for potential toilet cistern leak or outdoor hose drip.
+        {momText ? `Water bill up ${momText} vs last month. ` : 'Unusual water consumption detected. '}
+        Check the toilet cistern seal and outdoor pipes.
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Leak Detected (Amber)
   leakBanner: {
     backgroundColor: '#FDF6E4',
     borderColor: '#F5E4B8',
@@ -115,7 +119,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Major Pipe Burst (Terracotta)
   majorBurstBanner: {
     backgroundColor: '#FBECE8',
     borderColor: '#F2C8BE',
@@ -150,7 +153,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Minor Drip
   minorDripContainer: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -62,7 +62,8 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     canvasHeight: 388,
     contentWidth: 182,
     contentHeight: 164,
-    targetRoomHeightFraction: 0.26,
+    // 15% smaller so the TV can stay at x=.72 without entering the A-B doorway.
+    targetRoomHeightFraction: 0.22,
   },
   sofa: {
     canvasWidth: 520,
@@ -76,7 +77,9 @@ export const SPRITE_BASE_SIZE: Record<string, SpriteBounds> = {
     canvasHeight: 388,
     contentWidth: 262,
     contentHeight: 161,
-    targetRoomHeightFraction: 0.26,
+    // The transparent canvas makes tables wider than 55% of the small rooms at
+    // the medium size. A uniform 25% reduction keeps every table in bounds.
+    targetRoomHeightFraction: 0.195,
   },
   workplace: {
     canvasWidth: 520,
@@ -181,15 +184,19 @@ export function getItemDimensions(
   };
 }
 
+/** Floor-plan item art is intentionally uniform. Tray art has its own sizing. */
+export const FLOOR_ITEM_SCALE = 2.2;
 export const FLOOR_SPRITE_BASE_SIZE = {
-  appliance: 48,
-  furniture: 66,
+  item: 24,
+  appliance: 24,
+  furniture: 24,
   avatar: 66,
 } as const;
 
 export function getFloorSpriteSizes(planWidth: number) {
   const visualScale = Math.max(0.92, Math.min(1.25, planWidth / 350));
   return {
+    item: FLOOR_SPRITE_BASE_SIZE.item * FLOOR_ITEM_SCALE * visualScale,
     appliance: FLOOR_SPRITE_BASE_SIZE.appliance * visualScale,
     furniture: FLOOR_SPRITE_BASE_SIZE.furniture * visualScale,
     avatar: Math.max(60, Math.min(72, FLOOR_SPRITE_BASE_SIZE.avatar * visualScale)),

@@ -1,11 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, View, Text, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
-import { ChevronDown, ChevronUp, PackageOpen } from 'lucide-react-native';
-import { APPLIANCE_SPRITES, FURNITURE_SPRITES, SpriteItemDef } from '../logic/spriteMap';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, PackageOpen } from 'lucide-react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
+import type { ApplianceTrayRow } from '../logic/trayData';
+import { buildApplianceTrayItems, buildFurnitureTrayItems } from '../logic/trayData';
+import { getTrayTileWidth } from '../logic/trayRules';
+import { getSpriteSource, type SpriteItemDef } from '../logic/spriteMap';
 import { Sprite } from './Sprite';
+
+type TrayTab = 'Appliances' | 'Furniture';
 
 interface EditSheetProps {
   visible: boolean;
+  applianceTypes?: ApplianceTrayRow[];
   onItemPointerDown: (item: SpriteItemDef, clientX: number, clientY: number) => void;
   onItemDragMove?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
   onItemDragEnd?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
@@ -13,10 +21,66 @@ interface EditSheetProps {
   selectedPendingKey?: string | null;
   isDragging?: boolean;
   initialCollapsed?: boolean;
+  initialScrollToEnd?: boolean;
+}
+
+interface TrayTileProps {
+  item: SpriteItemDef;
+  width: number;
+  selected: boolean;
+  onStart: EditSheetProps['onItemPointerDown'];
+  onMove?: EditSheetProps['onItemDragMove'];
+  onEnd?: EditSheetProps['onItemDragEnd'];
+  onTap: EditSheetProps['onItemTap'];
+}
+
+function TrayTile({ item, width, selected, onStart, onMove, onEnd, onTap }: TrayTileProps) {
+  const beginDrag = (x: number, y: number) => onStart(item, x, y);
+  const moveDrag = (x: number, y: number) => onMove?.(item, x, y);
+  const finishDrag = (x: number, y: number) => onEnd?.(item, x, y);
+
+  const dragGesture = Gesture.Pan()
+    .activeOffsetY(-8)
+    .failOffsetX([-14, 14])
+    .onStart((event) => runOnJS(beginDrag)(event.absoluteX, event.absoluteY))
+    .onUpdate((event) => runOnJS(moveDrag)(event.absoluteX, event.absoluteY))
+    .onEnd((event) => runOnJS(finishDrag)(event.absoluteX, event.absoluteY));
+
+  const hasPicture = Boolean(getSpriteSource(item.key));
+
+  return (
+    <GestureDetector gesture={dragGesture}>
+      <Pressable
+        onPress={() => onTap(item)}
+        style={[styles.itemWrapper, { width }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Add ${item.label}`}
+      >
+        <View
+          style={[styles.itemCard, { width: width - 6 }, selected && styles.itemCardSelected]}
+        >
+          {hasPicture ? (
+            <Sprite type={item.key} width={44} height={44} size={44} resizeMode="contain" />
+          ) : (
+            <View style={styles.placeholderTile}>
+              <PackageOpen size={22} color="#78716C" strokeWidth={1.5} />
+              <Text style={styles.placeholderText} numberOfLines={1}>
+                {item.label}
+              </Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.itemLabel} numberOfLines={1}>
+          {item.label}
+        </Text>
+      </Pressable>
+    </GestureDetector>
+  );
 }
 
 export function EditSheet({
   visible,
+  applianceTypes = [],
   onItemPointerDown,
   onItemDragMove,
   onItemDragEnd,
@@ -24,159 +88,180 @@ export function EditSheet({
   selectedPendingKey,
   isDragging = false,
   initialCollapsed = false,
+  initialScrollToEnd = false,
 }: EditSheetProps) {
-  const [activeTab, setActiveTab] = useState<'Appliances' | 'Furniture'>('Appliances');
+  const [activeTab, setActiveTab] = useState<TrayTab>('Appliances');
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [opacity] = useState(() => new Animated.Value(1));
-  const nativeDraggedKey = useRef<string | null>(null);
+  const [trayWidth, setTrayWidth] = useState(390);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+  const scrollRef = useRef<any>(null);
+  const offsets = useRef<Record<TrayTab, number>>({ Appliances: 0, Furniture: 0 });
+
+  const applianceItems = useMemo(() => buildApplianceTrayItems(applianceTypes), [applianceTypes]);
+  const furnitureItems = useMemo(() => buildFurnitureTrayItems(), []);
+  const currentItems = activeTab === 'Appliances' ? applianceItems : furnitureItems;
+  const tileWidth = getTrayTileWidth(trayWidth);
+  const maxScroll = Math.max(0, contentWidth - trayWidth);
+  const canScrollLeft = scrollX > 6;
+  const canScrollRight = scrollX < maxScroll - 6;
 
   useEffect(() => {
     let active = true;
     AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (!active) return;
-      Animated.timing(opacity, {
-        toValue: isDragging ? 0.3 : 1,
-        duration: reduced ? 0 : 400,
-        useNativeDriver: true,
-      }).start();
+      if (active) {
+        Animated.timing(opacity, {
+          toValue: isDragging ? 0.3 : 1,
+          duration: reduced ? 0 : 400,
+          useNativeDriver: true,
+        }).start();
+      }
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [isDragging, opacity]);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (initialScrollToEnd && contentWidth > trayWidth) {
+      const maxX = contentWidth - trayWidth;
+      scrollRef.current?.scrollTo({ x: maxX, animated: false });
+      offsets.current[activeTab] = maxX;
+    }
+  }, [activeTab, contentWidth, initialScrollToEnd, trayWidth]);
 
-  const currentItems = (activeTab === 'Appliances' ? APPLIANCE_SPRITES : FURNITURE_SPRITES)
-    .filter((item) => item.inTray);
+  const handleTabChange = (tab: TrayTab) => {
+    offsets.current[activeTab] = scrollX;
+    setActiveTab(tab);
+    const targetX = offsets.current[tab] ?? 0;
+    setScrollX(targetX);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ x: targetX, animated: false });
+    }, 10);
+  };
+
+  const scrollTo = (x: number, animated = true) => {
+    const next = Math.max(0, Math.min(x, maxScroll));
+    offsets.current[activeTab] = next;
+    setScrollX(next);
+    scrollRef.current?.scrollTo({ x: next, animated });
+  };
+
+  if (!visible) return null;
+  const onTrayLayout = (event: LayoutChangeEvent) => setTrayWidth(event.nativeEvent.layout.width);
+  const webWheelProps =
+    Platform.OS === 'web'
+      ? {
+          onWheel: (event: any) => {
+            const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+            if (delta) scrollTo(offsets.current[activeTab] + delta, false);
+          },
+        }
+      : {};
 
   return (
     <Animated.View style={[styles.sheetContainer, collapsed && styles.sheetCollapsed, { opacity }]}>
       <Pressable
         onPress={() => setCollapsed((value) => !value)}
         style={styles.handleButton}
+        hitSlop={8}
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
         accessibilityLabel={collapsed ? 'Show item tray' : 'Collapse item tray'}
       >
-        {collapsed ? <ChevronUp size={18} color="#57534E" /> : <ChevronDown size={18} color="#57534E" />}
+        {collapsed ? <ChevronUp size={16} color="#57534E" /> : <ChevronDown size={16} color="#57534E" />}
         <View style={styles.handle} />
         <Text style={styles.handleText}>{collapsed ? 'Show item tray' : 'Collapse item tray'}</Text>
       </Pressable>
-
       {collapsed ? (
         <View style={styles.collapsedStatus}>
           <PackageOpen size={16} color="#566549" strokeWidth={1.5} />
           <Text style={styles.collapsedText}>Items hidden</Text>
         </View>
-      ) : <>
-
-      {/* Segmented Tab Pill */}
-      <View style={styles.segmentedContainer}>
-        <Pressable
-          onPress={() => setActiveTab('Appliances')}
-          style={[styles.segmentBtn, activeTab === 'Appliances' && styles.segmentBtnActive]}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'Appliances' }}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              activeTab === 'Appliances' && styles.segmentTextActive,
-            ]}
-          >
-            Appliances
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setActiveTab('Furniture')}
-          style={[styles.segmentBtn, activeTab === 'Furniture' && styles.segmentBtnActive]}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'Furniture' }}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              activeTab === 'Furniture' && styles.segmentTextActive,
-            ]}
-          >
-            Furniture
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Horizontal Scroll of Item Tiles */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {currentItems.map((item) => {
-          const isSelected = selectedPendingKey === item.key;
-          return (
-            <View key={item.key} style={styles.itemWrapper}>
-              <View
-                // Pointer down on Web & Native
-                {...(Platform.OS === 'web'
-                  ? {
-                      onPointerDown: (e: any) => {
-                        onItemPointerDown(item, e.clientX, e.clientY);
-                      },
-                    }
-                  : {})}
-                {...(Platform.OS !== 'web'
-                  ? {
-                      onTouchStart: (event: any) => {
-                        nativeDraggedKey.current = null;
-                        onItemPointerDown(item, event.nativeEvent.pageX, event.nativeEvent.pageY);
-                      },
-                      onTouchMove: (event: any) => {
-                        nativeDraggedKey.current = item.key;
-                        onItemDragMove?.(item, event.nativeEvent.pageX, event.nativeEvent.pageY);
-                      },
-                      onTouchEnd: (event: any) => {
-                        if (nativeDraggedKey.current === item.key) {
-                          const touch = event.nativeEvent.changedTouches?.[0] ?? event.nativeEvent;
-                          onItemDragEnd?.(item, touch.pageX, touch.pageY);
-                        }
-                      },
-                    }
-                  : {})}
+      ) : (
+        <>
+          <View style={styles.segmentedContainer}>
+            {(['Appliances', 'Furniture'] as const).map((tab) => (
+              <Pressable
+                key={tab}
+                onPress={() => handleTabChange(tab)}
+                style={[styles.segmentBtn, activeTab === tab && styles.segmentBtnActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === tab }}
               >
-                <Pressable
-                  onPress={() => {
-                    if (nativeDraggedKey.current === item.key) {
-                      nativeDraggedKey.current = null;
-                      return;
-                    }
-                    onItemTap(item);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Add ${item.label}`}
-                  style={[styles.itemCard, isSelected && styles.itemCardSelected]}
-                >
-                  <Sprite type={item.key} size={52} />
-                </Pressable>
-              </View>
-              <Text style={styles.itemLabel} numberOfLines={1}>
-                {item.label}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-      </>}
+                <Text style={[styles.segmentText, activeTab === tab && styles.segmentTextActive]}>
+                  {tab}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.trayViewport} onLayout={onTrayLayout} {...webWheelProps}>
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              style={styles.trayScrollView}
+              contentContainerStyle={styles.scrollContent}
+              onContentSizeChange={(w) => setContentWidth(w)}
+              onScroll={(event) => {
+                const next = event.nativeEvent.contentOffset.x;
+                offsets.current[activeTab] = next;
+                setScrollX(next);
+              }}
+            >
+              {currentItems.map((item) => (
+                <TrayTile
+                  key={`${activeTab}-${item.key}`}
+                  item={item}
+                  width={tileWidth}
+                  selected={selectedPendingKey === item.key}
+                  onStart={onItemPointerDown}
+                  onMove={onItemDragMove}
+                  onEnd={onItemDragEnd}
+                  onTap={onItemTap}
+                />
+              ))}
+            </ScrollView>
+            {Platform.OS === 'web' && canScrollLeft && (
+              <Pressable
+                onPress={() => scrollTo(scrollX - tileWidth * 2)}
+                style={[styles.chevronButton, styles.chevronLeft]}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Scroll tray left"
+              >
+                <ChevronLeft size={20} color="#566549" />
+              </Pressable>
+            )}
+            {Platform.OS === 'web' && canScrollRight && (
+              <Pressable
+                onPress={() => scrollTo(scrollX + tileWidth * 2)}
+                style={[styles.chevronButton, styles.chevronRight]}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Scroll tray right"
+              >
+                <ChevronRight size={20} color="#566549" />
+              </Pressable>
+            )}
+          </View>
+        </>
+      )}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   sheetContainer: {
+    height: 184,
     backgroundColor: '#FAF7F2',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingTop: 2,
-    paddingBottom: 12,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 4,
     paddingHorizontal: 16,
+    paddingBottom: 8,
     shadowColor: '#5C4033',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
@@ -185,40 +270,57 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: '#ECE7DE',
   },
-  sheetCollapsed: { paddingBottom: 2 },
+  sheetCollapsed: {
+    height: 48,
+    paddingBottom: 0,
+  },
   handleButton: {
-    minHeight: 48,
+    height: 28,
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
   },
   handle: {
-    width: 38,
+    width: 34,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#D6D3D1',
-    alignSelf: 'center',
   },
-  handleText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#57534E' },
-  collapsedStatus: { minHeight: 48, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
-  collapsedText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#566549' },
+  handleText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
+  },
+  collapsedStatus: {
+    height: 20,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapsedText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#566549',
+  },
   segmentedContainer: {
+    height: 32,
     flexDirection: 'row',
     backgroundColor: '#EAE7E0',
     borderRadius: 9999,
     padding: 3,
-    marginBottom: 8,
+    marginBottom: 6,
     alignSelf: 'center',
     width: 230,
   },
   segmentBtn: {
     flex: 1,
-    paddingVertical: 6,
     borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 26,
   },
   segmentBtnActive: {
     backgroundColor: '#FFFFFF',
@@ -230,46 +332,82 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 13,
+    fontSize: 12,
     color: '#78716C',
   },
   segmentTextActive: {
     color: '#1C1917',
   },
+  trayViewport: {
+    flex: 1,
+    marginHorizontal: -16,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  trayScrollView: {
+    flex: 1,
+  },
   scrollContent: {
     flexDirection: 'row',
-    gap: 14,
-    paddingHorizontal: 8,
-    paddingBottom: 2,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   itemWrapper: {
     alignItems: 'center',
-    width: 64,
   },
   itemCard: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    height: 58,
+    borderRadius: 16,
     backgroundColor: '#F6F4EE',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E8E4DC',
-    shadowColor: '#5C4033',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
   },
   itemCardSelected: {
     borderColor: '#566549',
     backgroundColor: '#E0E6D9',
   },
   itemLabel: {
+    width: '94%',
     fontFamily: 'SourceSans3_600SemiBold',
-    fontSize: 11.5,
+    fontSize: 12,
+    lineHeight: 15,
     color: '#292524',
-    marginTop: 5,
+    marginTop: 2,
     textAlign: 'center',
   },
+  placeholderTile: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  placeholderText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
+    marginTop: 1,
+  },
+  chevronButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D6D3D1',
+    shadowColor: '#5C4033',
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    zIndex: 10,
+  },
+  chevronLeft: { left: 4 },
+  chevronRight: { right: 4 },
 });

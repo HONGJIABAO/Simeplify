@@ -1,18 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Bell, CalendarCheck, CalendarDays, FastForward, Gauge } from 'lucide-react-native';
+import { CalendarCheck, CalendarDays, FastForward, Gauge, Square } from 'lucide-react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { BellPill } from '@/components/layout/BellPill';
 
-export type FastForwardPeriod = '1w' | '1m' | '1y';
+export type FastForwardPeriod = '1M' | '6M' | '1Y';
 
 interface BillCardProps {
   monthlyBillRm: number;
   usageBadge?: 'Low Usage' | 'Normal Usage' | 'High Usage' | null;
   simulatedDateStr: string;
   activeFastForward: FastForwardPeriod | null;
+  isFastForwardPlaying?: boolean;
+  fastForwardSavingsRm?: number | null;
+  fastForwardDisabled?: boolean;
   isEditMode?: boolean;
+  hasUnreadNotifications?: boolean;
   onSelectFastForward: (period: FastForwardPeriod) => void;
+  onToggleFastForward?: () => void;
   onToggleEdit?: () => void;
+  onTidyUp?: () => void;
   onPressBillCard?: () => void;
   onPressBell?: () => void;
   onPressCalendar?: () => void;
@@ -23,9 +30,15 @@ export function BillCard({
   usageBadge: _usageBadge,
   simulatedDateStr,
   activeFastForward,
+  isFastForwardPlaying = false,
+  fastForwardSavingsRm,
+  fastForwardDisabled = false,
   isEditMode = false,
+  hasUnreadNotifications = false,
   onSelectFastForward,
+  onToggleFastForward,
   onToggleEdit,
+  onTidyUp,
   onPressBillCard,
   onPressBell,
   onPressCalendar,
@@ -81,18 +94,10 @@ export function BillCard({
 
         {/* ── Right: notification and schedule buttons ─────────────────── */}
         <View style={styles.buttonStack}>
-        {/* Bell Button */}
-        <Pressable
-          style={styles.roundButton}
-          onPress={onPressBell}
-          accessibilityRole="button"
-          accessibilityLabel="Notifications"
-        >
-          <Bell size={18} color="#292524" strokeWidth={1.5} />
-          <View style={styles.bellDot} />
-        </Pressable>
+          {/* Bell Button (matching Bin page unified pill) */}
+          <BellPill hasUnread={hasUnreadNotifications} onPress={onPressBell} />
 
-        {/* Calendar Check Button */}
+          {/* Calendar Check Button */}
         <Pressable
           style={styles.roundButton}
           onPress={onPressCalendar}
@@ -108,7 +113,7 @@ export function BillCard({
 
       {/* A full-width control row keeps Edit under the bill and FF at the far right. */}
       <View style={styles.controlRow}>
-        {onToggleEdit ? (
+        {onToggleEdit ? <View style={styles.editActions}>
           <Pressable
             style={styles.editButton}
             onPress={onToggleEdit}
@@ -119,7 +124,7 @@ export function BillCard({
               {isEditMode ? 'Done' : 'Edit'}
             </Text>
           </Pressable>
-        ) : <View style={styles.editButtonPlaceholder} />}
+        </View> : <View style={styles.editButtonPlaceholder} />}
 
         {/* Fast-forward Button + period menu that grows to the left */}
         <View style={styles.fastForwardRow}>
@@ -127,15 +132,14 @@ export function BillCard({
             pointerEvents={fastForwardOpen ? 'auto' : 'none'}
             style={[styles.fastForwardTray, fastForwardMenuStyle]}
           >
-            {(['1w', '1m', '1y'] as FastForwardPeriod[]).map((period) => (
+            {(['1M', '6M', '1Y'] as FastForwardPeriod[]).map((period) => (
               <Pressable
                 key={period}
                 onPress={() => {
                   onSelectFastForward(period);
-                  setFastForwardOpen(false);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Fast forward ${period === '1w' ? 'one week' : period === '1m' ? 'one month' : 'one year'}`}
+                accessibilityLabel={`Fast forward ${period === '1M' ? 'one month' : period === '6M' ? 'six months' : 'one year'}`}
                 style={({ pressed }) => [
                   styles.periodButton,
                   activeFastForward === period && styles.periodButtonActive,
@@ -153,13 +157,20 @@ export function BillCard({
           </Animated.View>
 
           <Pressable
-            style={[styles.roundButton, styles.fastForwardButton]}
-            onPress={() => setFastForwardOpen((open) => !open)}
+            style={[styles.roundButton, styles.fastForwardButton, fastForwardDisabled && styles.fastForwardDisabled]}
+            disabled={fastForwardDisabled}
+            onPress={() => {
+              if (isFastForwardPlaying) { onToggleFastForward?.(); return; }
+              if (!fastForwardOpen) { setFastForwardOpen(true); return; }
+              onToggleFastForward?.();
+              setFastForwardOpen(false);
+            }}
             accessibilityRole="button"
-            accessibilityLabel="Choose fast-forward period"
+            accessibilityLabel={isFastForwardPlaying ? 'Stop fast-forward week preview' : fastForwardOpen ? 'Play fast-forward week preview' : 'Choose fast-forward period'}
             accessibilityState={{ expanded: fastForwardOpen }}
           >
-            <FastForward size={17} color="#FFFFFF" strokeWidth={1.5} />
+            {isFastForwardPlaying ? <Square size={15} color="#FFFFFF" fill="#FFFFFF" strokeWidth={1.5} />
+              : <FastForward size={17} color="#FFFFFF" strokeWidth={1.5} />}
             {!!activeFastForward && (
               <View style={styles.speedBadge}>
                 <Text style={styles.speedBadgeText}>{activeFastForward}</Text>
@@ -256,6 +267,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#57534E',
   },
+  savingsText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 11, color: '#566549' },
   buttonStack: {
     alignItems: 'flex-end',
     gap: 8,
@@ -276,19 +288,11 @@ const styles = StyleSheet.create({
     borderColor: '#F0ECE4',
     position: 'relative',
   },
-  bellDot: {
-    position: 'absolute',
-    top: 9,
-    right: 10,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#C87D55',
-  },
   fastForwardButton: {
     backgroundColor: '#1E1E1E',
     borderColor: '#1E1E1E',
   },
+  fastForwardDisabled: { opacity: 0.4 },
   fastForwardRow: {
     width: 44,
     height: 44,
@@ -372,6 +376,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#3D5236',
   },
+  editActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tidyButton: { height: 44, minWidth: 92, paddingHorizontal: 12, borderRadius: 22, flexDirection: 'row', gap: 6,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
+  tidyButtonText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },
   editButtonPlaceholder: {
     width: 52,
     height: 44,

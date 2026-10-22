@@ -4,6 +4,7 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { Plus } from 'lucide-react-native';
 import { StoredRoom } from '../logic/storage';
 import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
+import { ROOM_DOOR_RATIOS, type RoomSide } from '../logic/furnishedLayout';
 
 interface RoomProps {
   room: StoredRoom;
@@ -18,15 +19,6 @@ interface RoomProps {
   onPress: (room: StoredRoom) => void;
 }
 
-type Side = 'top' | 'right' | 'bottom' | 'left';
-
-const ROOM_DOORS: Record<StoredRoom['slot'], Partial<Record<Side, number>>> = {
-  A: { right: 0.545, bottom: 0.483 },
-  B: { left: 0.545, bottom: 0.833 },
-  C: { top: 0.56, right: 0.51 },
-  D: { left: 0.51, right: 0.51 },
-};
-
 export function Room({
   room,
   width,
@@ -40,7 +32,6 @@ export function Room({
   onPress,
 }: RoomProps) {
   const theme = ROOM_TYPE_SETTINGS[room.type];
-  const [darkOpacity] = useState(() => new Animated.Value(room.isSetUp ? 0 : 0.45));
   const [reduceMotion, setReduceMotion] = useState(false);
   const [isMouseOver, setIsMouseOver] = useState(false);
   const [isLongPressActive, setIsLongPressActive] = useState(false);
@@ -54,15 +45,6 @@ export function Room({
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    Animated.timing(darkOpacity, {
-      toValue: room.isSetUp ? 0 : 0.45,
-      duration: reduceMotion ? 0 : 500,
-      easing: Easing.inOut(Easing.ease),
-      useNativeDriver: true,
-    }).start();
-  }, [darkOpacity, reduceMotion, room.isSetUp]);
 
   useEffect(() => {
     Animated.timing(tagOpacity, {
@@ -97,11 +79,11 @@ export function Room({
   };
 
   const doorGap = Math.max(24, Math.min(38, Math.min(width, height) * 0.24));
-  const doors = ROOM_DOORS[room.slot];
+  const doors = ROOM_DOOR_RATIOS[room.slot];
 
   const wallLines = useMemo(() => {
     const walls: React.ReactNode[] = [];
-    const addWall = (side: Side, length: number, gapRatio?: number) => {
+    const addWall = (side: RoomSide, length: number, gapRatio?: number) => {
       const gapStart = gapRatio === undefined ? length : Math.max(8, length * gapRatio - doorGap / 2);
       const gapEnd = gapRatio === undefined ? length : Math.min(length - 8, length * gapRatio + doorGap / 2);
       const segments = gapRatio === undefined ? [[0, length]] : [[0, gapStart], [gapEnd, length]];
@@ -155,9 +137,6 @@ export function Room({
         {wallLines}
       </Svg>
 
-      {isLightOn && room.isSetUp && <View pointerEvents="none" style={styles.roomLightLayer} />}
-      <Animated.View pointerEvents="none" style={[styles.darkLayer, { opacity: darkOpacity }]} />
-
       {/* Dark rooms show a small round + button (48px) in the center */}
       {!room.isSetUp && (
         <View pointerEvents="none" style={styles.centerPlusButton}>
@@ -190,8 +169,6 @@ const styles = StyleSheet.create({
   depthStrip: { position: 'absolute', top: 4, left: 4, right: 4, height: 5, opacity: 0.9 },
   hoveredBorder: { borderColor: '#D4A373', borderWidth: 3 },
   pressed: { opacity: 0.88 },
-  roomLightLayer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(246, 232, 216, 0.34)' },
-  darkLayer: { ...StyleSheet.absoluteFill, backgroundColor: '#57534E', zIndex: 8 },
   centerPlusButton: {
     position: 'absolute',
     left: '50%',

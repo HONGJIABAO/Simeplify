@@ -25,6 +25,8 @@ import Animated, {
 import { X, Sprout, Camera, Settings } from 'lucide-react-native';
 
 import { Button } from '@/components/Button';
+import { useAuthSession } from '@/lib/authSession';
+import { uploadAndScanWaste } from '@/lib/services/binService';
 
 const cartonImage = require('../../../assets/images/plain_carton_box.png');
 
@@ -63,20 +65,54 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
 
 export default function BinScannerScreen() {
   const router = useRouter();
+  const { session } = useAuthSession();
+  const householdId = session.profile?.household_id;
+
   const params = useLocalSearchParams<{ state?: string }>();
   const [scanState, setScanState] = useState<ScannerState>(
     (params.state as ScannerState) ?? 'ready'
   );
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
+    if (!householdId) {
+      setScanState('scanning');
+      setTimeout(() => {
+        router.replace({
+          pathname: '/bin/result' as any,
+          params: { binType: 'paper' },
+        });
+      }, 1000);
+      return;
+    }
+
     setScanState('scanning');
-    // Simulate scanning delay then navigate to result
-    setTimeout(() => {
+    try {
+      const scanRes = await uploadAndScanWaste(householdId, cartonImage, {
+        fileName: 'camera_scan_carton.jpg',
+      });
+
+      router.replace({
+        pathname: '/bin/result' as any,
+        params: {
+          binType: scanRes.binType,
+          itemName: scanRes.itemName,
+          material: scanRes.material,
+          confidence: scanRes.confidence.toString(),
+          tips: scanRes.tips,
+          isRecyclable: scanRes.isRecyclable ? 'true' : 'false',
+          pointsAwarded: scanRes.pointsAwarded.toString(),
+          dailyLimitReached: scanRes.dailyLimitReached ? 'true' : 'false',
+          scanId: scanRes.scanId,
+        },
+      });
+    } catch (err) {
+      console.error('Camera scan failed:', err);
+      setScanState('ready');
       router.replace({
         pathname: '/bin/result' as any,
         params: { binType: 'paper' },
       });
-    }, 2000);
+    }
   };
 
   const handleClose = () => {

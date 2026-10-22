@@ -1,6 +1,6 @@
 /**
  * Simulation Engine for Simeplify
- * Manages simulated time, routine progression, avatar movement via hallway waypoints,
+ * Manages simulated time, routine progression, single-target avatar movement,
  * on/off appliance state calculation, and live monthly bill updates.
  */
 
@@ -40,16 +40,6 @@ export interface EngineTickResult {
   monthlyBillRm: number;
   usageBadge: 'Low Usage' | 'Normal Usage' | 'High Usage';
 }
-
-/** Hallway and doorway waypoints for 4-room layout (0-1 normalized coordinates) */
-export const ROOM_DOORWAYS: Record<string, Point> = {
-  living: { x: 0.38, y: 0.48 },
-  kitchen: { x: 0.62, y: 0.48 },
-  bedroom: { x: 0.48, y: 0.68 },
-  bathroom: { x: 0.52, y: 0.68 },
-};
-
-export const HALLWAY_INTERSECTION: Point = { x: 0.50, y: 0.50 };
 
 export function formatTimeMinutes(minutes: number): string {
   const m = Math.floor(minutes) % 1440;
@@ -97,30 +87,6 @@ export function getCurrentRoutine(
 export function getRoomCenter(room: StoredRoom): Point {
   const rect = getSlotRect(room.slot);
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
-
-/**
- * Build waypoints array from start to end position across rooms
- */
-export function buildWaypoints(
-  fromPos: Point,
-  fromRoomId: string | null,
-  toPos: Point,
-  toRoomId: string | null
-): Point[] {
-  if (!fromRoomId || !toRoomId || fromRoomId === toRoomId) {
-    return [toPos];
-  }
-
-  const fromDoor = ROOM_DOORWAYS[fromRoomId] || fromPos;
-  const toDoor = ROOM_DOORWAYS[toRoomId] || toPos;
-
-  return [
-    fromDoor,
-    HALLWAY_INTERSECTION,
-    toDoor,
-    toPos,
-  ];
 }
 
 /**

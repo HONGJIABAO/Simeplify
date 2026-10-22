@@ -1,23 +1,34 @@
 import React from 'react';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Pressable, View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 
 interface BellPillProps {
   hasUnread?: boolean;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function BellPill({ hasUnread = true }: BellPillProps) {
+export function BellPill({ hasUnread = true, onPress, style }: BellPillProps) {
   const router = useRouter();
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      router.push('/notifications');
+    }
+  };
 
   return (
     <Pressable
-      onPress={() => router.push('/notifications')}
+      onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel="Notifications"
       style={({ pressed }) => [
         styles.bellPill,
         pressed && styles.pressed,
+        style,
       ]}
     >
       <View style={styles.iconContainer}>
@@ -38,6 +49,11 @@ const styles = StyleSheet.create({
     borderColor: '#e7e5e4',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#5c4033',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   pressed: {
     backgroundColor: '#f5f5f4',

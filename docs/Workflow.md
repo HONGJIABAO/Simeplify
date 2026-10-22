@@ -43,7 +43,7 @@ Order for a new user:
 | Supabase Auth | Sign up, login, saved session. |
 | Supabase Database | Stores all user data. Row Level Security (RLS): a user can only read and write their own household data. |
 | Supabase Storage | Stores bill files (photo or PDF) and waste photos. |
-| Supabase Edge Functions | Call the Gemini API (waste sorting, bill reading). The API key is stored as a Supabase secret, never in the app. The model name is one config value, so it can change without an app update. |
+| Supabase Edge Functions | 3 functions: `scan-waste` (waste classification), `confirm-disposal` (points and deeds on "I threw it"), and `analyze-bill` (with 3 modes: `read` for OCR & signed token, `analyze` for server estimate/anomaly calculation & upserting bill/alerts/deeds/points, and `reanalyze` for re-running AI insight). Call the Gemini API. The API key is stored as a Supabase secret, never in the app. The model name is one config value, so it can change without an app update. |
 | Scheduled job (pg_cron) | Month-start and month-end notifications, and month-end points settlement and reward result. |
 
 Rules:
@@ -370,7 +370,7 @@ sequenceDiagram
     User->>App: Open Bin and point camera at waste
     User->>App: Take photo
     App->>Storage: Upload photo
-    App->>EF: classify_waste (photo path)
+    App->>EF: scan-waste (photo path)
     EF->>AI: Send image
     AI-->>EF: Item name, bin type (paper, plastic, glass_metal, general), recyclable yes or no, confidence
     EF->>DB: Save waste_scans row
@@ -378,7 +378,7 @@ sequenceDiagram
     alt Confidence is high
         App-->>User: Show which bin (recyclable or general waste)
         User->>App: Tap "I threw it"
-        App->>EF: confirm_disposal (scan id)
+        App->>EF: confirm-disposal (scan id)
         EF->>DB: Add points to household monthly points
         EF-->>App: New points total
         App-->>User: Show points updated
@@ -402,45 +402,35 @@ sequenceDiagram
     participant User
     participant App
     participant Storage
-    participant EF
-    participant AI
-    participant DB
+    participant EF as EF: analyze-bill
+    participant AI as Gemini API
+    participant DB as Supabase DB
 
     User->>App: Take photo or pick PDF of bill
-    App->>Storage: Upload file
-    App->>EF: read_bill (file path)
-    EF->>AI: Read bill
-    AI-->>EF: Bill type, billing month, usage, amount
-    EF-->>App: Extracted values
+    App->>Storage: Upload to bills/{household_id}/...
+    App->>EF: analyze-bill { mode: "read", file_path }
+    EF->>AI: OCR bill image
+    AI-->>EF: type, billing_month, usage, amount
+    EF->>DB: Record 1 row in ai_usage (kind: 'read')
+    EF-->>App: Extracted values + HMAC signed read_token
     App-->>User: Show values to check and correct
-    User->>App: Confirm
-    App->>DB: Save bills row and file path
-    App->>DB: Read last month bill and Simulator estimate
-    DB-->>App: Data
-    App->>App: Water bill: find the level (MoM and volume, see Feature_Requirements Appendix B)
-    alt Level is Leak detected or Major pipe burst
-        App->>DB: Save alert with level (a database trigger creates a notification)
-        App-->>User: Show warning banner (amber for Leak, terracotta for Major)
-    else Level is Minor drip
-        App-->>User: Show a water-saving tip line (no banner, no notification)
-    else Normal
-        App-->>User: Show "Normal"
+    User->>App: Confirm values
+    App->>EF: analyze-bill { mode: "analyze", file_path, type, billing_month, usage, amount, read_token }
+    EF->>DB: Verify read_token against submitted values
+    EF->>DB: Recompute electricity estimate on server (from rooms, appliances, day_blocks)
+    EF->>DB: Evaluate water anomaly level on server (higher of MoM % and volume)
+    EF->>DB: Upsert bill row
+    opt Water bill level is Leak detected or Major pipe burst
+        EF->>DB: Save alert with level (trigger sends notification)
     end
-    opt Electricity bill is lower than the Simulator estimate and no energy points yet for this billing month
-        App->>EF: award_energy_points (bill id)
-        EF->>DB: Add 50 points
-        EF-->>App: New points total
-        App-->>User: Show +50 points
+    opt Electricity bill beats estimate, My day set, values unchanged, not awarded yet this month, < 3 deeds today
+        EF->>DB: Record green deed (upload_lower_bill) and add +50 energy points
     end
-    App-->>User: Show result and an "Analyzing..." card
-    App->>EF: analyze_bill (bill id, Simulator estimate)
-    EF->>DB: Read earlier bills, appliances, My day, schedule
-    EF->>EF: Calculate history numbers (vs last month, 3-month average, same month last year, rank, streak)
-    EF->>AI: Send the bill data and the history numbers
-    AI-->>EF: Summary, reasons, tips
-    EF->>DB: Save the analysis on the bill
-    EF-->>App: Analysis
-    App-->>User: Show the AI Analysis card (SCN-03)
+    EF->>AI: Send bill history numbers, appliances, routine for insight
+    AI-->>EF: AI summary, reasons, tips
+    EF->>DB: Update bills.analysis
+    EF-->>App: Full bill result, alert level, points, deeds, and AI analysis
+    App-->>User: Show result, warning banner, points, and AI Analysis card
 ```
 
 Rules:
@@ -448,10 +438,10 @@ Rules:
 - The user always checks and can correct the numbers before saving.
 - Saved bills show in the archive list, newest first.
 - The first bill has no last month. For electricity, compare only with the Simulator estimate. For water, use only the volume limits.
-- Energy points (+50) are given once per billing month, even if the user uploads the same month again.
-- The warning level is decided by the app's rules (water: the higher of the MoM level and the volume level, Appendix B). The AI only explains it. The demo case is 18 m³ and +48%: Leak detected.
+- Energy points (+50) and green deed (`upload_lower_bill`) are given once per billing month, and only when actual usage beats the server-computed estimate with an unedited read token. If values were changed, My day is not set, usage is not lower, points are already awarded, or 3 deeds already completed today, no deed and 0 points are recorded.
+- The warning level is decided by `analyze-bill` on the server (water: the higher of the MoM level and the volume level, Appendix B). The AI only explains it. The demo case is 18 m³ and +48%: Leak detected.
 - The bill amount (RM) is shown but does not decide the level.
-- The +50 energy points count as one green deed (COM-03). The Edge Function applies the daily limit of 3 deeds.
+- The +50 energy points count as one green deed (COM-03). The Edge Function enforces the daily limit of 3 deeds (no deed row written at cap).
 - The Edge Function sends the AI only the numbers it needs. The AI must not make up RM amounts or percents. Every number in the text comes from the data sent.
 - **History comparison:** The Edge Function calculates the history numbers from the saved bills (change vs last month, difference vs the 3-month average, difference vs the same month last year, rank in the last 6 months, and the up or down streak). The AI only explains them.
 - Only bills of earlier months than the new bill are used. Numbers that need more history are left out.
@@ -498,7 +488,7 @@ sequenceDiagram
     participant DB
 
     User->>App: Complete a task (Bin item, lower electricity bill, or Simulator action)
-    App->>EF: The Edge Function for that task (classify, award_energy_points, or deed)
+    App->>EF: The Edge Function for that task (confirm-disposal or analyze-bill)
     EF->>DB: Count today's deeds for the household
     alt Fewer than 3 deeds today
         EF->>DB: Save the deed and add points
@@ -570,7 +560,7 @@ Version 1 is an in-app list only. There are no phone push messages.
 | Onboarding | schedules, rooms, appliances | schedules, households, rooms, appliances, profile.onboarding_done | |
 | Simulator | schedules, rooms, appliances, day_blocks, tariff_rates | appliances (position, edits), day_blocks, showers per person | Bill, avatar, and animation run in the app |
 | Bin | household points | waste_scans, points and deeds | Storage (photo), Edge Function, Gemini |
-| Scanner | bills (with analysis), appliances, day_blocks | bills (with analysis), alerts (with level), points and deeds (energy) | Storage (file), Edge Function, Gemini |
+| Scanner | bills (with analysis), alerts | (writes happen in analyze-bill Edge Function: bills, alerts, deeds, points, ai_usage) | Storage (file), analyze-bill Edge Function (read, analyze, reanalyze), Gemini |
 | Community | points, deeds (today), rewards, votes, neighbourhood totals | votes | Deeds and points written by Edge Functions. Scheduled job for month end. |
 | Notifications | notifications | notifications (read flag) | Database trigger, scheduled job |
 

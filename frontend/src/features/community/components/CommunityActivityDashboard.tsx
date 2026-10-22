@@ -42,10 +42,10 @@ export function CommunityActivityDashboard({
             <Text style={styles.sectorBadgeText}>Oakridge Commons • Sector 4B</Text>
           </View>
 
-          <Text style={styles.headerTitle}>Today's Community Activity</Text>
+          <Text style={styles.headerTitle}>{"Today's Community Activity"}</Text>
           <Text style={styles.headerSubtext}>
             Real-time household participation breakdown across Oakridge Commons for
-            today's green challenge.
+            {" today's green challenge."}
           </Text>
         </View>
       )}
@@ -164,7 +164,7 @@ export function CommunityActivityDashboard({
 
             <Text style={styles.statusMainDescription}>
               Healthy Stage • 1 action today. Complete 1 more green action today
-              to unlock tomorrow's Lush state.
+              to unlock {"tomorrow's"} Lush state.
             </Text>
 
             <Text style={styles.statusMetaNotice}>

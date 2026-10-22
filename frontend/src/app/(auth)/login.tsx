@@ -28,7 +28,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
 import { ENABLE_GOOGLE_AUTH } from '@/lib/flags';
-import { updateAuthSession } from '@/lib/authSession';
+import { signIn, getAuthSession } from '@/lib/authSession';
 
 function GoogleIcon({ size = 18 }: { size?: number }) {
   return (
@@ -65,38 +65,41 @@ export default function LoginScreen() {
   const [password, setPassword] = useState(isInitialError ? 'supers3cret!' : '');
   const [showPassword, setShowPassword] = useState(false);
   const [hasError, setHasError] = useState(isInitialError);
+  const [errorMessage, setErrorMessage] = useState('Email or password is wrong.');
   const [isLoading, setIsLoading] = useState(isInitialLoading);
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setHasError(false);
+    setErrorMessage('Email or password is wrong.');
 
     if (!email.trim() || !password.trim()) {
       setHasError(true);
       return;
     }
 
-    if (password === 'wrong') {
-      setHasError(true);
-      return;
-    }
-
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const isMeiLing =
-        email.trim().toLowerCase() === 'meiling.tan@example.com' ||
-        email.trim().toLowerCase().includes('meiling');
+    try {
+      const { user, error } = await signIn(email.trim(), password.trim());
+      if (error || !user) {
+        setHasError(true);
+        setErrorMessage(error?.message || 'Email or password is wrong.');
+        setIsLoading(false);
+        return;
+      }
 
-      updateAuthSession({
-        isLoggedIn: true,
-        email: email.trim(),
-        name: isMeiLing ? 'Mei Ling Tan' : 'Mei Ling Tan',
-        gender: 'girl',
-        addressDisplay: '18, Jalan SS 2/6, Petaling Jaya, Selangor',
-      });
-      router.replace('/(tabs)/simulator' as any);
-    }, 600);
+      const session = getAuthSession();
+      if (session.profile?.household_id && session.profile?.onboarding_done) {
+        router.replace('/(tabs)/simulator' as any);
+      } else {
+        router.replace('/(onboarding)/layout' as any);
+      }
+    } catch (err: any) {
+      setHasError(true);
+      setErrorMessage(err?.message || 'Email or password is wrong.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -229,7 +232,7 @@ export default function LoginScreen() {
             {hasError && (
               <View style={styles.errorBanner}>
                 <AlertCircle size={15} color="#a8442f" strokeWidth={2} />
-                <Text style={styles.errorText}>Email or password is wrong.</Text>
+                <Text style={styles.errorText}>{errorMessage}</Text>
               </View>
             )}
           </View>

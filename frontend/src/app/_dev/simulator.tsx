@@ -5,7 +5,7 @@
  * Each state can be opened directly for review.
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,12 +38,13 @@ import { ApplianceDetailsSheet } from '@/features/simulator/components/Appliance
 import { FloorPlan } from '@/features/simulator/components/FloorPlan';
 import { EditSheet } from '@/features/simulator/components/EditSheet';
 import { RoomNamingModal } from '@/features/simulator/components/RoomNamingModal';
-import { AvatarSimulationState } from '@/features/simulator/logic/SimulationEngine';
+import { AvatarSimulationState, getRoomCenter } from '@/features/simulator/logic/SimulationEngine';
+import { findFloorWalkPath } from '@/features/simulator/logic/walkGraph';
 import { FloorNumber } from '@/features/simulator/logic/roomLayout';
 import { SuggestionArea } from '@/features/simulator/components/SuggestionArea';
 import { getSwapSuggestions, SwapSuggestion } from '@/features/simulator/logic/swapLogic';
 import { ResidentAvatar } from '@/features/simulator/components/ResidentAvatar';
-import { AvatarPose } from '@/features/simulator/logic/avatarPlace';
+import { AvatarPose, resolveAvatarPlacement } from '@/features/simulator/logic/avatarPlace';
 import {
   RoutineBlock,
   DEFAULT_ROUTINE_BLOCKS,
@@ -52,8 +53,12 @@ import { QuickSetupSheet } from '@/features/simulator/components/QuickSetupSheet
 import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelineSheet';
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
+import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
+import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
+import { WeekReelCaption, WeekReelSummary } from '@/features/simulator/components/WeekReelStatus';
+import { buildWeekReel } from '@/features/simulator/logic/weekReel';
 
 type DemoState =
   // Stage 6
@@ -97,6 +102,11 @@ type DemoState =
   | 'workplace-details'
   | 'edit-tray-collapsed'
   | 'edit-tray-dragging'
+  | 'tray-first-screen'
+  | 'tray-scrolled-end'
+  | 'tidy-up-confirm'
+  | 'tidy-up-before'
+  | 'tidy-up-after'
   // Floor Plan V2
   | 'stair-filled-floor-1'
   | 'stair-filled-floor-2'
@@ -107,17 +117,50 @@ type DemoState =
   | 'room-tags-default'
   | 'room-tags-hovered'
   | 'room-tags-edit-mode'
+  | 'floor-items-2-2x'
+  | 'item-label-tapped'
+  | 'edit-selected-drag'
   // Furnished Mock States
   | 'home-furnished-floor-1'
   | 'home-furnished-floor-2'
-  | 'floor-2-setup-all';
+  | 'home-furnished-floor-1-debug'
+  | 'home-furnished-floor-2-debug'
+  | 'floor-2-setup-all'
+  | 'living-room-layout'
+  | 'kitchen-layout'
+  | 'bathroom-layout'
+  | 'bedroom-layout'
+  | 'workplace-room-layout'
+  | 'avatar-at-sofa'
+  | 'avatar-at-shower'
+  | 'avatar-at-workplace'
+  | 'floor-follow-transition'
+  | 'floor-follow-looked-away'
+  | 'floor-follow-edit-mode'
+  | 'doorway-route-preview'
+  | 'unreachable-room-route'
+  // Fast-Forward Week Reel (Part 6)
+  | 'week-reel-caption-shower'
+  | 'week-reel-caption-away'
+  | 'week-reel-playing'
+  | 'week-reel-reduced-summary';
 
 const STATE_GROUPS = [
   {
     title: 'Furnished Home Floor Plans',
     items: [
+      { id: 'living-room-layout' as DemoState, label: 'Living room layout' },
+      { id: 'kitchen-layout' as DemoState, label: 'Kitchen layout' },
+      { id: 'bathroom-layout' as DemoState, label: 'Bathroom layout' },
+      { id: 'bedroom-layout' as DemoState, label: 'Bedroom layout' },
+      { id: 'workplace-room-layout' as DemoState, label: 'Workplace room layout' },
+      { id: 'avatar-at-sofa' as DemoState, label: 'Avatar at sofa, TV lit' },
+      { id: 'avatar-at-shower' as DemoState, label: 'Avatar at shower' },
+      { id: 'avatar-at-workplace' as DemoState, label: 'Avatar at Workplace' },
       { id: 'home-furnished-floor-1' as DemoState, label: 'Home furnished, floor 1' },
       { id: 'home-furnished-floor-2' as DemoState, label: 'Home furnished, floor 2' },
+      { id: 'home-furnished-floor-1-debug' as DemoState, label: 'Home furnished, floor 1 — layout overlay' },
+      { id: 'home-furnished-floor-2-debug' as DemoState, label: 'Home furnished, floor 2 — layout overlay' },
       { id: 'floor-2-setup-all' as DemoState, label: 'Floor 2 with all rooms set up' },
     ],
   },
@@ -133,6 +176,9 @@ const STATE_GROUPS = [
       { id: 'room-tags-default' as DemoState, label: 'Room tags — hidden by default' },
       { id: 'room-tags-hovered' as DemoState, label: 'Room tags — hovered / long press' },
       { id: 'room-tags-edit-mode' as DemoState, label: 'Room tags — Edit mode visible' },
+      { id: 'floor-items-2-2x' as DemoState, label: 'All floor items — uniform 2.2×' },
+      { id: 'item-label-tapped' as DemoState, label: 'Normal mode — tapped name + watts' },
+      { id: 'edit-selected-drag' as DemoState, label: 'Edit mode — tap once, then drag' },
     ],
   },
   {
@@ -141,10 +187,20 @@ const STATE_GROUPS = [
       { id: 'two-floor-plan' as DemoState, label: '1F unequal rooms + stairs' },
       { id: 'floor-two-dark' as DemoState, label: '2F with two dark rooms' },
       { id: 'resident-other-floor' as DemoState, label: 'Resident is on the other floor' },
+      { id: 'floor-follow-transition' as DemoState, label: 'Floor follows resident after stair crossing' },
+      { id: 'floor-follow-looked-away' as DemoState, label: 'User looked away — resident floor pill' },
+      { id: 'floor-follow-edit-mode' as DemoState, label: 'Edit mode — floor follow disabled' },
+      { id: 'doorway-route-preview' as DemoState, label: 'Avatar doorway route preview' },
+      { id: 'unreachable-room-route' as DemoState, label: 'No route — nearest reachable waypoint' },
       { id: 'room-setup-sheet' as DemoState, label: 'Dark-room setup sheet' },
       { id: 'workplace-details' as DemoState, label: 'Workplace details (no star rating)' },
       { id: 'edit-tray-collapsed' as DemoState, label: 'Collapsed item tray' },
       { id: 'edit-tray-dragging' as DemoState, label: 'Item tray while dragging (30%)' },
+      { id: 'tray-first-screen' as DemoState, label: 'Tray — first screen' },
+      { id: 'tray-scrolled-end' as DemoState, label: 'Tray — scrolled to end' },
+      { id: 'tidy-up-confirm' as DemoState, label: 'Tidy up — confirm' },
+      { id: 'tidy-up-before' as DemoState, label: 'Tidy up — before' },
+      { id: 'tidy-up-after' as DemoState, label: 'Tidy up — after' },
     ],
   },
   {
@@ -206,6 +262,15 @@ const STATE_GROUPS = [
       { id: 'home-look-away' as DemoState, label: 'Home look: away (energy saving overlay & out pill)' },
     ],
   },
+  {
+    title: 'Fast-Forward Week Reel (Part 6)',
+    items: [
+      { id: 'week-reel-caption-shower' as DemoState, label: 'Week reel caption (Mon Shower)' },
+      { id: 'week-reel-caption-away' as DemoState, label: 'Week reel caption (Tue Away)' },
+      { id: 'week-reel-playing' as DemoState, label: 'Week reel playing (Floor 1)' },
+      { id: 'week-reel-reduced-summary' as DemoState, label: 'Week reel reduced motion summary' },
+    ],
+  },
 ];
 
 function BillHero({ kWh }: { kWh: number }) {
@@ -217,10 +282,16 @@ function TwoFloorPlanPreview({
   initialFloor = 1,
   residentFloor = 1,
   isEditMode = false,
-  activeApplianceIds = ['f1-fridge-kitchen', 'f1-ac-living'],
+  activeApplianceIds,
   hoveredRoomId = null,
   containerHeight,
   setupAllRooms = false,
+  debugLayout = false,
+  avatarScenario,
+  routeScenario,
+  messy = false,
+  isAvatarAway = false,
+  initialSelectedItemId = null,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -229,27 +300,67 @@ function TwoFloorPlanPreview({
   hoveredRoomId?: string | null;
   containerHeight?: number;
   setupAllRooms?: boolean;
+  debugLayout?: boolean;
+  avatarScenario?: 'sofa' | 'shower' | 'workplace';
+  routeScenario?: 'doorway' | 'unreachable';
+  messy?: boolean;
+  isAvatarAway?: boolean;
+  initialSelectedItemId?: string | null;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(initialSelectedItemId);
   const floorRef = useRef<View>(null);
   const rooms = setupAllRooms ? createDefaultRooms(true) : MOCK_SIMULATOR_ROOMS;
-  const items = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
+  const baseItems = setupAllRooms ? MOCK_SIMULATOR_ITEMS_ALL : MOCK_SIMULATOR_ITEMS;
+  const initialItems = messy ? baseItems.map((item, index) => item.roomId === 'f1-A'
+    ? { ...item, posX: 0.18 + (index % 3) * 0.025, posY: 0.34 + (index % 2) * 0.02 }
+    : item) : baseItems;
+  const [items, setItems] = useState(initialItems);
+  useEffect(() => {
+    if (isEditMode || !selectedItemId) return;
+    const timer = setTimeout(() => setSelectedItemId(null), 3000);
+    return () => clearTimeout(timer);
+  }, [isEditMode, selectedItemId]);
+  const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A' : avatarScenario === 'shower' ? 'f1-C' : avatarScenario === 'workplace' ? 'f2-B' : null;
+  const scenarioRoom = rooms.find((room) => room.id === scenarioRoomId);
+  const scenarioItems = items.filter((item) => item.roomId === scenarioRoomId);
+  const scenarioBlock = avatarScenario === 'sofa'
+    ? { name: 'Watching TV', iconType: 'custom' as const, applianceIds: ['f1-tv-living', 'f1-lamp-living', 'f1-ac-living'], avatarWalks: true }
+    : avatarScenario === 'shower'
+      ? { name: 'Morning Shower', iconType: 'shower' as const, applianceIds: ['f1-shower-bath'], avatarWalks: true }
+      : { name: 'Working', iconType: 'work' as const, applianceIds: ['f2-workplace-study'], avatarWalks: true };
+  const scenarioPlacement = scenarioRoom ? resolveAvatarPlacement(scenarioBlock, scenarioRoom, scenarioItems) : null;
+  const routeStartRoom = rooms.find((room) => room.id === 'f1-A')!;
+  const routeEndRoom = rooms.find((room) => room.id === (routeScenario === 'unreachable' ? 'f1-D' : 'f1-C'))!;
+  const routeResult = routeScenario ? findFloorWalkPath({
+    floor: 1, rooms, start: getRoomCenter(routeStartRoom), startRoomId: routeStartRoom.id,
+    end: getRoomCenter(routeEndRoom), endRoomId: routeEndRoom.id,
+  }) : null;
+  const routePosition = routeResult?.points[routeResult.points.length - 1];
+  const shownFloor = routeScenario ? 1 : scenarioRoom?.floor ?? residentFloor;
   const avatarState: AvatarSimulationState = {
-    currentX: residentFloor === 1 ? 0.28 : 0.72,
-    currentY: residentFloor === 1 ? 0.35 : 0.30,
-    facingLeft: false,
+    currentX: isAvatarAway ? 0.29 : (routePosition?.x ?? scenarioPlacement?.target.x ?? (residentFloor === 1 ? 0.28 : 0.72)),
+    currentY: isAvatarAway ? 0.50 : (routePosition?.y ?? scenarioPlacement?.target.y ?? (residentFloor === 1 ? 0.35 : 0.30)),
+    facingLeft: scenarioPlacement?.facingLeft ?? false,
     isWalking: false,
     isSleeping: false,
     isSitting: false,
-    currentRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
-    targetRoomId: residentFloor === 1 ? 'f1-A' : 'f2-B',
-    currentActivity: 'At home',
-    currentFloor: residentFloor,
-    targetFloor: residentFloor,
+    currentRoomId: isAvatarAway ? 'f1-A' : (scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B')),
+    targetRoomId: isAvatarAway ? 'f1-A' : (scenarioRoomId ?? (residentFloor === 1 ? 'f1-A' : 'f2-B')),
+    currentActivity: isAvatarAway ? 'Away' : 'At home',
+    currentFloor: isAvatarAway ? 1 : shownFloor,
+    targetFloor: isAvatarAway ? 1 : shownFloor,
     isFloorTransitioning: false,
   };
   return (
     <View style={{ flex: 1, minHeight: containerHeight ?? 420, padding: 16 }}>
+      {debugLayout && (
+        <View style={galleryStyles.missingPicturesCard}>
+          <Text style={galleryStyles.missingPicturesText}>
+            Missing pictures: {SKIPPED_ITEM_TYPES.join(', ')}
+          </Text>
+        </View>
+      )}
       <FloorPlan
         rooms={rooms}
         items={items}
@@ -257,19 +368,22 @@ function TwoFloorPlanPreview({
         onFloorChange={setFloor}
         avatarState={avatarState}
         avatarVariant="avatar_girl"
-        activeApplianceIds={activeApplianceIds}
+        isAvatarAway={isAvatarAway}
+        walkPath={routeResult?.points}
+        activeApplianceIds={activeApplianceIds ?? scenarioPlacement?.activeApplianceIds ?? ['f1-fridge-kitchen', 'f1-ac-living']}
         activeRoomLightIds={[]}
         isEditMode={isEditMode}
-        selectedItemId={null}
+        selectedItemId={selectedItemId}
         hoveredRoomId={hoveredRoomId}
-        walkPath={[]}
         onRoomPress={() => {}}
-        onSelectItem={() => {}}
+        onSelectItem={(item) => setSelectedItemId(item.id)}
         onDeleteItem={() => {}}
         onRotateItem={() => {}}
-        onMoveItemEnd={() => {}}
+        onMoveItemEnd={(itemId, posX, posY) => setItems((current) => current.map((item) =>
+          item.id === itemId ? { ...item, posX, posY } : item))}
         floorPlanRef={floorRef}
         onLayout={() => {}}
+        debugLayout={debugLayout}
       />
     </View>
   );
@@ -298,6 +412,11 @@ export default function SimulatorGallery() {
 
   // In-memory swap demo state
   const [activeSwapIds, setActiveSwapIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (activeState !== 'home-furnished-floor-1-debug' && activeState !== 'home-furnished-floor-2-debug') return;
+    SKIPPED_ITEM_TYPES.forEach((type) => console.warn(`[Simulator layout] Missing sprite picture: ${type}`));
+  }, [activeState]);
 
   const onCanvasLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -371,18 +490,37 @@ export default function SimulatorGallery() {
           activeState === 'square-plan-default' || activeState === 'square-plan-shrunk' ||
           activeState === 'glow-on' || activeState === 'glow-off' ||
           activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode' ||
-          activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all') && (
+          activeState === 'floor-items-2-2x' || activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ||
+          activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' ||
+          activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' ||
+          activeState === 'living-room-layout' || activeState === 'kitchen-layout' || activeState === 'bathroom-layout' ||
+          activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' ||
+          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' ||
+          activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ||
+          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route') && (
           <TwoFloorPlanPreview
             key={activeState}
-            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all' ? 2 : 1}
-            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'floor-2-setup-all' ? 2 : 1}
-            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode'}
-            activeApplianceIds={activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
+            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' ? 2 : 1}
+            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ? 2 : 1}
+            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'floor-follow-edit-mode' || activeState === 'edit-selected-drag'}
+            initialSelectedItemId={activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ? 'f1-ac-living' : null}
+            activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace'
+              ? undefined
+              : activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
             hoveredRoomId={activeState === 'room-tags-hovered' ? 'f1-A' : null}
             containerHeight={activeState === 'square-plan-shrunk' ? 260 : undefined}
             setupAllRooms={activeState === 'floor-2-setup-all'}
+            debugLayout={activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug'}
+            avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa' : activeState === 'avatar-at-shower' ? 'shower' : activeState === 'avatar-at-workplace' ? 'workplace' : undefined}
+            routeScenario={activeState === 'doorway-route-preview' ? 'doorway' : activeState === 'unreachable-room-route' ? 'unreachable' : undefined}
           />
         )}
+
+        {(activeState === 'tidy-up-before' || activeState === 'tidy-up-after' || activeState === 'tidy-up-confirm') && <>
+          <TwoFloorPlanPreview isEditMode messy={activeState === 'tidy-up-before'} debugLayout={activeState !== 'tidy-up-confirm'} />
+          <TidyUpSheet visible={activeState === 'tidy-up-confirm'} onConfirm={() => setActiveState('tidy-up-after')}
+            onClose={() => setActiveState(null)} />
+        </>}
 
         {activeState === 'room-setup-sheet' && (
           <RoomNamingModal visible room={MOCK_SIMULATOR_ROOMS.find((room) => !room.isSetUp) ?? null}
@@ -396,10 +534,88 @@ export default function SimulatorGallery() {
             onSave={() => {}} onCancel={() => setActiveState(null)} />
         )}
 
-        {(activeState === 'edit-tray-collapsed' || activeState === 'edit-tray-dragging') && (
-          <View style={{ flex: 1, justifyContent: 'flex-end', maxHeight: '28%' }}>
+        {(activeState === 'edit-tray-collapsed' || activeState === 'edit-tray-dragging' ||
+          activeState === 'tray-first-screen' || activeState === 'tray-scrolled-end') && (
+          <View style={{ flex: 1, justifyContent: 'flex-end', maxHeight: '22%' }}>
             <EditSheet visible initialCollapsed={activeState === 'edit-tray-collapsed'}
+              initialScrollToEnd={activeState === 'tray-scrolled-end'}
               isDragging={activeState === 'edit-tray-dragging'} onItemPointerDown={() => {}} onItemTap={() => {}} />
+          </View>
+        )}
+
+        {/* ── Week Reel (Part 6) ── */}
+        {activeState === 'week-reel-caption-shower' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Monday',
+                dayIndex: 0,
+                block: {
+                  id: 'block-shower',
+                  name: 'Morning Shower',
+                  startTime: '06:30',
+                  endTime: '07:15',
+                  roomId: 'f1-C',
+                  iconType: 'shower',
+                  applianceIds: ['f1-shower-bath'],
+                },
+                isAway: false,
+                caption: 'Monday · Morning Shower · 06:30',
+              }}
+              roomName="Bathroom"
+              savingsRm={15}
+            />
+            <TwoFloorPlanPreview avatarScenario="shower" />
+          </View>
+        )}
+
+        {activeState === 'week-reel-caption-away' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Tuesday',
+                dayIndex: 1,
+                block: null,
+                isAway: true,
+                caption: 'Tuesday · Away',
+              }}
+              savingsRm={30}
+            />
+            <TwoFloorPlanPreview isAvatarAway />
+          </View>
+        )}
+
+        {activeState === 'week-reel-playing' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelCaption
+              segment={{
+                day: 'Monday',
+                dayIndex: 0,
+                block: {
+                  id: 'block-shower',
+                  name: 'Morning Shower',
+                  startTime: '06:30',
+                  endTime: '07:15',
+                  roomId: 'f1-C',
+                  iconType: 'shower',
+                  applianceIds: ['f1-shower-bath'],
+                },
+                isAway: false,
+                caption: 'Monday · Morning Shower · 06:30',
+              }}
+              roomName="Bathroom"
+              savingsRm={12}
+            />
+            <TwoFloorPlanPreview routeScenario="doorway" />
+          </View>
+        )}
+
+        {activeState === 'week-reel-reduced-summary' && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <WeekReelSummary
+              segments={buildWeekReel(DEFAULT_ROUTINE_BLOCKS)}
+              finalSavingsRm={80}
+            />
           </View>
         )}
 
@@ -887,6 +1103,19 @@ const galleryStyles = StyleSheet.create({
     borderColor: '#e7e5e4',
     padding: 16,
     overflow: 'hidden',
+  },
+  missingPicturesCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 8,
+  },
+  missingPicturesText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#57534E',
   },
   skeletonDemo: {
     flex: 1,

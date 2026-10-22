@@ -29,14 +29,22 @@ export interface RoutineBlock {
   isLocked?: boolean;
   applianceIds: string[];
   minutesPerShower?: number;
-  iconType: 'sleep' | 'shower' | 'meal' | 'away' | 'evening' | 'custom';
+  iconType: 'sleep' | 'shower' | 'meal' | 'away' | 'evening' | 'work' | 'custom';
   description?: string;
   appliancesInUse?: ApplianceInUse[];
   temperature?: number;
   timerHours?: number;
   fanSpeed?: 'Low' | 'Med' | 'High';
   repeatDays?: string[];
+  /** Whether this activity moves the resident to its interactive item. */
+  avatarWalks?: boolean;
 }
+
+export const WORK_ROUTINE_SUGGESTIONS = [
+  { name: 'Working', roomType: 'bedroom' as const, avatarWalks: true },
+  { name: 'Studying', roomType: 'bedroom' as const, avatarWalks: true },
+  { name: 'Charging phone', roomType: 'bedroom' as const, avatarWalks: false },
+] as const;
 
 export const AWAY_RANGE_WEEKDAY = { start: '08:30', end: '17:30' };
 
