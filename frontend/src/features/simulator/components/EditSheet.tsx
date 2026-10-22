@@ -3,8 +3,8 @@ import { AccessibilityInfo, Animated, LayoutChangeEvent, Platform, Pressable, Sc
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, PackageOpen } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import type { ApplianceTrayRow } from '../logic/trayData';
-import { buildApplianceTrayItems, buildFurnitureTrayItems } from '../logic/trayData';
+import type { ApplianceTrayRow, FurnitureTrayRow } from '../logic/trayData';
+import { buildApplianceTrayItems, buildFurnitureTrayItems, ENABLE_FURNITURE_TAB } from '../logic/trayData';
 import { getTrayTileWidth } from '../logic/trayRules';
 import { getSpriteSource, type SpriteItemDef } from '../logic/spriteMap';
 import { Sprite } from './Sprite';
@@ -14,6 +14,7 @@ type TrayTab = 'Appliances' | 'Furniture';
 interface EditSheetProps {
   visible: boolean;
   applianceTypes?: ApplianceTrayRow[];
+  furnitureTypes?: FurnitureTrayRow[];
   onItemPointerDown: (item: SpriteItemDef, clientX: number, clientY: number) => void;
   onItemDragMove?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
   onItemDragEnd?: (item: SpriteItemDef, clientX: number, clientY: number) => void;
@@ -34,14 +35,51 @@ interface TrayTileProps {
   onTap: EditSheetProps['onItemTap'];
 }
 
+export const EDIT_SHEET_HEIGHT = 184;
+
+export function EditSheetSurface({
+  children,
+  collapsed = false,
+  opacity,
+}: {
+  children: React.ReactNode;
+  collapsed?: boolean;
+  opacity?: Animated.Value;
+}) {
+  const [translateY] = useState(() => new Animated.Value(EDIT_SHEET_HEIGHT));
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!active) return;
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: reduced ? 0 : 500,
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => { active = false; };
+  }, [translateY]);
+
+  return (
+    <Animated.View style={[
+      styles.sheetContainer,
+      collapsed && styles.sheetCollapsed,
+      { opacity: opacity ?? 1, transform: [{ translateY }] },
+    ]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 function TrayTile({ item, width, selected, onStart, onMove, onEnd, onTap }: TrayTileProps) {
   const beginDrag = (x: number, y: number) => onStart(item, x, y);
   const moveDrag = (x: number, y: number) => onMove?.(item, x, y);
   const finishDrag = (x: number, y: number) => onEnd?.(item, x, y);
 
   const dragGesture = Gesture.Pan()
-    .activeOffsetY(-8)
-    .failOffsetX([-14, 14])
+    .activateAfterLongPress(200)
+    .minDistance(4)
     .onStart((event) => runOnJS(beginDrag)(event.absoluteX, event.absoluteY))
     .onUpdate((event) => runOnJS(moveDrag)(event.absoluteX, event.absoluteY))
     .onEnd((event) => runOnJS(finishDrag)(event.absoluteX, event.absoluteY));
@@ -81,6 +119,7 @@ function TrayTile({ item, width, selected, onStart, onMove, onEnd, onTap }: Tray
 export function EditSheet({
   visible,
   applianceTypes = [],
+  furnitureTypes = [],
   onItemPointerDown,
   onItemDragMove,
   onItemDragEnd,
@@ -100,7 +139,7 @@ export function EditSheet({
   const offsets = useRef<Record<TrayTab, number>>({ Appliances: 0, Furniture: 0 });
 
   const applianceItems = useMemo(() => buildApplianceTrayItems(applianceTypes), [applianceTypes]);
-  const furnitureItems = useMemo(() => buildFurnitureTrayItems(), []);
+  const furnitureItems = useMemo(() => buildFurnitureTrayItems(furnitureTypes), [furnitureTypes]);
   const currentItems = activeTab === 'Appliances' ? applianceItems : furnitureItems;
   const tileWidth = getTrayTileWidth(trayWidth);
   const maxScroll = Math.max(0, contentWidth - trayWidth);
@@ -161,7 +200,7 @@ export function EditSheet({
       : {};
 
   return (
-    <Animated.View style={[styles.sheetContainer, collapsed && styles.sheetCollapsed, { opacity }]}>
+    <EditSheetSurface collapsed={collapsed} opacity={opacity}>
       <Pressable
         onPress={() => setCollapsed((value) => !value)}
         style={styles.handleButton}
@@ -182,7 +221,7 @@ export function EditSheet({
       ) : (
         <>
           <View style={styles.segmentedContainer}>
-            {(['Appliances', 'Furniture'] as const).map((tab) => (
+            {(['Appliances', ...(ENABLE_FURNITURE_TAB ? ['Furniture' as const] : [])] as const).map((tab) => (
               <Pressable
                 key={tab}
                 onPress={() => handleTabChange(tab)}
@@ -249,13 +288,13 @@ export function EditSheet({
           </View>
         </>
       )}
-    </Animated.View>
+    </EditSheetSurface>
   );
 }
 
 const styles = StyleSheet.create({
   sheetContainer: {
-    height: 184,
+    height: EDIT_SHEET_HEIGHT,
     backgroundColor: '#FAF7F2',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

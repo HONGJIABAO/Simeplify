@@ -17,6 +17,8 @@ import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelin
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
+import { AIAnalysisReportModal } from '@/features/simulator/components/AIAnalysisReportModal';
+import { ApplianceSuggestionSheet } from '@/features/simulator/components/ApplianceSuggestionSheet';
 import { WeekReelCaption, WeekReelSummary } from '@/features/simulator/components/WeekReelStatus';
 import {
   StoredRoom, StoredPlacedItem, loadLayoutState, saveLayoutState, loadSimulationState,
@@ -39,9 +41,16 @@ import { shouldFollowAvatarFloor } from '@/features/simulator/logic/floorFollow'
 import { AVATAR_PLAN_SPEED_PER_SECOND, findHomeWalkRoute } from '@/features/simulator/logic/walkGraph';
 import { buildWeekReel, getReducedMotionSummary, getReelSavings, getReelTargetDate, type WeekReelSegment } from '@/features/simulator/logic/weekReel';
 import { calcTotalSavings } from '@/features/simulator/logic/fastForward';
+import { furnishEmptyRooms } from '@/features/simulator/logic/mockHomeData';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
+import {
+  createFurniture,
+  deleteFurniture,
+  updateFurniturePosition,
+  type FurnitureTypeRow,
+} from '@/lib/services/furnitureService';
 import {
   fetchSimulatorState,
   saveRoom,
@@ -109,6 +118,7 @@ export default function SimulatorScreen() {
   const { hasUnread: liveHasUnread } = useUnreadNotifications(householdId);
 
   const [applianceTypes, setApplianceTypes] = useState<ApplianceTypeRow[]>([]);
+  const [furnitureTypes, setFurnitureTypes] = useState<FurnitureTypeRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [activeTariff, setActiveTariff] = useState<TariffRateRow | null>(null);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
@@ -130,21 +140,12 @@ export default function SimulatorScreen() {
         if (data.rooms.length > 0) {
           setRooms(data.rooms);
         }
-        if (data.appliances.length > 0) {
-          setItems((prev) => {
-            const furniture = prev.filter((it) => it.category === 'Furniture').map((item) => {
-              const legacyMatch = /^f([12])-([A-D])$/.exec(item.roomId);
-              if (!legacyMatch) return item;
-              const room = data.rooms.find((candidate) => candidate.floor === Number(legacyMatch[1]) && candidate.slot === legacyMatch[2]);
-              return room ? { ...item, roomId: room.id } : item;
-            });
-            return [...data.appliances, ...furniture];
-          });
-        }
+        setItems(furnishEmptyRooms(data.appliances, data.rooms.length > 0 ? data.rooms : createDefaultRooms()));
         if (data.routineBlocks.length > 0) {
           setRoutineBlocks(data.routineBlocks);
         }
         setApplianceTypes(data.applianceTypes);
+        setFurnitureTypes(data.furnitureTypes);
         setSchedules(data.schedules);
         setActiveTariff(data.tariff);
         setUnreadNotificationsCount(data.unreadNotificationsCount);
@@ -161,7 +162,11 @@ export default function SimulatorScreen() {
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     return () => subscription.remove();
   }, []);
-  useEffect(() => saveLayoutState({ rooms, items }), [rooms, items]);
+  useEffect(() => saveLayoutState({
+    rooms,
+    // Logged-in furniture is real data and must never be restored from LocalStorage.
+    items: householdId ? items.filter((item) => item.category === 'Appliances') : items,
+  }), [householdId, rooms, items]);
   useEffect(() => saveSimulationState({ simSpeed, simulatedMinutes, avatarVariant, viewedFloor: currentFloor }),
     [avatarVariant, currentFloor, simSpeed, simulatedMinutes]);
 
@@ -178,6 +183,9 @@ export default function SimulatorScreen() {
   const [pendingRoomAction, setPendingRoomAction] = useState<PendingRoomAction | null>(null);
   const [billModalVisible, setBillModalVisible] = useState(false);
   const [tidySheetVisible, setTidySheetVisible] = useState(false);
+  const [aiReportVisible, setAiReportVisible] = useState(false);
+  const [suggestionVisible, setSuggestionVisible] = useState(false);
+  const [solarApplied, setSolarApplied] = useState(false);
   const [tidyUndoItems, setTidyUndoItems] = useState<StoredPlacedItem[] | null>(null);
   const tidyUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -290,6 +298,11 @@ export default function SimulatorScreen() {
     setSimulatedDateTime(run.snapshot.simulatedDateTime);
   }, []);
 
+  const completeWeekReel = useCallback(() => {
+    stopWeekReel();
+    setAiReportVisible(true);
+  }, [stopWeekReel]);
+
   useEffect(() => {
     let lastTime = Date.now();
     const interval = setInterval(() => {
@@ -378,7 +391,7 @@ export default function SimulatorScreen() {
         setAnimatedBillRm(targetMax);
         setWeekReelView({ segment: run.segments[run.index], savingsRm: run.totalSavingsRm });
         setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, 1));
-        reelCompletionTimerRef.current = setTimeout(stopWeekReel, reduceMotion ? 0 : 700);
+        reelCompletionTimerRef.current = setTimeout(completeWeekReel, reduceMotion ? 0 : 700);
         return;
       }
       run.completedDurationMs += run.segmentDurationMs;
@@ -391,7 +404,7 @@ export default function SimulatorScreen() {
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
     }, 50);
     return () => clearInterval(interval);
-  }, [reduceMotion, rooms, stopWeekReel]);
+  }, [completeWeekReel, reduceMotion, rooms]);
 
   const currentRoutine = useMemo(() => {
     if (weekReelView) {
@@ -552,6 +565,7 @@ export default function SimulatorScreen() {
     if (reduceMotion) {
       setReducedWeekSummary(getReducedMotionSummary(routineBlocks, totalSavingsRm));
       setAnimatedBillRm(targetMax);
+      setAiReportVisible(true);
       return;
     }
     setAnimatedBillRm(monthlyBillRm);
@@ -610,11 +624,26 @@ export default function SimulatorScreen() {
     const placementPoint = fixed ?? (point && point.x > 0 && point.y > 0 ? point : calculateFallbackPlacementPoint(targetRoom));
 
     if (itemDef.category === 'Furniture') {
-      setItems((previous) => [...previous, {
+      const localItem: StoredPlacedItem = {
         id: `furn_${Date.now()}`, category: 'Furniture', type: itemDef.key, spriteKey: itemDef.key,
         name: itemDef.label, roomId: targetRoom.id, posX: placementPoint.x, posY: placementPoint.y,
-      }]);
-      showToast(`Placed ${itemDef.label}`, 'success');
+        facing: 'front',
+      };
+      if (householdId) {
+        createFurniture(householdId, {
+          room_id: targetRoom.id,
+          type: itemDef.key,
+          position_x: placementPoint.x,
+          position_y: placementPoint.y,
+          facing: 'front',
+        }).then((row) => {
+          setItems((previous) => [...previous, { ...localItem, id: row.id }]);
+          showToast(`Placed ${itemDef.label}`, 'success');
+        }).catch((err) => console.error('Failed to create furniture in Supabase:', err));
+      } else {
+        setItems((previous) => [...previous, localItem]);
+        showToast(`Placed ${itemDef.label}`, 'success');
+      }
       return;
     }
     const pending: StoredPlacedItem = {
@@ -623,6 +652,7 @@ export default function SimulatorScreen() {
       brand: '', model: '', quantity: 1, wattage: itemDef.defaultWattage,
       stars: itemDef.hasStarRating === false ? undefined : 3, hoursPerDay: itemDef.defaultHours,
       alwaysOn: itemDef.alwaysOn ?? false, isOn: false,
+      facing: 'front',
     };
     setItems((previous) => [...previous, pending]);
     setEditingAppliance(pending);
@@ -671,6 +701,13 @@ export default function SimulatorScreen() {
           posX: resolvedPoint.x,
           posY: resolvedPoint.y,
         }).catch((err) => console.error('Failed to update moved appliance in Supabase:', err));
+      }
+      if (movedItem?.category === 'Furniture' && !pendingRoomAction.itemId.startsWith('furn_') && !pendingRoomAction.itemId.startsWith('mock_')) {
+        updateFurniturePosition(pendingRoomAction.itemId, {
+          room_id: roomId,
+          position_x: resolvedPoint.x,
+          position_y: resolvedPoint.y,
+        }).catch((err) => console.error('Failed to update moved furniture in Supabase:', err));
       }
     }
     setPendingRoomAction(null);
@@ -729,10 +766,7 @@ export default function SimulatorScreen() {
       }, PLAN_ITEM_LABEL_DURATION_MS);
       return;
     }
-    if (selectedItemId !== item.id) {
-      setSelectedItemId(item.id);
-      return;
-    }
+    setSelectedItemId(item.id);
     if (item.category === 'Appliances') { setEditingAppliance(item); setApplianceSheetVisible(true); }
     else { setEditingFurniture(item); setFurnitureSheetVisible(true); }
   };
@@ -740,6 +774,9 @@ export default function SimulatorScreen() {
     const itemToDelete = items.find((it) => it.id === itemId);
     if (itemToDelete?.category === 'Appliances' && !itemId.startsWith('pending_') && !itemId.startsWith('mock_')) {
       deleteAppliance(itemId).catch((err) => console.error('Failed to delete appliance from Supabase:', err));
+    }
+    if (itemToDelete?.category === 'Furniture' && !itemId.startsWith('furn_') && !itemId.startsWith('mock_')) {
+      deleteFurniture(itemId).catch((err) => console.error('Failed to delete furniture from Supabase:', err));
     }
     setItems((value) => value.filter((item) => item.id !== itemId));
     setSelectedItemId(null);
@@ -749,16 +786,16 @@ export default function SimulatorScreen() {
   const handleRotateItem = (itemId: string) => setItems((value) => value.map((item) =>
     item.id === itemId && item.category === 'Furniture' ? { ...item, rotation: ((item.rotation ?? 0) + 90) % 360 } : item));
 
-  const handleMoveItemEnd = (itemId: string, x: number, y: number) => {
+  const handleMoveItemEnd = (itemId: string, x: number, y: number): Point | null => {
     const point = { x, y };
     const target = getPlanTarget(point);
-    if (target?.kind === 'stair') { showToast("Stairs can't hold items", 'info'); return; }
-    if (target?.kind !== 'room') return;
+    if (target?.kind === 'stair') { showToast("Stairs can't hold items", 'info'); return null; }
+    if (target?.kind !== 'room') return null;
     if (!target.room.isSetUp) {
-      setPendingRoomAction({ kind: 'move', itemId, point }); setNamingRoom(target.room); setNamingModalVisible(true); return;
+      setPendingRoomAction({ kind: 'move', itemId, point }); setNamingRoom(target.room); setNamingModalVisible(true); return null;
     }
     const item = items.find((candidate) => candidate.id === itemId);
-    if (!item) return;
+    if (!item) return null;
     const planWidth = floorRectRef.current?.width ?? 350;
     const planHeight = floorRectRef.current?.height ?? planWidth;
     const resolvedPoint = clampDraggedItemToRoom(
@@ -778,6 +815,31 @@ export default function SimulatorScreen() {
         posY: resolvedPoint.y,
       }).catch((err) => console.error('Failed to update appliance position in Supabase:', err));
     }
+    if (householdId && item.category === 'Appliances' && itemId.startsWith('mock_default_')) {
+      createAppliance(householdId, {
+        roomId: target.room.id, type: item.type, brand: item.brand, model: item.model,
+        wattage: item.wattage || 100,
+        starRating: applianceTypes.find((type) => type.id === item.type)?.has_star_rating === false ? null : (item.stars ?? 3),
+        quantity: item.quantity || 1,
+        posX: resolvedPoint.x, posY: resolvedPoint.y, facing: item.facing,
+      }).then((dbId) => setItems((value) => value.map((candidate) => candidate.id === itemId ? { ...candidate, id: dbId } : candidate)))
+        .catch((err) => console.error('Failed to persist default appliance position:', err));
+    }
+    if (item?.category === 'Furniture' && !itemId.startsWith('furn_') && !itemId.startsWith('mock_')) {
+      updateFurniturePosition(itemId, {
+        room_id: target.room.id,
+        position_x: resolvedPoint.x,
+        position_y: resolvedPoint.y,
+      }).catch((err) => console.error('Failed to update furniture position in Supabase:', err));
+    }
+    if (householdId && item.category === 'Furniture' && itemId.startsWith('mock_default_')) {
+      createFurniture(householdId, {
+        room_id: target.room.id, type: item.type, position_x: resolvedPoint.x,
+        position_y: resolvedPoint.y, facing: item.facing ?? 'front', role: item.role ?? null,
+      }).then((row) => setItems((value) => value.map((candidate) => candidate.id === itemId ? { ...candidate, id: row.id } : candidate)))
+        .catch((err) => console.error('Failed to persist default furniture position:', err));
+    }
+    return { x: resolvedPoint.x, y: resolvedPoint.y };
   };
 
   const handleSaveAppliance = (saved: StoredPlacedItem) => {
@@ -789,10 +851,11 @@ export default function SimulatorScreen() {
         brand: saved.brand,
         model: saved.model,
         wattage: saved.wattage || 100,
-        starRating: saved.stars ?? 3,
+        starRating: applianceTypes.find((type) => type.id === saved.type)?.has_star_rating === false ? null : (saved.stars ?? 3),
         quantity: saved.quantity || 1,
         posX: saved.posX,
         posY: saved.posY,
+        facing: saved.facing,
       })
         .then((dbId) => {
           setItems((value) => value.map((item) => (item.id === editingAppliance?.id ? { ...saved, id: dbId } : item)));
@@ -808,6 +871,7 @@ export default function SimulatorScreen() {
         quantity: saved.quantity,
         posX: saved.posX,
         posY: saved.posY,
+        facing: saved.facing,
       }).catch((err) => console.error('Failed to update appliance in Supabase:', err));
     }
 
@@ -820,12 +884,38 @@ export default function SimulatorScreen() {
   };
   const handleSaveFurniture = (saved: StoredPlacedItem) => {
     setItems((value) => value.map((item) => item.id === editingFurniture?.id ? saved : item));
+    if (householdId && saved.id.startsWith('mock_default_')) {
+      createFurniture(householdId, {
+        room_id: saved.roomId, type: saved.type, position_x: saved.posX,
+        position_y: saved.posY, facing: saved.facing ?? 'front', role: saved.role ?? null,
+      }).then((row) => setItems((value) => value.map((item) => item.id === saved.id ? { ...item, id: row.id } : item)))
+        .catch((err) => console.error('Failed to save default furniture in Supabase:', err));
+    } else if (!saved.id.startsWith('furn_') && !saved.id.startsWith('mock_')) {
+      updateFurniturePosition(saved.id, {
+        room_id: saved.roomId,
+        position_x: saved.posX,
+        position_y: saved.posY,
+        facing: saved.facing,
+        role: saved.role ?? null,
+      }).catch((err) => console.error('Failed to save furniture in Supabase:', err));
+    }
     setFurnitureSheetVisible(false); setEditingFurniture(null); showToast(`Saved ${saved.name}`, 'success');
   };
 
-  const saveMovedAppliancePositions = (moved: StoredPlacedItem[]) => Promise.all(moved
-    .filter((item) => item.category === 'Appliances' && !item.id.startsWith('pending_') && !item.id.startsWith('mock_'))
-    .map((item) => updateAppliance(item.id, { roomId: item.roomId, posX: item.posX, posY: item.posY })));
+  const saveMovedItemPositions = (moved: StoredPlacedItem[]) => Promise.all(moved.map((item) => {
+    if (item.category === 'Appliances' && !item.id.startsWith('pending_') && !item.id.startsWith('mock_')) {
+      return updateAppliance(item.id, { roomId: item.roomId, posX: item.posX, posY: item.posY, facing: item.facing });
+    }
+    if (item.category === 'Furniture' && !item.id.startsWith('furn_') && !item.id.startsWith('mock_')) {
+      return updateFurniturePosition(item.id, {
+        room_id: item.roomId,
+        position_x: item.posX,
+        position_y: item.posY,
+        facing: item.facing,
+      });
+    }
+    return Promise.resolve();
+  }));
 
   const handleTidyFloor = () => {
     const before = items.map((item) => ({ ...item }));
@@ -834,7 +924,7 @@ export default function SimulatorScreen() {
     setTidyUndoItems(before);
     if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
     tidyUndoTimerRef.current = setTimeout(() => setTidyUndoItems(null), 6000);
-    saveMovedAppliancePositions(result.moved).catch((err) => console.error('Failed to save tidy positions:', err));
+    saveMovedItemPositions(result.moved).catch((err) => console.error('Failed to save tidy positions:', err));
     showToast(result.leftovers.length
       ? `Tidied ${result.moved.length} items; ${result.leftovers.length} stayed in place`
       : `Tidied ${result.moved.length} items on ${currentFloor}F`, 'success');
@@ -847,7 +937,7 @@ export default function SimulatorScreen() {
     setItems(restored);
     setTidyUndoItems(null);
     if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
-    saveMovedAppliancePositions(restoredFloorItems).catch((err) => console.error('Failed to save restored positions:', err));
+    saveMovedItemPositions(restoredFloorItems).catch((err) => console.error('Failed to save restored positions:', err));
     showToast('Tidy up undone', 'info');
   };
 
@@ -944,10 +1034,11 @@ export default function SimulatorScreen() {
             isEditMode={isEditMode} selectedItemId={selectedItemId} dragGhost={dragGhost} hoveredRoomId={hoveredRoomId}
             onRoomPress={handleRoomPress} onSelectItem={handleSelectItem} onDeleteItem={handleDeleteItem}
             onRotateItem={handleRotateItem} onMoveItemEnd={handleMoveItemEnd}
+            solarApplied={solarApplied}
             onViewportChange={(viewport) => { floorViewportRef.current = viewport; }} floorPlanRef={floorPlanRef} onLayout={onFloorLayout} />
         </View>
       </View>
-      {isEditMode && <View style={styles.editTrayOverlay}><EditSheet visible applianceTypes={applianceTypes} isDragging={Boolean(dragGhost)}
+      {isEditMode && <View style={styles.editTrayOverlay}><EditSheet visible applianceTypes={applianceTypes} furnitureTypes={furnitureTypes} isDragging={Boolean(dragGhost)}
         onItemPointerDown={handleItemPointerDown} onItemDragMove={updateTrayDrag} onItemDragEnd={completeTrayDrop}
         onItemTap={(item) => { setDragGhost(null); setSelectedPendingItem(item); publishPlacementMessage(`Tap a room to place ${item.label}`); }}
         selectedPendingKey={selectedPendingItem?.key} /></View>}
@@ -968,6 +1059,15 @@ export default function SimulatorScreen() {
         onSave={handleSaveAppliance} onCancel={handleCancelApplianceSheet} onDelete={handleDeleteItem} />
       <FurnitureDetailsSheet visible={furnitureSheetVisible} item={editingFurniture} rooms={setupRooms}
         onSave={handleSaveFurniture} onCancel={() => { setFurnitureSheetVisible(false); setEditingFurniture(null); }} onDelete={handleDeleteItem} />
+      {aiReportVisible && <AIAnalysisReportModal visible appliances={appliancesForBillModal} onClose={() => {
+        setAiReportVisible(false);
+        setSuggestionVisible(true);
+      }} />}
+      {suggestionVisible && <ApplianceSuggestionSheet visible onClose={() => setSuggestionVisible(false)} onApply={() => {
+        setSolarApplied(true);
+        setSuggestionVisible(false);
+        showToast('Solar is now active on your floor plan', 'success');
+      }} />}
       <RoomNamingModal visible={namingModalVisible} room={namingRoom} onSave={handleSaveRoomName}
         onClose={() => { setNamingModalVisible(false); setNamingRoom(null); setPendingRoomAction(null); }} />
       <TidyUpSheet visible={tidySheetVisible} onConfirm={handleTidyFloor} onClose={() => setTidySheetVisible(false)} />
@@ -1045,5 +1145,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
     backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
   undoTidyText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },
-  dragGhostRoot: { position: Platform.OS === 'web' ? 'fixed' as any : 'absolute', width: 52, height: 52, opacity: 0.88, zIndex: 9999 },
+  dragGhostRoot: { position: Platform.OS === 'web' ? 'fixed' as any : 'absolute', width: 52, height: 52, opacity: 0.88, zIndex: 10000, elevation: 50 },
 });

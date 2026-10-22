@@ -16,6 +16,7 @@ export interface SpriteItemDef {
   fullName: string;
   category: SpriteCategory;
   source: ImageSourcePropType;
+  backSource?: ImageSourcePropType;
   defaultWattage: number;
   defaultHours: number;
   inTray: boolean;
@@ -218,6 +219,9 @@ export const APPLIANCE_SPRITES: SpriteItemDef[] = [
   },
 ];
 
+/** Recommendation art; it is deliberately not an appliance tray item. */
+export const SOLAR_RECOMMENDATION_SOURCE = require('../../../../assets/sprites/appliances/solar.png');
+
 export const FURNITURE_SPRITES: SpriteItemDef[] = [
   {
     key: 'bed',
@@ -344,4 +348,11 @@ export function getSpriteSource(key: string): ImageSourcePropType | null {
     return AVATAR_SPRITES.avatar_boy.source;
   }
   return null;
+}
+
+/** Missing back art deliberately returns null; callers must not rotate/mirror front art. */
+export function getFacingSpriteSource(key: string, facing: 'front' | 'back' = 'front'): ImageSourcePropType | null {
+  const item = SPRITE_MAP[key];
+  if (facing === 'back') return item?.backSource ?? null;
+  return getSpriteSource(key);
 }

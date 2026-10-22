@@ -196,7 +196,9 @@ export default function BinScannerScreen() {
     let mounted = true;
 
     if (Platform.OS === 'web') {
-      startWebCamera();
+      void Promise.resolve().then(() => {
+        if (mounted) startWebCamera();
+      });
     } else {
       // Native iOS/Android: Launch native camera straight away
       (async () => {

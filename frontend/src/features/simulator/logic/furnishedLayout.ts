@@ -23,11 +23,16 @@ export interface RoomSlotDefinition {
   spriteKey: string;
   x: number;
   y: number;
+  /** Visible-content bottom edge as a fraction of the room. */
+  bottom?: number;
+  /** Approximate visible-content height used to convert bottom anchors to centres. */
+  h?: number;
   w: number;
   facing?: Facing;
   layer?: 'ceiling' | 'floor';
   role?: string;
   rotation?: number;
+  itemFacing?: 'front' | 'back';
 }
 
 export interface RoomTemplateDefinition {
@@ -59,87 +64,71 @@ const ITEM_SLOT_WIDTHS = {
 export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   'f1-A': {
     slots: [
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.17, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'tv', spriteKey: 'tv', x: 0.45, y: 0.10, w: ITEM_SLOT_WIDTHS.tv, facing: 'down' },
-      { type: 'router', spriteKey: 'router', x: 0.84, y: 0.08, w: ITEM_SLOT_WIDTHS.router, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.47, y: 0.40, w: ITEM_SLOT_WIDTHS.table, role: 'coffee table' },
-      { type: 'sofa', spriteKey: 'sofa', x: 0.47, y: 0.62, w: ITEM_SLOT_WIDTHS.sofa, facing: 'up', rotation: 180 },
-      { type: 'table', spriteKey: 'table', x: 0.22, y: 0.74, w: ITEM_SLOT_WIDTHS.table, role: 'side table left' },
-      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.74, w: ITEM_SLOT_WIDTHS.table, role: 'side table right' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.47, y: 0.78, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'fan', spriteKey: 'fan', x: 0.14, y: 0.86, w: ITEM_SLOT_WIDTHS.fan },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.16, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'tv', spriteKey: 'tv', x: 0.46, y: 0.35, bottom: 0.44, h: 0.18, w: ITEM_SLOT_WIDTHS.tv, facing: 'down' },
+      { type: 'router', spriteKey: 'router', x: 0.86, y: 0.12, bottom: 0.17, h: 0.10, w: ITEM_SLOT_WIDTHS.router, facing: 'down' },
+      { type: 'table', spriteKey: 'table', x: 0.48, y: 0.50, bottom: 0.58, h: 0.16, w: ITEM_SLOT_WIDTHS.table, role: 'coffee table' },
+      { type: 'sofa', spriteKey: 'sofa', x: 0.48, y: 0.71, bottom: 0.80, h: 0.18, w: ITEM_SLOT_WIDTHS.sofa, facing: 'up', itemFacing: 'back' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.88, bottom: 0.94, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'fan', spriteKey: 'fan', x: 0.14, y: 0.83, bottom: 0.94, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
     ],
     clearZones: [{ x: 0.58, y: 0.36, width: 0.10, height: 0.18 }],
   },
   'f1-B': {
     slots: [
-      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.21, y: 0.15, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.72, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.78, y: 0.16, w: ITEM_SLOT_WIDTHS.table, facing: 'down', role: 'counter' },
-      { type: 'table', spriteKey: 'table', x: 0.50, y: 0.70, w: ITEM_SLOT_WIDTHS.table, role: 'dining' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.40, y: 0.55, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.52, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
+      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.22, y: 0.39, bottom: 0.52, h: 0.26, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.45, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.42, bottom: 0.52, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'down' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.46, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
     ],
     clearZones: [{ x: 0.43, y: 0.25, width: 0.14, height: 0.28 }],
   },
   'f1-C': {
     slots: [
-      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.25, y: 0.14, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.58, y: 0.52, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-    ],
-    clearZones: [],
+      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.27, y: 0.39, bottom: 0.52, h: 0.26, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+    ], clearZones: [],
   },
   'f1-D': {
     slots: [
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.74, y: 0.12, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.52, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'toilet', spriteKey: 'toilet', x: 0.22, y: 0.78, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
-      { type: 'sink', spriteKey: 'sink', x: 0.82, y: 0.78, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
-    ],
-    clearZones: [],
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.75, y: 0.055, bottom: 0.17, h: 0.23, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.52, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'toilet', spriteKey: 'toilet', x: 0.22, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
+      { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.78, bottom: 0.88, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
+    ], clearZones: [],
   },
   'f2-A': {
     slots: [
-      { type: 'bed', spriteKey: 'bed', x: 0.25, y: 0.22, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.57, y: 0.12, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside left' },
-      { type: 'lights', spriteKey: 'lights', x: 0.68, y: 0.12, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.82, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.60, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'fan', spriteKey: 'fan', x: 0.85, y: 0.78, w: ITEM_SLOT_WIDTHS.fan },
-    ],
-    clearZones: [{ x: 0.44, y: 0.68, width: 0.12, height: 0.24 }],
+      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.38, bottom: 0.50, h: 0.24, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.41, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.52, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
+    ], clearZones: [{ x: 0.44, y: 0.68, width: 0.12, height: 0.24 }],
   },
   'f2-B': {
     slots: [
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.30, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.16, y: 0.38, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside left' },
-      { type: 'lights', spriteKey: 'lights', x: 0.56, y: 0.38, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
-      { type: 'workplace', spriteKey: 'workplace', x: 0.78, y: 0.26, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
-      { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.80, w: ITEM_SLOT_WIDTHS.fan },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.48, y: 0.60, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-    ],
-    clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
+      { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.38, bottom: 0.50, h: 0.24, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.54, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.48, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+    ], clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
   },
   'f2-C': {
     slots: [
-      { type: 'workplace', spriteKey: 'workplace', x: 0.26, y: 0.12, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.70, y: 0.07, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.50, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-    ],
-    clearZones: [],
+      { type: 'workplace', spriteKey: 'workplace', x: 0.26, y: 0.41, bottom: 0.52, h: 0.22, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.50, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
+    ], clearZones: [],
   },
   'f2-D': {
     slots: [
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.40, y: 0.12, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.58, y: 0.42, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'toilet', spriteKey: 'toilet', x: 0.26, y: 0.77, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
-      { type: 'sink', spriteKey: 'sink', x: 0.83, y: 0.78, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
-    ],
-    clearZones: [],
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.40, y: 0.055, bottom: 0.17, h: 0.23, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'toilet', spriteKey: 'toilet', x: 0.26, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
+      { type: 'sink', spriteKey: 'sink', x: 0.82, y: 0.78, bottom: 0.88, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
+    ], clearZones: [],
   },
 };
-
 /** PNG canvas and measured non-transparent content bounds. */
 export const ITEM_IMAGE_META: Record<string, {
   canvasWidth: number; canvasHeight: number; contentX: number; contentY: number;
@@ -206,8 +195,8 @@ export function getRoomSlotDefinition(
 
 function slotLocalCenter(slot: RoomSlotDefinition) {
   return {
-    x: INNER_FLOOR_RECT.x + slot.x * INNER_FLOOR_RECT.width,
-    y: INNER_FLOOR_RECT.y + slot.y * INNER_FLOOR_RECT.height,
+    x: slot.x,
+    y: slot.bottom !== undefined ? slot.bottom - (slot.h ?? 0) / 2 : slot.y,
   };
 }
 
@@ -226,6 +215,7 @@ export function layoutItemsInRooms(items: StoredPlacedItem[], rooms: StoredRoom[
     if (!slot) return [];
     const point = getSlotPlanPoint(room, slot);
     return [{ ...item, posX: point.x, posY: point.y,
+      ...(slot.itemFacing ? { facing: slot.itemFacing } : {}),
       ...(slot.rotation !== undefined ? { rotation: slot.rotation } : {}) }];
   });
 }
@@ -248,8 +238,9 @@ export function tidyFloorItems(items: StoredPlacedItem[], rooms: StoredRoom[], f
     if (!slot) { leftovers.push(item); return item; }
     const point = getSlotPlanPoint(room, slot);
     const placed = { ...item, posX: point.x, posY: point.y,
+      ...(slot.itemFacing ? { facing: slot.itemFacing } : {}),
       ...(slot.rotation !== undefined ? { rotation: slot.rotation } : {}) };
-    if (Math.abs(placed.posX - item.posX) > 0.0001 || Math.abs(placed.posY - item.posY) > 0.0001) moved.push(placed);
+    if (Math.abs(placed.posX - item.posX) > 0.0001 || Math.abs(placed.posY - item.posY) > 0.0001 || placed.facing !== item.facing) moved.push(placed);
     return placed;
   });
   return { items: next, moved, leftovers };

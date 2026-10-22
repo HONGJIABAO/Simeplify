@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
-import { getSpriteSource } from '../logic/spriteMap';
+import { getFacingSpriteSource } from '../logic/spriteMap';
 import { ITEM_IMAGE_META } from '../logic/furnishedLayout';
 
 interface SpriteProps {
@@ -14,6 +14,7 @@ interface SpriteProps {
   containerStyle?: ViewStyle;
   cropTransparent?: boolean;
   resizeMode?: 'contain' | 'cover' | 'fill' | 'scale-down' | 'none';
+  facing?: 'front' | 'back';
 }
 
 export function Sprite({
@@ -25,8 +26,9 @@ export function Sprite({
   containerStyle,
   cropTransparent = false,
   resizeMode = 'contain',
+  facing = 'front',
 }: SpriteProps) {
-  const source = getSpriteSource(type);
+  const source = getFacingSpriteSource(type, facing);
   if (!source) {
     return null;
   }

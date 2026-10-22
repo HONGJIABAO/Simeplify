@@ -7,7 +7,7 @@ export type Json =
   | Json[];
 
 export type DayType = 'weekday' | 'weekend';
-export type RoomType = 'living_room' | 'kitchen' | 'bedroom' | 'bathroom';
+export type RoomType = 'living_room' | 'kitchen' | 'bedroom' | 'bathroom' | 'laundry_room' | 'work_room';
 export type RoomSlot = 'A' | 'B' | 'C' | 'D';
 
 export interface Database {
@@ -204,6 +204,34 @@ export interface Database {
         };
         Relationships: [];
       };
+      furniture_types: {
+        Row: {
+          id: string;
+          name: string;
+          sprite_key: string;
+          in_tray: boolean;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          sprite_key: string;
+          in_tray?: boolean;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          sprite_key?: string;
+          in_tray?: boolean;
+          sort_order?: number;
+          active?: boolean;
+        };
+        Relationships: [];
+      };
       appliances: {
         Row: {
           id: string;
@@ -217,6 +245,7 @@ export interface Database {
           quantity: number;
           position_x: number | null;
           position_y: number | null;
+          facing: 'front' | 'back';
           created_at: string;
           updated_at: string;
         };
@@ -232,6 +261,7 @@ export interface Database {
           quantity?: number;
           position_x?: number | null;
           position_y?: number | null;
+          facing?: 'front' | 'back';
           created_at?: string;
           updated_at?: string;
         };
@@ -246,6 +276,7 @@ export interface Database {
           quantity?: number;
           position_x?: number | null;
           position_y?: number | null;
+          facing?: 'front' | 'back';
           updated_at?: string;
         };
         Relationships: [
@@ -262,6 +293,65 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "rooms";
             referencedColumns: ["id", "household_id"];
+          }
+        ];
+      };
+      furniture_items: {
+        Row: {
+          id: string;
+          household_id: string;
+          room_id: string;
+          type: string;
+          role: string | null;
+          facing: 'front' | 'back';
+          position_x: number;
+          position_y: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          room_id: string;
+          type: string;
+          role?: string | null;
+          facing?: 'front' | 'back';
+          position_x: number;
+          position_y: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          room_id?: string;
+          type?: string;
+          role?: string | null;
+          facing?: 'front' | 'back';
+          position_x?: number;
+          position_y?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "furniture_items_household_id_fkey";
+            columns: ["household_id"];
+            isOneToOne: false;
+            referencedRelation: "households";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fk_furniture_items_room_composite";
+            columns: ["room_id", "household_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id", "household_id"];
+          },
+          {
+            foreignKeyName: "furniture_items_type_fkey";
+            columns: ["type"];
+            isOneToOne: false;
+            referencedRelation: "furniture_types";
+            referencedColumns: ["id"];
           }
         ];
       };

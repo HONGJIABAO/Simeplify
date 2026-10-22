@@ -6,7 +6,7 @@
 import type { StoredRoom } from './storage';
 import type { FloorNumber, RoomSlot } from './roomLayout';
 
-export type SimulatorRoomType = 'living' | 'kitchen' | 'bedroom' | 'bathroom';
+export type SimulatorRoomType = 'living' | 'kitchen' | 'bedroom' | 'bathroom' | 'laundry_room' | 'work_room';
 
 export const ROOM_TYPE_SETTINGS: Record<SimulatorRoomType, {
   label: string;
@@ -38,6 +38,18 @@ export const ROOM_TYPE_SETTINGS: Record<SimulatorRoomType, {
     depthStripColor: '#E8E6E2',
     accentColor: '#57534E',
   },
+  laundry_room: {
+    label: 'Laundry room',
+    floorColor: '#D6D3CD',
+    depthStripColor: '#E8E6E2',
+    accentColor: '#57534E',
+  },
+  work_room: {
+    label: 'Work room',
+    floorColor: '#EAD3AE',
+    depthStripColor: '#F2DFC0',
+    accentColor: '#A97A4A',
+  },
 };
 
 interface DefaultRoomSeed {
@@ -52,11 +64,11 @@ interface DefaultRoomSeed {
 const DEFAULT_ROOM_SEEDS: DefaultRoomSeed[] = [
   { floor: 1, slot: 'A', type: 'living', name: 'Living room', isSetUp: true },
   { floor: 1, slot: 'B', type: 'kitchen', name: 'Kitchen', isSetUp: true },
-  { floor: 1, slot: 'C', type: 'bathroom', name: 'Laundry Room', isSetUp: true },
+  { floor: 1, slot: 'C', type: 'laundry_room', name: 'Laundry Room', isSetUp: true },
   { floor: 1, slot: 'D', type: 'bathroom', name: 'Bathroom', isSetUp: true },
   { floor: 2, slot: 'A', type: 'bedroom', name: 'Master bedroom', isSetUp: true },
   { floor: 2, slot: 'B', type: 'bedroom', name: 'Study & Guest', isSetUp: true },
-  { floor: 2, slot: 'C', type: 'bathroom', name: 'Work Room', isSetUp: true },
+  { floor: 2, slot: 'C', type: 'work_room', name: 'Work Room', isSetUp: true },
   { floor: 2, slot: 'D', type: 'bathroom', name: 'Bathroom', isSetUp: true },
 ];
 

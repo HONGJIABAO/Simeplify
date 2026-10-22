@@ -65,7 +65,7 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
   const configuredRooms = rooms.filter((r) => r.is_set_up);
   assert.equal(configuredRooms.length, 8, `Expected 8 configured rooms, got ${configuredRooms.length}`);
 
-  // 5. Appliances Verification (17 existing rows + 4 new ceiling bulbs)
+  // 5. Exact persisted appliance and furniture layout
   const { data: appliances, error: appliancesError } = await client
     .from('appliances')
     .select('*')
@@ -75,7 +75,14 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
     );
 
   assert.equal(appliancesError, null, `Appliances query error: ${appliancesError?.message}`);
-  assert.equal(appliances.length, 21, `Expected 21 appliances, got ${appliances.length}`);
+  assert.equal(appliances.length, 23, `Expected 23 appliances, got ${appliances.length}`);
+
+  const { data: furniture, error: furnitureError } = await client
+    .from('furniture_items')
+    .select('*')
+    .eq('household_id', householdId);
+  assert.equal(furnitureError, null, `Furniture query error: ${furnitureError?.message}`);
+  assert.equal(furniture.length, 9, `Expected 9 furniture items, got ${furniture.length}`);
 
   // 6. Day Blocks Verification (5 blocks)
   const { data: blocks, error: blocksError } = await client

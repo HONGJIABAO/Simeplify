@@ -54,6 +54,8 @@ import { MyDayTimelineSheet } from '@/features/simulator/components/MyDayTimelin
 import { AddBlockSheet } from '@/features/simulator/components/AddBlockSheet';
 import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
+import { AIAnalysisReportModal } from '@/features/simulator/components/AIAnalysisReportModal';
+import { ApplianceSuggestionSheet } from '@/features/simulator/components/ApplianceSuggestionSheet';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
@@ -143,7 +145,10 @@ type DemoState =
   | 'week-reel-caption-shower'
   | 'week-reel-caption-away'
   | 'week-reel-playing'
-  | 'week-reel-reduced-summary';
+  | 'week-reel-reduced-summary'
+  | 'post-simulation-ai-report'
+  | 'post-simulation-solar-suggestion'
+  | 'solar-applied';
 
 const STATE_GROUPS = [
   {
@@ -269,6 +274,9 @@ const STATE_GROUPS = [
       { id: 'week-reel-caption-away' as DemoState, label: 'Week reel caption (Tue Away)' },
       { id: 'week-reel-playing' as DemoState, label: 'Week reel playing (Floor 1)' },
       { id: 'week-reel-reduced-summary' as DemoState, label: 'Week reel reduced motion summary' },
+      { id: 'post-simulation-ai-report' as DemoState, label: 'Post-simulation AI report' },
+      { id: 'post-simulation-solar-suggestion' as DemoState, label: 'Post-report solar suggestion' },
+      { id: 'solar-applied' as DemoState, label: 'Floor plan with solar active' },
     ],
   },
 ];
@@ -292,6 +300,7 @@ function TwoFloorPlanPreview({
   messy = false,
   isAvatarAway = false,
   initialSelectedItemId = null,
+  solarApplied = false,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -306,6 +315,7 @@ function TwoFloorPlanPreview({
   messy?: boolean;
   isAvatarAway?: boolean;
   initialSelectedItemId?: string | null;
+  solarApplied?: boolean;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialSelectedItemId);
@@ -379,11 +389,15 @@ function TwoFloorPlanPreview({
         onSelectItem={(item) => setSelectedItemId(item.id)}
         onDeleteItem={() => {}}
         onRotateItem={() => {}}
-        onMoveItemEnd={(itemId, posX, posY) => setItems((current) => current.map((item) =>
-          item.id === itemId ? { ...item, posX, posY } : item))}
+        onMoveItemEnd={(itemId, posX, posY) => {
+          setItems((current) => current.map((item) =>
+            item.id === itemId ? { ...item, posX, posY } : item));
+          return { x: posX, y: posY };
+        }}
         floorPlanRef={floorRef}
         onLayout={() => {}}
         debugLayout={debugLayout}
+        solarApplied={solarApplied}
       />
     </View>
   );
@@ -497,7 +511,7 @@ export default function SimulatorGallery() {
           activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' ||
           activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' ||
           activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ||
-          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route') && (
+          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route' || activeState === 'solar-applied') && (
           <TwoFloorPlanPreview
             key={activeState}
             initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' ? 2 : 1}
@@ -513,6 +527,7 @@ export default function SimulatorGallery() {
             debugLayout={activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug'}
             avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa' : activeState === 'avatar-at-shower' ? 'shower' : activeState === 'avatar-at-workplace' ? 'workplace' : undefined}
             routeScenario={activeState === 'doorway-route-preview' ? 'doorway' : activeState === 'unreachable-room-route' ? 'unreachable' : undefined}
+            solarApplied={activeState === 'solar-applied'}
           />
         )}
 
@@ -617,6 +632,14 @@ export default function SimulatorGallery() {
               finalSavingsRm={80}
             />
           </View>
+        )}
+
+        {activeState === 'post-simulation-ai-report' && (
+          <AIAnalysisReportModal visible appliances={MOCK_APPLIANCES} onClose={() => setActiveState('post-simulation-solar-suggestion')} />
+        )}
+
+        {activeState === 'post-simulation-solar-suggestion' && (
+          <ApplianceSuggestionSheet visible onClose={() => setActiveState(null)} onApply={() => setActiveState('solar-applied')} />
         )}
 
         {/* ── 1. Loading Skeleton ── */}

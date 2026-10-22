@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Polyline } from 'react-native-svg';
+import { Image } from 'expo-image';
 import { Room } from './Room';
 import { StairBlock } from './StairBlock';
 import { PlacedItem } from './PlacedItem';
@@ -17,7 +18,7 @@ import { Avatar } from './Avatar';
 import { StoredPlacedItem, StoredRoom } from '../logic/storage';
 import { AvatarSimulationState } from '../logic/SimulationEngine';
 import type { Point } from '../logic/SimulationEngine';
-import { SpriteItemDef } from '../logic/spriteMap';
+import { SOLAR_RECOMMENDATION_SOURCE, SpriteItemDef } from '../logic/spriteMap';
 import {
   calculateSquarePlanSide,
   FloorNumber,
@@ -61,11 +62,12 @@ interface FloorPlanProps {
   onSelectItem: (item: StoredPlacedItem) => void;
   onDeleteItem: (itemId: string) => void;
   onRotateItem: (itemId: string) => void;
-  onMoveItemEnd: (itemId: string, newNormX: number, newNormY: number) => void;
+  onMoveItemEnd: (itemId: string, newNormX: number, newNormY: number) => { x: number; y: number } | null;
   onViewportChange?: (viewport: FloorViewport) => void;
   floorPlanRef: React.RefObject<any>;
   onLayout: (event: LayoutChangeEvent) => void;
   debugLayout?: boolean;
+  solarApplied?: boolean;
 }
 
 export { calculateSquarePlanSide };
@@ -93,6 +95,7 @@ export function FloorPlan({
   floorPlanRef,
   onLayout,
   debugLayout = false,
+  solarApplied = false,
 }: FloorPlanProps) {
   const [containerSize, setContainerSize] = useState({ width: 350, height: 350 });
   const [settledZoom, setSettledZoom] = useState(1);
@@ -436,6 +439,14 @@ export function FloorPlan({
                 <Text style={styles.residentFloorText}>Resident is on {avatarState.currentFloor}F</Text>
               </View>
             )}
+            {solarApplied && (
+              <View pointerEvents="none" style={styles.solarApplied} accessibilityRole="text" accessibilityLabel="Solar active">
+                <View style={styles.solarImageBox}>
+                  <Image source={SOLAR_RECOMMENDATION_SOURCE} style={styles.solarImage} contentFit="contain" />
+                </View>
+                <View style={styles.solarBadge}><Text style={styles.solarBadgeText}>Active</Text></View>
+              </View>
+            )}
           </View>
         </GestureDetector>
       </Animated.View>
@@ -554,4 +565,9 @@ const styles = StyleSheet.create({
   awayTag: { position: 'absolute', minHeight: 22, paddingHorizontal: 7, borderRadius: 11, flexDirection: 'row',
     alignItems: 'center', gap: 4, backgroundColor: '#E7E5E4', borderWidth: 1, borderColor: '#D6D3D1', zIndex: 360 },
   awayTagText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#57534E' },
+  solarApplied: { position: 'absolute', right: 10, bottom: 10, width: 68, alignItems: 'center', zIndex: 500 },
+  solarImageBox: { width: 62, height: 62, borderRadius: 18, backgroundColor: '#E0E6D9', borderWidth: 1, borderColor: '#8B9D77', alignItems: 'center', justifyContent: 'center' },
+  solarImage: { width: 52, height: 52 },
+  solarBadge: { minHeight: 20, marginTop: 3, paddingHorizontal: 9, borderRadius: 9999, backgroundColor: '#566549', justifyContent: 'center' },
+  solarBadgeText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#F5F5F4' },
 });

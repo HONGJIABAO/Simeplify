@@ -255,7 +255,7 @@ export async function refreshSession(): Promise<AuthSession> {
 
       try {
         await authStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession));
-      } catch {}
+      } catch { }
 
       notifyListeners();
       return { ...currentSession };
@@ -275,7 +275,7 @@ export async function refreshSession(): Promise<AuthSession> {
           return { ...currentSession };
         }
       }
-    } catch {}
+    } catch { }
 
     currentSession = {
       ...INITIAL_AUTH_SESSION,
@@ -378,7 +378,7 @@ export async function signIn(
         currentSession = { ...DEMO_AUTH_SESSION };
         try {
           await authStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession));
-        } catch {}
+        } catch { }
         notifyListeners();
         return { user: DEMO_USER, error: null };
       } else {
@@ -402,7 +402,7 @@ export async function signIn(
             return { user: found.session.user, error: null };
           }
         }
-      } catch {}
+      } catch { }
       return {
         user: null,
         error: new Error('Cannot connect to server. Please use the Demo Account (Mei Ling Tan).'),
@@ -526,7 +526,7 @@ export async function signUp(
           session: offlineSession,
         });
         await authStorage.setItem(OFFLINE_USERS_KEY, JSON.stringify(usersList));
-      } catch {}
+      } catch { }
 
       notifyListeners();
       return { user: offlineUser, error: null };
@@ -548,7 +548,7 @@ export async function logoutAuthSession(): Promise<void> {
   }
   try {
     await authStorage.removeItem(LOCAL_SESSION_KEY);
-  } catch {}
+  } catch { }
   currentSession = {
     ...INITIAL_AUTH_SESSION,
     isLoading: false,

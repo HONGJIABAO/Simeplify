@@ -6,7 +6,7 @@
 export interface StoredRoom {
   id: string;
   name: string;
-  type: 'living' | 'kitchen' | 'bedroom' | 'bathroom';
+  type: 'living' | 'kitchen' | 'bedroom' | 'bathroom' | 'laundry_room' | 'work_room';
   floor: 1 | 2;
   slot: 'A' | 'B' | 'C' | 'D';
   isSetUp: boolean;
@@ -36,6 +36,7 @@ export interface StoredPlacedItem {
   isOn?: boolean;
   color?: string;
   rotation?: number;
+  facing?: 'front' | 'back';
   /** Distinguishes repeated sprites, for example coffee table and side table. */
   role?: string;
 }

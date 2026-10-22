@@ -1,6 +1,6 @@
 /** Named Simulator fixtures built from the fixed ROOM_SLOTS table. */
 
-import type { StoredPlacedItem } from './storage';
+import type { StoredPlacedItem, StoredRoom } from './storage';
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
 import { layoutItemsInRooms } from './furnishedLayout.ts';
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
@@ -45,59 +45,46 @@ const furniture = (id: string, roomId: string, type: string, name: string, role?
 });
 
 const DEFAULT_ITEMS: FixtureItem[] = [
-  // 1F A · Living room. Repeated table sprites have explicit roles.
-  appliance('f1-tv-living', 'f1-A', 'tv', 'Samsung TV', 90, { brand: 'Samsung' }),
-  appliance('f1-ac-living', 'f1-A', 'air_conditioner', 'Panasonic Air Conditioner', 1200, { brand: 'Panasonic', hoursPerDay: 8 }),
-  appliance('f1-router-living', 'f1-A', 'router', 'TP-Link Wi-Fi Router', 15, { brand: 'TP-Link', hoursPerDay: 24, alwaysOn: true }),
-  furniture('f1-sofa-living', 'f1-A', 'sofa', 'Sofa'),
+  appliance('f1-ac-living', 'f1-A', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin' }),
+  appliance('f1-tv-living', 'f1-A', 'tv', 'Sony Television', 90, { brand: 'Sony' }),
+  appliance('f1-router-living', 'f1-A', 'router', 'TP-Link Wi-Fi Router', 15, { brand: 'TP-Link', alwaysOn: true }),
   furniture('f1-coffee-living', 'f1-A', 'table', 'Coffee Table', 'coffee table'),
-  furniture('f1-side-left-living', 'f1-A', 'table', 'Left Side Table', 'side table left'),
-  furniture('f1-side-right-living', 'f1-A', 'table', 'Right Side Table', 'side table right'),
-  appliance('f1-fan-living', 'f1-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
+  furniture('f1-sofa-living', 'f1-A', 'sofa', 'Sofa'),
   appliance('f1-bulb-a', 'f1-A', 'light_bulb', 'Living room light', 9),
+  appliance('f1-fan-living', 'f1-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK' }),
 
-  // 1F B · Kitchen.
-  appliance('f1-fridge-kitchen', 'f1-B', 'refrigerator', 'Samsung Inverter Fridge', 150, { brand: 'Samsung' }),
-  furniture('f1-counter-kitchen', 'f1-B', 'table', 'Kitchen Counter', 'counter'),
-  furniture('f1-table-kitchen', 'f1-B', 'table', 'Dining Table', 'dining'),
+  appliance('f1-fridge-kitchen', 'f1-B', 'refrigerator', 'Hitachi Refrigerator', 150, { brand: 'Hitachi', alwaysOn: true }),
   appliance('f1-bulb-b', 'f1-B', 'light_bulb', 'Kitchen light', 9),
+  furniture('f1-sink-kitchen', 'f1-B', 'sink', 'Kitchen Sink'),
+  appliance('f1-ac-kitchen', 'f1-B', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin' }),
 
-  // 1F C · Laundry Room. The washing-machine catalog has no placed row yet.
+  appliance('f1-washer-laundry', 'f1-C', 'washing_machine', 'Washing Machine', 500),
   appliance('f1-bulb-c', 'f1-C', 'light_bulb', 'Laundry room light', 9),
 
-  // 1F D · Bathroom. Existing bathroom items moved here; one new ceiling bulb.
+  appliance('f1-shower-bath', 'f1-D', 'water_heater', 'Joven Water Heater', 3500, { brand: 'Joven' }),
+  appliance('f1-bulb-d', 'f1-D', 'light_bulb', 'Downstairs toilet light', 9),
   furniture('f1-toilet-bath', 'f1-D', 'toilet', 'Toilet'),
   furniture('f1-sink-bath', 'f1-D', 'sink', 'Sink'),
-  appliance('f1-shower-bath', 'f1-D', 'water_heater', 'Ariston Water Heater', 3500, { brand: 'Ariston', hoursPerDay: 1 }),
-  appliance('f1-bulb-d', 'f1-D', 'light_bulb', 'Downstairs bathroom light', 9),
 
-  // 2F A · Bedroom.
   furniture('f2-bed-master', 'f2-A', 'bed', 'Bed'),
-  appliance('f2-ac-master', 'f2-A', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin', hoursPerDay: 8 }),
-  appliance('f2-lamp-master-left', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside left' }),
-  appliance('f2-lamp-master-right', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside right' }),
-  appliance('f2-fan-master', 'f2-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
+  appliance('f2-lamp-master', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', role: 'bedside right' }),
   appliance('f2-bulb-a', 'f2-A', 'light_bulb', 'Master bedroom light', 9),
+  appliance('f2-ac-master', 'f2-A', 'air_conditioner', 'Panasonic Air Conditioner', 1000, { brand: 'Panasonic' }),
 
-  // 2F B · Study & Guest. Workplace is the desk, laptop, and phone in one sprite.
-  furniture('f2-bed-study', 'f2-B', 'bed', 'Guest Bed'),
-  appliance('f2-ac-study', 'f2-B', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin', hoursPerDay: 8 }),
-  appliance('f2-lamp-study-left', 'f2-B', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside left' }),
-  appliance('f2-lamp-study-right', 'f2-B', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', stars: 5, role: 'bedside right' }),
-  appliance('f2-workplace-study', 'f2-B', 'workplace', 'Workplace', 80, { brand: '' }),
-  appliance('f2-fan-study', 'f2-B', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 3 }),
-  appliance('f2-bulb-b', 'f2-B', 'light_bulb', 'Study light', 9),
+  furniture('f2-bed-bedroom2', 'f2-B', 'bed', 'Bed'),
+  appliance('f2-lamp-bedroom2', 'f2-B', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', role: 'bedside right' }),
+  appliance('f2-fan-bedroom2', 'f2-B', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK' }),
+  appliance('f2-bulb-b', 'f2-B', 'light_bulb', 'Bedroom light', 9),
 
-  // 2F C · Work Room. No separate Workplace/air-conditioner rows exist here.
+  appliance('f2-workplace', 'f2-C', 'workplace', 'Workplace', 80, { brand: '' }),
   appliance('f2-bulb-c', 'f2-C', 'light_bulb', 'Work room light', 9),
+  appliance('f2-ac-work', 'f2-C', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin' }),
 
-  // 2F D · Bathroom. Existing upstairs bathroom items moved here.
+  appliance('f2-shower-bath', 'f2-D', 'water_heater', 'Panasonic Water Heater', 3500, { brand: 'Panasonic' }),
+  appliance('f2-bulb-d', 'f2-D', 'light_bulb', 'Upstairs toilet light', 9),
   furniture('f2-toilet-bath', 'f2-D', 'toilet', 'Toilet'),
   furniture('f2-sink-bath', 'f2-D', 'sink', 'Sink'),
-  appliance('f2-shower-bath', 'f2-D', 'water_heater', 'Panasonic Water Heater', 3500, { brand: 'Panasonic', hoursPerDay: 1 }),
-  appliance('f2-bulb-d', 'f2-D', 'light_bulb', 'Upstairs bathroom light', 9),
 ];
-
 const EXTRA_ITEMS: FixtureItem[] = [];
 
 function materialize(items: FixtureItem[], setupAllFloor2 = false): StoredPlacedItem[] {
@@ -108,6 +95,39 @@ function materialize(items: FixtureItem[], setupAllFloor2 = false): StoredPlaced
 export const MOCK_SIMULATOR_ITEMS = materialize(DEFAULT_ITEMS);
 export const MOCK_FLOOR2_EXTRA_ITEMS = materialize(EXTRA_ITEMS, true);
 export const MOCK_SIMULATOR_ITEMS_ALL = materialize([...DEFAULT_ITEMS, ...EXTRA_ITEMS], true);
+
+/**
+ * Keeps a newly-created or partially-seeded household visually usable without
+ * overwriting any real rows. Defaults are injected only into set-up rooms that
+ * contain no persisted appliance or furniture at all.
+ */
+export function furnishEmptyRooms(
+  persistedItems: StoredPlacedItem[],
+  rooms: StoredRoom[]
+): StoredPlacedItem[] {
+  const result = persistedItems.map((item) => ({ ...item }));
+  const fixtureRooms = createDefaultRooms(true);
+
+  for (const room of rooms.filter((candidate) => candidate.isSetUp)) {
+    if (result.some((item) => item.roomId === room.id)) continue;
+    const fixtureRoom = fixtureRooms.find(
+      (candidate) => candidate.floor === room.floor && candidate.slot === room.slot
+    );
+    if (!fixtureRoom) continue;
+
+    for (const item of MOCK_SIMULATOR_ITEMS_ALL.filter(
+      (candidate) => candidate.roomId === fixtureRoom.id
+    )) {
+      result.push({
+        ...item,
+        id: `mock_default_${room.id}_${item.id}`,
+        roomId: room.id,
+      });
+    }
+  }
+
+  return result;
+}
 
 function toRaw(item: StoredPlacedItem): RawSpecItem {
   const room = createDefaultRooms(true).find((candidate) => candidate.id === item.roomId)!;

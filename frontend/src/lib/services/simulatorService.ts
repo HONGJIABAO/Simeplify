@@ -10,6 +10,7 @@ import type { Database, RoomType } from '@/types/database';
 import type { StoredRoom, StoredPlacedItem } from '@/features/simulator/logic/storage';
 import type { RoutineBlock } from '@/features/simulator/logic/myDayLogic';
 import { STAR_EFFICIENCY_FACTORS, USAGE_THRESHOLDS } from '@/features/simulator/logic/routineConfig';
+import { fetchFurnitureState, type FurnitureTypeRow } from './furnitureService';
 
 export type RoomRow = Database['public']['Tables']['rooms']['Row'];
 export type ApplianceRow = Database['public']['Tables']['appliances']['Row'];
@@ -23,6 +24,7 @@ export interface SimulatorData {
   rooms: StoredRoom[];
   appliances: StoredPlacedItem[];
   applianceTypes: ApplianceTypeRow[];
+  furnitureTypes: FurnitureTypeRow[];
   schedules: ScheduleRow[];
   routineBlocks: RoutineBlock[];
   tariff: TariffRateRow | null;
@@ -33,10 +35,12 @@ export interface SimulatorData {
  * Convert DB room type ('living_room' | 'kitchen' | 'bedroom' | 'bathroom')
  * to simulator UI room type ('living' | 'kitchen' | 'bedroom' | 'bathroom').
  */
-export function dbTypeToSimType(dbType: string | null): 'living' | 'kitchen' | 'bedroom' | 'bathroom' {
+export function dbTypeToSimType(dbType: string | null): StoredRoom['type'] {
   if (dbType === 'living_room' || dbType === 'living') return 'living';
   if (dbType === 'kitchen') return 'kitchen';
   if (dbType === 'bathroom') return 'bathroom';
+  if (dbType === 'laundry_room') return 'laundry_room';
+  if (dbType === 'work_room') return 'work_room';
   return 'bedroom';
 }
 
@@ -47,6 +51,8 @@ export function simTypeToDbType(simType: string): RoomType {
   if (simType === 'living' || simType === 'living_room') return 'living_room';
   if (simType === 'kitchen') return 'kitchen';
   if (simType === 'bathroom') return 'bathroom';
+  if (simType === 'laundry_room') return 'laundry_room';
+  if (simType === 'work_room') return 'work_room';
   return 'bedroom';
 }
 
@@ -62,6 +68,7 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
     dayBlocksRes,
     tariffRes,
     unreadNotifsRes,
+    furnitureState,
   ] = await Promise.all([
     supabase
       .from('rooms')
@@ -85,6 +92,7 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
       .select('id', { count: 'exact', head: true })
       .eq('household_id', householdId)
       .eq('is_read', false),
+    fetchFurnitureState(householdId),
   ]);
 
   const rawRooms: RoomRow[] = roomsRes.data || [];
@@ -124,6 +132,7 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
       quantity: app.quantity || 1,
       wattage: app.wattage || 100,
       stars: app.star_rating !== null ? app.star_rating : 3,
+      facing: app.facing,
       alwaysOn: Boolean(t?.always_on),
       isOn: false,
     };
@@ -151,10 +160,28 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
     };
   });
 
+  const furnitureTypeMap = new Map(furnitureState.types.map((type) => [type.id, type]));
+  const mappedFurniture: StoredPlacedItem[] = furnitureState.items.map((item) => {
+    const type = furnitureTypeMap.get(item.type);
+    return {
+      id: item.id,
+      category: 'Furniture',
+      type: item.type,
+      spriteKey: type?.sprite_key ?? item.type,
+      name: type?.name ?? item.type,
+      roomId: item.room_id,
+      posX: Number(item.position_x),
+      posY: Number(item.position_y),
+      role: item.role ?? undefined,
+      facing: item.facing,
+    };
+  });
+
   return {
     rooms: mappedRooms,
-    appliances: mappedAppliances,
+    appliances: [...mappedAppliances, ...mappedFurniture],
     applianceTypes: rawTypes,
+    furnitureTypes: furnitureState.types,
     schedules: rawSchedules,
     routineBlocks: mappedBlocks,
     tariff,
@@ -222,10 +249,11 @@ export async function createAppliance(
     brand?: string;
     model?: string;
     wattage: number;
-    starRating?: number;
+    starRating?: number | null;
     quantity?: number;
     posX?: number;
     posY?: number;
+    facing?: 'front' | 'back';
   }
 ): Promise<string> {
   const { data, error } = await supabase
@@ -237,10 +265,11 @@ export async function createAppliance(
       brand: item.brand?.trim() || null,
       model: item.model?.trim() || null,
       wattage: Math.max(1, item.wattage),
-      star_rating: item.starRating ?? 3,
+      star_rating: item.starRating === undefined ? 3 : item.starRating,
       quantity: Math.max(1, item.quantity ?? 1),
       position_x: item.posX !== undefined ? Number(item.posX.toFixed(4)) : null,
       position_y: item.posY !== undefined ? Number(item.posY.toFixed(4)) : null,
+      facing: item.facing ?? 'front',
     })
     .select('id')
     .single();
@@ -263,10 +292,11 @@ export async function updateAppliance(
     brand?: string;
     model?: string;
     wattage?: number;
-    starRating?: number;
+    starRating?: number | null;
     quantity?: number;
     posX?: number;
     posY?: number;
+    facing?: 'front' | 'back';
   }
 ): Promise<void> {
   const payload: Database['public']['Tables']['appliances']['Update'] = {};
@@ -279,6 +309,7 @@ export async function updateAppliance(
   if (updates.quantity !== undefined) payload.quantity = Math.max(1, updates.quantity);
   if (updates.posX !== undefined) payload.position_x = Number(updates.posX.toFixed(4));
   if (updates.posY !== undefined) payload.position_y = Number(updates.posY.toFixed(4));
+  if (updates.facing !== undefined) payload.facing = updates.facing;
 
   const { error } = await supabase.from('appliances').update(payload).eq('id', applianceId);
 

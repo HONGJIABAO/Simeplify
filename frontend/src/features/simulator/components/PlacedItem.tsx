@@ -33,7 +33,7 @@ interface PlacedItemProps {
   onSelect: (item: StoredPlacedItem) => void;
   onDelete: (itemId: string) => void;
   onRotate: (itemId: string) => void;
-  onMoveEnd: (itemId: string, newNormX: number, newNormY: number) => void;
+  onMoveEnd: (itemId: string, newNormX: number, newNormY: number) => { x: number; y: number } | null;
 }
 
 export function PlacedItem({
@@ -95,40 +95,60 @@ export function PlacedItem({
 
   // Drag responder in edit mode
   const [pan] = useState(() => new Animated.ValueXY());
+  const [dragReady, setDragReady] = useState(false);
+  const [didLongPress, setDidLongPress] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // First tap selects the item. Only an already-selected item owns the
-        // next gesture, so scrolling/tapping the plan does not start a move.
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gesture) =>
-          isEditMode && isSelected && (Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4),
+          isEditMode && dragReady && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onPanResponderGrant: () => {
+          setDidLongPress(true);
+          setIsDragging(true);
+          layoutPosition.stopAnimation();
+        },
         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
           useNativeDriver: false,
         }),
         onPanResponderRelease: (_, gesture) => {
-          pan.setValue({ x: 0, y: 0 });
-
-          if (Math.hypot(gesture.dx, gesture.dy) < 6) {
-            onSelect(item);
-          } else {
+          if (Math.hypot(gesture.dx, gesture.dy) >= 2) {
             const newX = Math.max(0.08, Math.min(0.92, (posX + gesture.dx / zoomScale) / canvasWidth));
             const newY = Math.max(0.08, Math.min(0.92, (posY + gesture.dy / zoomScale) / canvasHeight));
-            onMoveEnd(item.id, newX, newY);
+            // Move the animated base to the release point before clearing the
+            // translation. This prevents a one-frame jump back to the old DB
+            // coordinates while the parent commits the new position.
+            const resolved = onMoveEnd(item.id, newX, newY);
+            const releaseX = resolved?.x ?? item.posX;
+            const releaseY = resolved?.y ?? item.posY;
+            layoutPosition.setValue({
+              x: releaseX * canvasWidth - width / 2,
+              y: releaseY * canvasHeight - height / 2,
+            });
+            pan.setValue({ x: 0, y: 0 });
+          } else {
+            pan.setValue({ x: 0, y: 0 });
           }
+          setDragReady(false);
+          setDidLongPress(false);
+          setIsDragging(false);
         },
         onPanResponderTerminate: () => {
           pan.setValue({ x: 0, y: 0 });
+          setDragReady(false);
+          setDidLongPress(false);
+          setIsDragging(false);
         },
       }),
-    [isEditMode, isSelected, item, onSelect, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale]
+    [isEditMode, dragReady, item, onMoveEnd, pan, posX, posY, canvasWidth, canvasHeight, zoomScale, layoutPosition, width, height]
   );
 
   const isCeilingLayer = item.type === 'light_bulb' || item.spriteKey === 'light_bulb';
   const zIndex = isCeilingLayer
     ? 1
-    : Math.floor(item.posY * 100) + (isFurniture ? 2 : 5) + (isSelected ? 50 : 0);
+    : Math.floor(item.posY * 100) + (isFurniture ? 2 : 5) + (isSelected ? 50 : 0) + (isDragging ? 1000 : 0);
 
   const horizontalSlop = Math.max(0, Math.ceil((48 - width) / 2));
   const verticalSlop = Math.max(0, Math.ceil((48 - height) / 2));
@@ -154,7 +174,23 @@ export function PlacedItem({
       ]}
     >
       <Pressable
-        onPress={() => onSelect(item)}
+        delayLongPress={300}
+        onLongPress={() => {
+          if (!isEditMode) return;
+          setDragReady(true);
+          setDidLongPress(true);
+        }}
+        onPress={() => {
+          if (didLongPress) {
+            setDidLongPress(false);
+            setDragReady(false);
+            return;
+          }
+          onSelect(item);
+        }}
+        onPressOut={() => {
+          if (!isDragging && !didLongPress) setDragReady(false);
+        }}
         accessibilityRole="button"
         accessibilityLabel={`${getPlanItemAccessibilityLabel(item)}${isOn ? ', turned on' : ', turned off'}`}
         hitSlop={{
@@ -188,6 +224,7 @@ export function PlacedItem({
             >
               <Sprite
                 type={item.spriteKey || item.type}
+                facing={item.facing}
                 width={width}
                 height={height}
                 cropTransparent
@@ -211,6 +248,7 @@ export function PlacedItem({
             >
               <Sprite
                 type={item.spriteKey || item.type}
+                facing={item.facing}
                 width={width}
                 height={height}
                 cropTransparent
@@ -224,6 +262,7 @@ export function PlacedItem({
         <View pointerEvents="none" style={styles.pictureOnly}>
           <Sprite
             type={item.spriteKey || item.type}
+            facing={item.facing}
             width={width}
             height={height}
             cropTransparent

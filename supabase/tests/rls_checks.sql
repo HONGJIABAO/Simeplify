@@ -29,6 +29,10 @@ insert into public.appliance_types (id, name, sprite_key, always_on, needs_perso
 values ('air_conditioner', 'Air Conditioner', 'air_conditioner', false, true)
 on conflict (id) do nothing;
 
+insert into public.furniture_types (id, name, sprite_key, in_tray, sort_order)
+values ('bed', 'Bed', 'bed', true, 1)
+on conflict (id) do nothing;
+
 insert into public.rewards (id, voting_month, title, description, is_unlocked)
 select reward_id, test_month, 'Community Solar Canopy', '50% clean energy for park', false
 from _test_fixtures;
@@ -94,6 +98,11 @@ select
   'Panasonic',
   1200,
   4
+from _test_fixtures f
+join public.rooms r on r.household_id = f.household_b_id and r.floor = 1 and r.slot = 'A';
+
+insert into public.furniture_items (household_id, room_id, type, position_x, position_y)
+select f.household_b_id, r.id, 'bed', 0.25, 0.50
 from _test_fixtures f
 join public.rooms r on r.household_id = f.household_b_id and r.floor = 1 and r.slot = 'A';
 
@@ -175,6 +184,12 @@ begin
   from public.appliances
   where household_id in (select household_b_id from _test_fixtures);
   assert v_count = 0, 'FAIL: User A was able to read Appliances of B';
+
+  -- furniture_items
+  select count(*) into v_count
+  from public.furniture_items
+  where household_id in (select household_b_id from _test_fixtures);
+  assert v_count = 0, 'FAIL: User A was able to read Furniture of B';
 
   -- day_blocks
   select count(*) into v_count
