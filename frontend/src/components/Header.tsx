@@ -148,7 +148,10 @@ const styles = StyleSheet.create({
     color: '#292524', // stone-800
     letterSpacing: -0.5,
     marginBottom: 4,
-  },
+    userSelect: 'none',
+    cursor: 'default',
+    caretColor: 'transparent',
+  } as any,
   pageSubtitle: {
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 15,
@@ -179,7 +182,10 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     paddingHorizontal: 8,
-  },
+    userSelect: 'none',
+    cursor: 'default',
+    caretColor: 'transparent',
+  } as any,
   backPlaceholder: {
     width: 48,
   },

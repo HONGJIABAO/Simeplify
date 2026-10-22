@@ -6,3 +6,32 @@
   --font-heading: 'Lora_600SemiBold', serif;
   --font-body: 'SourceSans3_400Regular', sans-serif;
 }
+
+/* Hide visible text cursor (caret) on headers, buttons, and static text elements */
+*,
+*::before,
+*::after {
+  caret-color: transparent;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
+  caret-color: auto;
+}
+
+/* Ensure buttons and headers prevent text selection carets */
+button,
+[role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+header,
+[data-testid*="header"] {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}

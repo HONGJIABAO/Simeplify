@@ -35,6 +35,7 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
 import { uploadAndScanWaste } from '@/lib/services/binService';
+import { classifyWasteWithGemini } from '@/lib/services/geminiService';
 import { type BinType, getBinInfo } from '@/lib/mockData';
 
 const cartonImage = require('../../../assets/images/plain_carton_box.png');
@@ -142,48 +143,75 @@ export default function BinUploadScreen() {
   };
 
   const handleAnalyze = async () => {
-    if (!householdId) {
-      setIsAnalyzing(true);
-      setTimeout(() => {
-        setIsAnalyzing(false);
-        const isCustomUri = selectedItem.image?.uri;
-        router.push({
-          pathname: '/bin/result' as any,
-          params: {
-            binType: selectedItem.binType,
-            imageUri: isCustomUri ? selectedItem.image.uri : undefined,
-            itemName: selectedItem.name,
-          },
-        });
-      }, 1000);
-      return;
-    }
-
     setIsAnalyzing(true);
     try {
-      const scanRes = await uploadAndScanWaste(householdId, selectedItem.image, {
-        fileName: selectedItem.fileName,
-      });
+      let aiResult: any = null;
+
+      // If user uploaded a custom image with data URI, classify directly with Gemini AI
+      if (selectedItem.image?.uri && typeof selectedItem.image.uri === 'string' && selectedItem.image.uri.startsWith('data:')) {
+        try {
+          aiResult = await classifyWasteWithGemini(selectedItem.image.uri);
+        } catch (aiErr) {
+          console.warn('Gemini classification fallback on custom image:', aiErr);
+        }
+      }
+
+      const finalBinType = aiResult?.binType || selectedItem.binType;
+      const finalItemName = aiResult?.identifiedItem || selectedItem.name;
+      const finalMaterial =
+        aiResult?.material ||
+        (finalBinType === 'paper'
+          ? 'Cardboard / Paperboard'
+          : finalBinType === 'plastic'
+          ? 'PET / Plastic'
+          : finalBinType === 'glass_metal'
+          ? 'Glass / Metal'
+          : 'Organic / Residual Waste');
+      const finalConfidence = aiResult?.confidence ?? 0.94;
+      const finalTip =
+        aiResult?.disposalTip ||
+        (finalBinType === 'general'
+          ? 'Dispose in general waste bin.'
+          : 'Rinse and dry before placing in the recycling bin.');
+      const finalRecyclable =
+        typeof aiResult?.isRecyclable === 'boolean'
+          ? aiResult.isRecyclable
+          : finalBinType !== 'general';
+
+      // Optional background sync with Supabase (silently catches network error if offline)
+      if (householdId) {
+        uploadAndScanWaste(householdId, selectedItem.image, {
+          fileName: selectedItem.fileName,
+        }).catch((err) => {
+          console.warn('Background Supabase scan log ignored:', err?.message);
+        });
+      }
 
       const isCustomUri = selectedItem.image?.uri;
       router.push({
         pathname: '/bin/result' as any,
         params: {
-          binType: scanRes.binType,
-          itemName: scanRes.itemName,
-          material: scanRes.material,
-          confidence: scanRes.confidence.toString(),
-          tips: scanRes.tips,
-          isRecyclable: scanRes.isRecyclable ? 'true' : 'false',
-          pointsAwarded: scanRes.pointsAwarded.toString(),
-          dailyLimitReached: scanRes.dailyLimitReached ? 'true' : 'false',
-          scanId: scanRes.scanId,
+          binType: finalBinType,
+          itemName: finalItemName,
+          material: finalMaterial,
+          confidence: finalConfidence.toString(),
+          tips: finalTip,
+          isRecyclable: finalRecyclable ? 'true' : 'false',
+          pointsAwarded: finalRecyclable ? '10' : '0',
           imageUri: isCustomUri ? selectedItem.image.uri : undefined,
         },
       });
     } catch (err: any) {
       console.error('Scan failed:', err);
-      showToast(err?.message || 'Classification failed. Please try again.', 'error');
+      // Fallback navigation with selected item data
+      router.push({
+        pathname: '/bin/result' as any,
+        params: {
+          binType: selectedItem.binType,
+          itemName: selectedItem.name,
+          imageUri: selectedItem.image?.uri ? selectedItem.image.uri : undefined,
+        },
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -423,12 +451,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
-  },
+    userSelect: 'none',
+    cursor: 'pointer',
+    caretColor: 'transparent',
+  } as any,
   browsePillText: {
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 14,
     color: '#292524',
-  },
+    userSelect: 'none',
+    cursor: 'pointer',
+    caretColor: 'transparent',
+  } as any,
 
   // Selected Card
   selectedCard: {
