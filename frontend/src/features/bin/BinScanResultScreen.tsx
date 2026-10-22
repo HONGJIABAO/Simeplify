@@ -173,7 +173,7 @@ export default function BinScanResultScreen() {
         if (isMounted) {
           setDailyLimitReached(st.dailyLimitReached);
         }
-      }).catch(console.error);
+      }).catch(console.warn);
     }
     return () => {
       isMounted = false;
@@ -181,6 +181,14 @@ export default function BinScanResultScreen() {
   }, [householdId]);
 
   const binInfo = getBinInfo(result.binType);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/bin' as any);
+    }
+  };
 
   const handleRetake = () => {
     router.replace('/bin/scanner' as any);
@@ -235,7 +243,7 @@ export default function BinScanResultScreen() {
   if (uiState === 'loading') {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <Header variant="back-and-title" title="Scan result" onBack={() => router.back()} />
+        <Header variant="back-and-title" title="Scan result" onBack={handleBack} />
         <View style={styles.centerStateContainer}>
           <LeafSpinner size={48} />
           <Text style={styles.loadingTitle}>Analyzing waste with Gemini...</Text>
@@ -249,7 +257,7 @@ export default function BinScanResultScreen() {
   if (uiState === 'error') {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <Header variant="back-and-title" title="Scan result" onBack={() => router.back()} />
+        <Header variant="back-and-title" title="Scan result" onBack={handleBack} />
         <View style={styles.centerStateContainer}>
           <View style={[styles.stateIconCircle, { backgroundColor: '#fbece8' }]}>
             <AlertCircle size={44} color="#a8442f" strokeWidth={1.5} />
@@ -285,7 +293,7 @@ export default function BinScanResultScreen() {
   if (uiState === 'low-confidence') {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <Header variant="back-and-title" title="Scan result" onBack={() => router.back()} />
+        <Header variant="back-and-title" title="Scan result" onBack={handleBack} />
         <View style={styles.centerStateContainer}>
           <View style={[styles.stateIconCircle, { backgroundColor: '#fef3c7' }]}>
             <AlertTriangle size={44} color="#92600e" strokeWidth={1.5} />
@@ -331,7 +339,7 @@ export default function BinScanResultScreen() {
       <Header
         variant="back-and-title"
         title="Scan result"
-        onBack={() => router.back()}
+        onBack={handleBack}
       />
 
       <ScrollView

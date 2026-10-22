@@ -414,7 +414,13 @@ export default function OnboardingScheduleScreen() {
           {/* Action buttons */}
           <View style={styles.actionRow}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(onboarding)/layout');
+                }
+              }}
               style={styles.backButton}
               accessibilityRole="button"
             >

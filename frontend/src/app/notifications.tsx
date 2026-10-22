@@ -86,7 +86,13 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/simulator');
+            }
+          }}
           accessibilityRole="button"
           accessibilityLabel="Back"
           style={({ pressed }) => [

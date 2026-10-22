@@ -932,7 +932,13 @@ export default function SimulatorGallery() {
     <SafeAreaView style={galleryStyles.container} edges={['top', 'left', 'right']}>
       <View style={galleryStyles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/simulator');
+            }
+          }}
           style={galleryStyles.backBtn}
           accessibilityRole="button"
           accessibilityLabel="Back"

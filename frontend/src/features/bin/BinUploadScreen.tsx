@@ -196,7 +196,14 @@ export default function BinUploadScreen() {
       <Header
         variant="back-and-title"
         title="Upload waste photo"
-        onBack={() => router.back()}
+        fallbackRoute="/(tabs)/bin"
+        onBack={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)/bin' as any);
+          }
+        }}
       />
 
       <ScrollView

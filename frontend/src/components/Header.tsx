@@ -11,6 +11,7 @@ export interface HeaderProps {
   subtitle?: string;
   hasUnread?: boolean;
   onBack?: () => void;
+  fallbackRoute?: string;
   rightAction?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }
@@ -21,6 +22,7 @@ export function Header({
   subtitle,
   hasUnread = true,
   onBack,
+  fallbackRoute = '/(tabs)/simulator',
   rightAction,
   style,
 }: HeaderProps) {
@@ -33,8 +35,10 @@ export function Header({
   const handleBack = () => {
     if (onBack) {
       onBack();
-    } else {
+    } else if (router.canGoBack()) {
       router.back();
+    } else {
+      router.replace(fallbackRoute as any);
     }
   };
 

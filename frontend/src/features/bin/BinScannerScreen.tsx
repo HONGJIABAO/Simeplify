@@ -116,7 +116,11 @@ export default function BinScannerScreen() {
   };
 
   const handleClose = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/bin' as any);
+    }
   };
 
   // Permission denied state

@@ -552,7 +552,13 @@ export default function OnboardingAppliancesScreen() {
           {/* Action buttons */}
           <View style={styles.actionRow}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(onboarding)/schedule');
+                }
+              }}
               style={styles.backButton}
               accessibilityRole="button"
             >

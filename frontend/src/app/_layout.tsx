@@ -51,7 +51,8 @@ if (typeof window !== 'undefined') {
       text.includes('Failed to fetch') ||
       text.includes('Network request failed') ||
       text.includes('Error syncing routine notifications') ||
-      text.includes('Error fetching unread notifications count')
+      text.includes('Error fetching unread notifications count') ||
+      text.includes("The action 'GO_BACK' was not handled")
     );
   };
 
@@ -75,6 +76,8 @@ LogBox.ignoreLogs([
   /onResponderTerminate/,
   /onResponder/,
   /Unknown event handler property/,
+  "The action 'GO_BACK' was not handled by any navigator",
+  /The action 'GO_BACK' was not handled/,
 ]);
 
 if (Platform.OS === 'web') {

@@ -80,7 +80,13 @@ export default function ComponentGalleryScreen() {
       {/* Gallery Header */}
       <View style={styles.topNav}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/simulator');
+            }
+          }}
           accessibilityRole="button"
           accessibilityLabel="Back"
           style={styles.backButton}
