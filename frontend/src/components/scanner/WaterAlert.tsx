@@ -1,24 +1,72 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { AlertTriangle, AlertCircle, Droplets } from 'lucide-react-native';
+import { AlertTriangle, AlertCircle, Droplets, Zap, ShieldAlert } from 'lucide-react-native';
 import { type WaterAlertLevel } from '@/lib/waterLevel';
 
+export type BillAlertDisplayLevel =
+  | WaterAlertLevel
+  | 'spike_detected'
+  | 'electricity_spike'
+  | 'anomaly';
+
 export interface WaterAlertProps {
-  level?: WaterAlertLevel;
+  level?: BillAlertDisplayLevel;
   momPercent?: number | null;
   monthName?: string;
+  utilityType?: 'electricity' | 'water';
+  title?: string;
+  message?: string;
+  promptAction?: string;
 }
 
 export function WaterAlert({
   level = 'normal',
   momPercent,
   monthName,
+  utilityType,
+  title,
+  message,
+  promptAction,
 }: WaterAlertProps) {
   if (!level || level === 'normal') {
     return null;
   }
 
-  const momText = typeof momPercent === 'number' && !isNaN(momPercent) ? `${momPercent > 0 ? '+' : ''}${Math.round(momPercent)}%` : null;
+  const momText =
+    typeof momPercent === 'number' && !isNaN(momPercent)
+      ? `${momPercent > 0 ? '+' : ''}${Math.round(momPercent)}%`
+      : null;
+
+  // Electricity Spike Anomaly
+  if (level === 'spike_detected' || level === 'electricity_spike' || utilityType === 'electricity') {
+    return (
+      <View style={styles.elecSpikeBanner}>
+        <View style={styles.headerRow}>
+          <View style={styles.badgeLeft}>
+            <View style={styles.elecIconCircle}>
+              <Zap size={18} color="#92400e" strokeWidth={2} />
+            </View>
+            <Text style={styles.elecTitle}>{title || 'HIGH ELECTRICITY SPIKE DETECTED'}</Text>
+          </View>
+          {monthName ? <Text style={styles.elecStatement}>{monthName}</Text> : null}
+        </View>
+
+        <Text style={styles.elecBody}>
+          {message ||
+            `High electricity spike detected${
+              momText ? ` (${momText} vs previous month)` : ''
+            }. Please check if high-drain appliances or lights were accidentally left on.`}
+        </Text>
+
+        <View style={styles.promptActionBox}>
+          <ShieldAlert size={15} color="#92400e" strokeWidth={1.5} />
+          <Text style={styles.promptActionText}>
+            {promptAction || 'Please check your household and verify the anomaly.'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (level === 'minor_drip') {
     return (
@@ -40,19 +88,27 @@ export function WaterAlert({
             <View style={styles.majorIconCircle}>
               <AlertCircle size={20} color="#a8442f" strokeWidth={1.5} />
             </View>
-            <Text style={styles.majorTitle}>MAJOR PIPE BURST ALERT</Text>
+            <Text style={styles.majorTitle}>{title || 'MAJOR PIPE BURST ALERT'}</Text>
           </View>
           {monthName ? <Text style={styles.majorStatement}>{monthName}</Text> : null}
         </View>
         <Text style={styles.majorBody}>
-          {momText ? `Water use doubled (${momText}). ` : 'Extremely high water volume detected. '}
-          Check for a burst pipe and consider closing the main valve immediately.
+          {message ||
+            `Water use doubled${
+              momText ? ` (${momText})` : ''
+            }. Check for a burst pipe and consider closing the main valve immediately.`}
         </Text>
+        <View style={styles.promptActionBoxBurst}>
+          <ShieldAlert size={15} color="#a8442f" strokeWidth={1.5} />
+          <Text style={styles.promptActionTextBurst}>
+            {promptAction || 'Please check your household and verify the anomaly.'}
+          </Text>
+        </View>
       </View>
     );
   }
 
-  // level === 'leak_detected'
+  // Water Anomaly: leak_detected
   return (
     <View style={styles.leakBanner}>
       <View style={styles.headerRow}>
@@ -60,15 +116,24 @@ export function WaterAlert({
           <View style={styles.leakIconCircle}>
             <AlertTriangle size={18} color="#8F5B14" strokeWidth={1.5} />
           </View>
-          <Text style={styles.leakTitle}>ANOMALY DETECTED</Text>
+          <Text style={styles.leakTitle}>{title || 'UNUSUAL WATER USAGE DETECTED'}</Text>
         </View>
         {monthName ? <Text style={styles.leakStatement}>{monthName}</Text> : null}
       </View>
 
       <Text style={styles.leakBody}>
-        {momText ? `Water bill up ${momText} vs last month. ` : 'Unusual water consumption detected. '}
-        Check the toilet cistern seal and outdoor pipes.
+        {message ||
+          `Unusual water usage detected${
+            momText ? ` (${momText} vs previous month)` : ''
+          }. Please check for potential pipe leakages.`}
       </Text>
+
+      <View style={styles.promptActionBoxWater}>
+        <ShieldAlert size={15} color="#8F5B14" strokeWidth={1.5} />
+        <Text style={styles.promptActionTextWater}>
+          {promptAction || 'Please check your household and verify the anomaly.'}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -170,5 +235,87 @@ const styles = StyleSheet.create({
     color: '#566549',
     flex: 1,
     lineHeight: 18,
+  },
+
+  elecSpikeBanner: {
+    backgroundColor: '#fffbeb', // amber-50
+    borderColor: '#fde68a', // amber-200
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+  },
+  elecIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  elecTitle: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#92400e',
+    letterSpacing: 0.5,
+  },
+  elecStatement: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#92400e',
+  },
+  elecBody: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 14,
+    color: '#92400e',
+    lineHeight: 20,
+  },
+
+  promptActionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#fde68a',
+  },
+  promptActionText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#92400e',
+    flex: 1,
+  },
+
+  promptActionBoxWater: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F5E4B8',
+  },
+  promptActionTextWater: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#8F5B14',
+    flex: 1,
+  },
+
+  promptActionBoxBurst: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F2C8BE',
+  },
+  promptActionTextBurst: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#A8442F',
+    flex: 1,
   },
 });

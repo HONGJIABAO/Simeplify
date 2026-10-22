@@ -7,11 +7,17 @@ import { type MonthlyChartDataPoint } from '@/lib/services/scannerService';
 import { formatMoney } from '@/lib/formatters';
 
 export type ChartFilter = 'All' | 'Electricity' | 'Water';
+export type ChartMetric = 'Cost' | 'Consumption';
 
 const FILTER_OPTIONS: SegmentOption<ChartFilter>[] = [
   { label: 'All', value: 'All' },
   { label: 'Electricity', value: 'Electricity' },
   { label: 'Water', value: 'Water' },
+];
+
+const METRIC_OPTIONS: SegmentOption<ChartMetric>[] = [
+  { label: 'Cost (RM)', value: 'Cost' },
+  { label: 'Usage (Volume)', value: 'Consumption' },
 ];
 
 export interface UsageChartProps {
@@ -22,6 +28,7 @@ export interface UsageChartProps {
 
 export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: UsageChartProps) {
   const [filter, setFilter] = useState<ChartFilter>('All');
+  const [metric, setMetric] = useState<ChartMetric>('Cost');
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(
     selectedMonthKey ?? (data.length > 0 ? data[data.length - 1].month : null)
   );
@@ -47,14 +54,18 @@ export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: Usage
     );
   }
 
-  // Calculate scaling
-  const maxElec = Math.max(...data.map((d) => d.electricityRm), 10);
-  const maxWater = Math.max(...data.map((d) => d.waterRm), 10);
-  const maxSpend = filter === 'All'
-    ? Math.max(...data.map((d) => Math.max(d.electricityRm, d.waterRm * 2, d.totalRm * 0.7)), 50)
-    : filter === 'Electricity'
-    ? maxElec
-    : maxWater;
+  // Calculate scaling for both RM and Consumption volume
+  const maxElecRm = Math.max(...data.map((d) => d.electricityRm), 10);
+  const maxWaterRm = Math.max(...data.map((d) => d.waterRm), 10);
+  const maxElecKwh = Math.max(...data.map((d) => d.electricityKwh), 50);
+  const maxWaterM3 = Math.max(...data.map((d) => d.waterM3), 5);
+
+  const maxSpend =
+    filter === 'All'
+      ? Math.max(...data.map((d) => Math.max(d.electricityRm, d.waterRm * 2, d.totalRm * 0.7)), 50)
+      : filter === 'Electricity'
+      ? maxElecRm
+      : maxWaterRm;
 
   const CHART_WIDTH = 320;
   const CHART_HEIGHT = 130;
@@ -67,13 +78,37 @@ export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: Usage
 
   return (
     <Card style={styles.card}>
-      {/* Title block */}
+      {/* Title block with metric toggle */}
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Monthly usage</Text>
-        <Text style={styles.subtitle}>Past 5 billing cycles</Text>
+        <View style={styles.titleLeft}>
+          <Text style={styles.title}>Historical comparison</Text>
+          <Text style={styles.subtitle}>
+            {metric === 'Cost' ? 'Monthly cost (RM) vs previous cycles' : 'Monthly volume (kWh & m³) vs previous cycles'}
+          </Text>
+        </View>
+
+        {/* Metric Selector Pills: Cost vs Usage */}
+        <View style={styles.metricSwitchRow}>
+          <Pressable
+            onPress={() => setMetric('Cost')}
+            style={[styles.metricPill, metric === 'Cost' && styles.metricPillActive]}
+          >
+            <Text style={[styles.metricPillText, metric === 'Cost' && styles.metricPillTextActive]}>
+              RM
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMetric('Consumption')}
+            style={[styles.metricPill, metric === 'Consumption' && styles.metricPillActive]}
+          >
+            <Text style={[styles.metricPillText, metric === 'Consumption' && styles.metricPillTextActive]}>
+              kWh/m³
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Filter row placed on its own row under title (page_refined.md S7.1) */}
+      {/* Filter row placed on its own row under title */}
       <View style={styles.filterRow}>
         <SegmentedControl
           options={FILTER_OPTIONS}
@@ -96,17 +131,27 @@ export function UsageChart({ data = [], onSelectMonth, selectedMonthKey }: Usage
             const centerX = idx * colWidth + colWidth / 2;
             const isSelected = selectedItem?.month === item.month;
 
-            const elecHeight = Math.max(6, (item.electricityRm / (maxSpend * 1.15)) * (BASELINE_Y - 20));
-            const waterHeight = Math.max(6, (item.waterRm / (maxSpend * 0.5 || 25)) * (BASELINE_Y - 20));
+            let elecHeight = 6;
+            let waterHeight = 6;
+
+            if (metric === 'Cost') {
+              elecHeight = Math.max(6, (item.electricityRm / (maxSpend * 1.15)) * (BASELINE_Y - 20));
+              waterHeight = Math.max(6, (item.waterRm / (maxSpend * 0.5 || 25)) * (BASELINE_Y - 20));
+            } else {
+              elecHeight = Math.max(6, (item.electricityKwh / (maxElecKwh * 1.15)) * (BASELINE_Y - 20));
+              waterHeight = Math.max(6, (item.waterM3 / (maxWaterM3 * 1.15)) * (BASELINE_Y - 20));
+            }
 
             const showElec = filter === 'All' || filter === 'Electricity';
             const showWater = filter === 'All' || filter === 'Water';
 
             // Trend point for this month
-            let trendVal = item.totalRm;
-            if (filter === 'Electricity') trendVal = item.electricityRm;
-            if (filter === 'Water') trendVal = item.waterRm;
-            const trendHeight = Math.max(8, (trendVal / (maxSpend * 1.15)) * (BASELINE_Y - 20));
+            let trendVal = metric === 'Cost' ? item.totalRm : item.electricityKwh;
+            if (filter === 'Electricity') trendVal = metric === 'Cost' ? item.electricityRm : item.electricityKwh;
+            if (filter === 'Water') trendVal = metric === 'Cost' ? item.waterRm : item.waterM3 * 15;
+
+            const trendMax = metric === 'Cost' ? maxSpend * 1.15 : maxElecKwh * 1.15;
+            const trendHeight = Math.max(8, (trendVal / (trendMax || 100)) * (BASELINE_Y - 20));
             const trendY = Math.max(16, BASELINE_Y - trendHeight);
             trendPoints.push({ x: centerX, y: trendY });
 
@@ -234,7 +279,40 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  titleLeft: {
+    flex: 1,
+    minWidth: 160,
+  },
+  metricSwitchRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f5f5f4',
+    padding: 3,
+    borderRadius: 9999,
+    gap: 2,
+  },
+  metricPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 9999,
+  },
+  metricPillActive: {
+    backgroundColor: '#e0e6d9', // sage-100
+  },
+  metricPillText: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12,
+    color: '#78716c',
+  },
+  metricPillTextActive: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    color: '#566549',
   },
   title: {
     fontFamily: 'Lora_600SemiBold',

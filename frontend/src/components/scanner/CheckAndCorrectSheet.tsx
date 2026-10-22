@@ -59,8 +59,8 @@ export function CheckAndCorrectSheet({
     if (initialValues) {
       setBillType(initialValues.billType || 'electricity');
       setBillingMonth(initialValues.billingMonth || '');
-      setUsage(initialValues.usage != null && initialValues.usage > 0 ? String(initialValues.usage) : '');
-      setAmount(initialValues.amount != null && initialValues.amount > 0 ? String(initialValues.amount) : '');
+      setUsage(initialValues.usage != null ? String(initialValues.usage) : '');
+      setAmount(initialValues.amount != null ? String(initialValues.amount) : '');
       setProvider(initialValues.provider);
     } else if (readingFailed) {
       setBillType('electricity');
@@ -92,14 +92,14 @@ export function CheckAndCorrectSheet({
         setConfirmReplace(false);
         onClose();
       }}
-      title="Check and correct"
+      title={isReading ? 'Analyzing...' : 'Check and correct'}
       height="88%"
     >
       <ScrollView contentContainerStyle={styles.container}>
         {isReading ? (
           <View style={styles.loadingContainer}>
             <Skeleton height={120} style={{ width: '100%', borderRadius: 16, marginBottom: 16 }} />
-            <Text style={styles.loadingText}>Reading your bill...</Text>
+            <Text style={styles.loadingText}>Analyzing your bill...</Text>
             <View style={{ gap: 12, width: '100%', marginTop: 12 }}>
               <Skeleton height={48} style={{ borderRadius: 9999 }} />
               <Skeleton height={48} style={{ borderRadius: 9999 }} />
