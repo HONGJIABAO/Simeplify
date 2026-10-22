@@ -1,6 +1,7 @@
 /**
  * Notification Core Logic
  * Stage 6: Pure Supabase client functions for notifications and routine reminders.
+ * Offline-safe with graceful fallbacks.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -15,17 +16,20 @@ export async function syncRoutineNotificationsWithClient(
   client: SupabaseClient,
   householdId?: string
 ): Promise<number> {
-  const { data, error } = await client.rpc(
-    'sync_routine_appliance_notifications',
-    householdId ? { p_household_id: householdId } : {}
-  );
+  try {
+    const { data, error } = await client.rpc(
+      'sync_routine_appliance_notifications',
+      householdId ? { p_household_id: householdId } : {}
+    );
 
-  if (error) {
-    console.error('Error syncing routine notifications:', error);
-    throw error;
+    if (error) {
+      return 0;
+    }
+
+    return (data as number) ?? 0;
+  } catch {
+    return 0;
   }
-
-  return (data as number) ?? 0;
 }
 
 /**
@@ -35,18 +39,21 @@ export async function fetchUnreadNotificationsCountWithClient(
   client: SupabaseClient,
   householdId: string
 ): Promise<number> {
-  const { count, error } = await client
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('household_id', householdId)
-    .eq('is_read', false);
+  try {
+    const { count, error } = await client
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('household_id', householdId)
+      .eq('is_read', false);
 
-  if (error) {
-    console.error('Error fetching unread notifications count:', error);
+    if (error) {
+      return 0;
+    }
+
+    return count ?? 0;
+  } catch {
     return 0;
   }
-
-  return count ?? 0;
 }
 
 /**
@@ -56,18 +63,21 @@ export async function fetchNotificationsWithClient(
   client: SupabaseClient,
   householdId: string
 ): Promise<NotificationRow[]> {
-  const { data, error } = await client
-    .from('notifications')
-    .select('*')
-    .eq('household_id', householdId)
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await client
+      .from('notifications')
+      .select('*')
+      .eq('household_id', householdId)
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching notifications:', error);
-    throw error;
+    if (error) {
+      return [];
+    }
+
+    return (data as NotificationRow[]) ?? [];
+  } catch {
+    return [];
   }
-
-  return (data as NotificationRow[]) ?? [];
 }
 
 /**
@@ -77,14 +87,17 @@ export async function markNotificationAsReadWithClient(
   client: SupabaseClient,
   notificationId: string
 ): Promise<void> {
-  const { error } = await client
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('id', notificationId);
+  try {
+    const { error } = await client
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
 
-  if (error) {
-    console.error('Error marking notification as read:', error);
-    throw error;
+    if (error) {
+      return;
+    }
+  } catch {
+    // Offline – ignore
   }
 }
 
@@ -95,14 +108,18 @@ export async function markAllNotificationsAsReadWithClient(
   client: SupabaseClient,
   householdId: string
 ): Promise<void> {
-  const { error } = await client
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('household_id', householdId)
-    .eq('is_read', false);
+  try {
+    const { error } = await client
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('household_id', householdId)
+      .eq('is_read', false);
 
-  if (error) {
-    console.error('Error marking all notifications as read:', error);
-    throw error;
+    if (error) {
+      return;
+    }
+  } catch {
+    // Offline – ignore
   }
 }
+

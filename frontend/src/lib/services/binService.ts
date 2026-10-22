@@ -147,7 +147,7 @@ export async function uploadAndScanWaste(
     });
 
   if (uploadError) {
-    console.error('Storage upload error in waste-photos:', uploadError);
+    console.warn('Storage upload error in waste-photos:', uploadError);
     throw uploadError;
   }
 
@@ -160,7 +160,7 @@ export async function uploadAndScanWaste(
   });
 
   if (funcError) {
-    console.error('scan-waste Edge Function returned error:', funcError);
+    console.warn('scan-waste Edge Function returned error:', funcError);
     throw funcError;
   }
 
@@ -205,7 +205,7 @@ export async function fetchBinState(householdId: string): Promise<BinState> {
     .limit(10);
 
   if (scansError) {
-    console.error('Failed to fetch waste scans:', scansError);
+    console.warn('Failed to fetch waste scans:', scansError);
   }
 
   // 2. Count today's recycling deeds (Malaysia time)
@@ -216,7 +216,7 @@ export async function fetchBinState(householdId: string): Promise<BinState> {
     .eq('deed_date', mytDate);
 
   if (deedsError) {
-    console.error('Failed to count today deeds:', deedsError);
+    console.warn('Failed to count today deeds:', deedsError);
   }
 
   // 3. Sum points awarded for recycling
@@ -227,7 +227,7 @@ export async function fetchBinState(householdId: string): Promise<BinState> {
     .eq('source', 'recycling');
 
   if (pointsError) {
-    console.error('Failed to sum recycling points:', pointsError);
+    console.warn('Failed to sum recycling points:', pointsError);
   }
 
   const totalPoints = pointsRows ? pointsRows.reduce((acc, row) => acc + (row.amount || 0), 0) : 0;
@@ -240,7 +240,7 @@ export async function fetchBinState(householdId: string): Promise<BinState> {
     .eq('is_recyclable', true);
 
   if (countError) {
-    console.error('Failed to count diverted items:', countError);
+    console.warn('Failed to count diverted items:', countError);
   }
 
   const itemsDiverted = totalDiverted || 0;
@@ -297,7 +297,7 @@ export async function confirmDisposal(
   });
 
   if (funcError) {
-    console.error('confirm-disposal Edge Function error:', funcError);
+    console.warn('confirm-disposal Edge Function error:', funcError);
     throw funcError;
   }
 

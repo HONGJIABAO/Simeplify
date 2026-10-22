@@ -66,7 +66,7 @@ export async function fetchProfileDataWithClient(
     .maybeSingle();
 
   if (profileError) {
-    console.error('Error fetching profile:', profileError);
+    console.warn('Error fetching profile:', profileError);
     throw profileError;
   }
 
@@ -82,7 +82,7 @@ export async function fetchProfileDataWithClient(
       .maybeSingle();
 
     if (householdError) {
-      console.error('Error fetching household:', householdError);
+      console.warn('Error fetching household:', householdError);
       throw householdError;
     }
 
@@ -107,7 +107,7 @@ export async function fetchProfileDataWithClient(
       .eq('is_read', false);
 
     if (notifsError) {
-      console.error('Error fetching unread notifications count:', notifsError);
+      console.warn('Error fetching unread notifications count:', notifsError);
     } else {
       unreadNotificationsCount = count ?? 0;
     }
@@ -153,7 +153,7 @@ export async function updateProfileAndHouseholdWithClient(
       .eq('id', userId);
 
     if (profileError) {
-      console.error('Error updating profile name:', profileError);
+      console.warn('Error updating profile name:', profileError);
       throw profileError;
     }
   }
@@ -180,7 +180,7 @@ export async function updateProfileAndHouseholdWithClient(
       .eq('id', householdId);
 
     if (householdError) {
-      console.error('Error updating household address:', householdError);
+      console.warn('Error updating household address:', householdError);
       throw householdError;
     }
   }

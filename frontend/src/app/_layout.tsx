@@ -47,7 +47,11 @@ if (typeof window !== 'undefined') {
       text.includes('onResponder') ||
       text.includes('onResponderTerminate') ||
       text.includes('Unknown event handler property') ||
-      text.includes('onStartShouldSetResponder')
+      text.includes('onStartShouldSetResponder') ||
+      text.includes('Failed to fetch') ||
+      text.includes('Network request failed') ||
+      text.includes('Error syncing routine notifications') ||
+      text.includes('Error fetching unread notifications count')
     );
   };
 

@@ -186,7 +186,7 @@ export async function saveRoom(
       .eq('id', roomId);
 
     if (error) {
-      console.error('Failed to update room in Supabase:', error);
+      console.warn('Failed to update room in Supabase:', error);
       throw error;
     }
   } else if (householdId) {
@@ -205,7 +205,7 @@ export async function saveRoom(
       .eq('slot', slot);
 
     if (error) {
-      console.error('Failed to update room in Supabase by slot:', error);
+      console.warn('Failed to update room in Supabase by slot:', error);
       throw error;
     }
   }
@@ -246,7 +246,7 @@ export async function createAppliance(
     .single();
 
   if (error) {
-    console.error('Failed to create appliance in Supabase:', error);
+    console.warn('Failed to create appliance in Supabase:', error);
     throw error;
   }
 
@@ -283,7 +283,7 @@ export async function updateAppliance(
   const { error } = await supabase.from('appliances').update(payload).eq('id', applianceId);
 
   if (error) {
-    console.error('Failed to update appliance in Supabase:', error);
+    console.warn('Failed to update appliance in Supabase:', error);
     throw error;
   }
 }
@@ -294,7 +294,7 @@ export async function updateAppliance(
 export async function deleteAppliance(applianceId: string): Promise<void> {
   const { error } = await supabase.from('appliances').delete().eq('id', applianceId);
   if (error) {
-    console.error('Failed to delete appliance from Supabase:', error);
+    console.warn('Failed to delete appliance from Supabase:', error);
     throw error;
   }
 }
@@ -336,7 +336,7 @@ export async function saveRoutineBlocksToDb(
 
   const { error } = await supabase.from('day_blocks').insert(rows);
   if (error) {
-    console.error('Failed to save day_blocks in Supabase:', error);
+    console.warn('Failed to save day_blocks in Supabase:', error);
     throw error;
   }
 
@@ -379,7 +379,7 @@ export async function saveSchedulesToDb(
   }));
   const { error } = await supabase.from('schedules').insert(rows);
   if (error) {
-    console.error('Failed to save schedules in Supabase:', error);
+    console.warn('Failed to save schedules in Supabase:', error);
     throw error;
   }
 }
@@ -395,7 +395,7 @@ export async function fetchNotifications(householdId: string): Promise<Notificat
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Failed to fetch notifications:', error);
+    console.warn('Failed to fetch notifications:', error);
     return [];
   }
   return data || [];
@@ -411,7 +411,7 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
     .eq('id', notificationId);
 
   if (error) {
-    console.error('Failed to mark notification as read:', error);
+    console.warn('Failed to mark notification as read:', error);
   }
 }
 
@@ -426,7 +426,7 @@ export async function markAllNotificationsAsRead(householdId: string): Promise<v
     .eq('is_read', false);
 
   if (error) {
-    console.error('Failed to mark all notifications as read:', error);
+    console.warn('Failed to mark all notifications as read:', error);
   }
 }
 
