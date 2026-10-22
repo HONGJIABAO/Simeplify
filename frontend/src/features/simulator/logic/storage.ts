@@ -51,10 +51,11 @@ export interface SimulationState {
   simulatedMinutes: number; // 0 to 1439
   avatarVariant: 'avatar_girl' | 'avatar_boy' | 'girl' | 'boy';
   viewedFloor?: 1 | 2;
+  fastForwardPeriod?: '1W' | '1M' | '1Y';
 }
 
-const LAYOUT_KEY = 'simeplify_simulator_layout_v4';
-const LEGACY_LAYOUT_KEY = 'simeplify_simulator_layout_v3';
+const LAYOUT_KEY = 'simeplify_simulator_layout_v5';
+const LEGACY_LAYOUT_KEYS = ['simeplify_simulator_layout_v4', 'simeplify_simulator_layout_v3'];
 const SIM_KEY = 'simeplify_simulator_sim_v2';
 
 // In-memory fallback if localStorage is unavailable
@@ -84,7 +85,7 @@ function safeSetItem(key: string, value: string): void {
 
 export function loadLayoutState(): LayoutState | null {
   try {
-    const raw = safeGetItem(LAYOUT_KEY) || safeGetItem(LEGACY_LAYOUT_KEY);
+    const raw = safeGetItem(LAYOUT_KEY) || LEGACY_LAYOUT_KEYS.map(safeGetItem).find(Boolean);
     if (raw) {
       const parsed = JSON.parse(raw) as LayoutState;
       if (parsed.items) {

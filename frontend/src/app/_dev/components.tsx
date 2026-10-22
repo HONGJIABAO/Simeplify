@@ -247,15 +247,15 @@ export default function ComponentGalleryScreen() {
           />
 
           <Text style={[styles.subLabel, styles.mt3]}>
-            Fast-Forward Horizon (Stops: 1M, 6M, 1Y)
+            Fast-Forward Horizon (Stops: 1W, 1M, 1Y)
           </Text>
           <Slider
             value={stopVal}
             min={1}
             max={12}
             stops={[
+              { value: 0.25, label: '1W' },
               { value: 1, label: '1M' },
-              { value: 6, label: '6M' },
               { value: 12, label: '1Y' },
             ]}
             onChange={setStopVal}

@@ -1,7 +1,7 @@
 /** SIM-04 — pure seven-day fast-forward reel selection and progress. */
 import type { RoutineBlock } from './myDayLogic';
 
-export type ReelPeriod = '1M' | '6M' | '1Y';
+export type ReelPeriod = '1W' | '1M' | '1Y';
 export const REEL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 export type ReelDay = typeof REEL_DAYS[number];
 export type FeaturedCategory = 'shower' | 'breakfast' | 'work' | 'evening' | 'dinner';
@@ -86,7 +86,8 @@ export function getReelSavings(totalSavingsRm: number, dayIndex: number, segment
 export function getReelTargetDate(start: Date, period: ReelPeriod, progress: number): Date {
   const end = new Date(start.getTime());
   if (period === '1Y') end.setFullYear(end.getFullYear() + 1);
-  else end.setMonth(end.getMonth() + (period === '6M' ? 6 : 1));
+  else if (period === '1W') end.setDate(end.getDate() + 7);
+  else end.setMonth(end.getMonth() + 1);
   return new Date(start.getTime() + (end.getTime() - start.getTime()) * Math.max(0, Math.min(1, progress)));
 }
 

@@ -96,6 +96,26 @@ function getApplianceIcon(icon?: ApplianceInUse['icon']) {
   }
 }
 
+const LEGACY_APPLIANCE_HINTS: Record<string, string[]> = {
+  ac: ['air_conditioner'], fan: ['fan'], lamp: ['lights', 'light_bulb'],
+  lights: ['lights', 'light_bulb'], wh: ['water_heater'], fridge: ['refrigerator'],
+  tv: ['tv'], router: ['router'], workplace: ['workplace'],
+};
+
+function resolveRoutineAppliances(block: RoutineBlock, appliances: Appliance[]) {
+  const roomAppliances = appliances.filter((appliance) => appliance.roomId === block.roomId);
+  const resolved = new Map<string, Appliance>();
+  for (const storedId of block.applianceIds) {
+    const exact = appliances.find((appliance) => appliance.id === storedId || appliance.type === storedId || appliance.spriteKey === storedId);
+    if (exact) { resolved.set(exact.id, exact); continue; }
+    const prefix = Object.keys(LEGACY_APPLIANCE_HINTS).find((key) => storedId.toLowerCase().startsWith(key));
+    const types = prefix ? LEGACY_APPLIANCE_HINTS[prefix] : [];
+    const inferred = roomAppliances.find((appliance) => types.includes(appliance.type) || types.includes(appliance.spriteKey ?? ''));
+    if (inferred) resolved.set(inferred.id, inferred);
+  }
+  return [...resolved.values()];
+}
+
 export function MyDayTimelineSheet({
   visible,
   onClose,
@@ -179,9 +199,7 @@ export function MyDayTimelineSheet({
           {blocks.map((block) => {
             const isAway = block.isAway;
             const isExpanded = expandedBlockId === block.id;
-            const actualAppliances = appliances.filter((appliance) =>
-              block.applianceIds.includes(appliance.id)
-            );
+            const actualAppliances = resolveRoutineAppliances(block, appliances);
             const hasAppliancesInUse = actualAppliances.length > 0 ||
               Boolean(block.appliancesInUse && block.appliancesInUse.length > 0);
 

@@ -240,7 +240,7 @@ const STATE_GROUPS = [
     items: [
       { id: 'fast-forward-closed' as DemoState, label: 'Fast-forward: closed' },
       { id: 'fast-forward-open-1m' as DemoState, label: 'Fast-forward: open (1M)' },
-      { id: 'fast-forward-open-6m' as DemoState, label: 'Fast-forward: open (6M)' },
+      { id: 'fast-forward-open-6m' as DemoState, label: 'Fast-forward: open (1W)' },
       { id: 'fast-forward-open-1y' as DemoState, label: 'Fast-forward: open (1Y)' },
       { id: 'fast-forward-playing' as DemoState, label: 'Fast-forward: playing animation' },
       { id: 'fast-forward-stopped' as DemoState, label: 'Fast-forward: stopped on tap/drag' },
@@ -765,7 +765,7 @@ export default function SimulatorGallery() {
               visible={activeState !== 'fast-forward-closed'}
               period={
                 activeState === 'fast-forward-open-6m'
-                  ? '6M'
+                  ? '1W'
                   : activeState === 'fast-forward-open-1y'
                   ? '1Y'
                   : ffPeriod

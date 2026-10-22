@@ -4,7 +4,7 @@ import { CalendarCheck, CalendarDays, FastForward, Gauge, Square } from 'lucide-
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BellPill } from '@/components/layout/BellPill';
 
-export type FastForwardPeriod = '1M' | '6M' | '1Y';
+export type FastForwardPeriod = '1W' | '1M' | '1Y';
 
 interface BillCardProps {
   monthlyBillRm: number;
@@ -66,7 +66,9 @@ export function BillCard({
           style={styles.billCard}
           onPress={onPressBillCard}
           accessibilityRole="button"
-          accessibilityLabel={`Estimated monthly bill RM ${monthlyBillRm}`}
+          accessibilityLabel={activeFastForward === '1Y'
+            ? `Estimated annual bill RM ${Math.round(monthlyBillRm * 12)}`
+            : `Estimated monthly bill RM ${monthlyBillRm}`}
         >
         {/* Header row */}
         <View style={styles.cardHeaderRow}>
@@ -78,8 +80,8 @@ export function BillCard({
 
         {/* Hero Number (exact 28px Lora font) */}
         <View style={styles.heroRow}>
-          <Text style={styles.heroAmount}>RM {monthlyBillRm}</Text>
-          <Text style={styles.heroUnit}> / mo</Text>
+          <Text style={styles.heroAmount}>RM {activeFastForward === '1Y' ? Math.round(monthlyBillRm * 12).toLocaleString('en-MY') : monthlyBillRm.toLocaleString('en-MY')}</Text>
+          <Text style={styles.heroUnit}>{activeFastForward === '1Y' ? ' / year' : ' / mo'}</Text>
         </View>
 
         {/* Subtle Divider */}
@@ -132,14 +134,14 @@ export function BillCard({
             pointerEvents={fastForwardOpen ? 'auto' : 'none'}
             style={[styles.fastForwardTray, fastForwardMenuStyle]}
           >
-            {(['1M', '6M', '1Y'] as FastForwardPeriod[]).map((period) => (
+            {(['1W', '1M', '1Y'] as FastForwardPeriod[]).map((period) => (
               <Pressable
                 key={period}
                 onPress={() => {
                   onSelectFastForward(period);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Fast forward ${period === '1M' ? 'one month' : period === '6M' ? 'six months' : 'one year'}`}
+                accessibilityLabel={`Fast forward ${period === '1W' ? 'one week' : period === '1M' ? 'one month' : 'one year'}`}
                 style={({ pressed }) => [
                   styles.periodButton,
                   activeFastForward === period && styles.periodButtonActive,

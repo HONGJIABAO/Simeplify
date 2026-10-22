@@ -65,10 +65,10 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   'f1-A': {
     slots: [
       { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.16, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
-      { type: 'tv', spriteKey: 'tv', x: 0.46, y: 0.35, bottom: 0.44, h: 0.18, w: ITEM_SLOT_WIDTHS.tv, facing: 'down' },
+      { type: 'tv', spriteKey: 'tv', x: 0.43, y: 0.21, bottom: 0.30, h: 0.18, w: ITEM_SLOT_WIDTHS.tv, facing: 'down' },
       { type: 'router', spriteKey: 'router', x: 0.86, y: 0.12, bottom: 0.17, h: 0.10, w: ITEM_SLOT_WIDTHS.router, facing: 'down' },
-      { type: 'table', spriteKey: 'table', x: 0.48, y: 0.50, bottom: 0.58, h: 0.16, w: ITEM_SLOT_WIDTHS.table, role: 'coffee table' },
-      { type: 'sofa', spriteKey: 'sofa', x: 0.48, y: 0.71, bottom: 0.80, h: 0.18, w: ITEM_SLOT_WIDTHS.sofa, facing: 'up', itemFacing: 'back' },
+      { type: 'table', spriteKey: 'table', x: 0.48, y: 0.49, bottom: 0.57, h: 0.16, w: ITEM_SLOT_WIDTHS.table, role: 'coffee table' },
+      { type: 'sofa', spriteKey: 'sofa', x: 0.48, y: 0.73, bottom: 0.82, h: 0.18, w: ITEM_SLOT_WIDTHS.sofa, facing: 'up', itemFacing: 'back', rotation: 180 },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.88, bottom: 0.94, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
       { type: 'fan', spriteKey: 'fan', x: 0.14, y: 0.83, bottom: 0.94, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
     ],
@@ -76,17 +76,17 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   },
   'f1-B': {
     slots: [
-      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.22, y: 0.39, bottom: 0.52, h: 0.26, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.45, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.42, bottom: 0.52, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'down' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.46, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
+      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.22, y: 0.31, bottom: 0.44, h: 0.26, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.78, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'sink', spriteKey: 'sink', x: 0.50, y: 0.45, bottom: 0.55, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.66, bottom: 0.72, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ],
-    clearZones: [{ x: 0.43, y: 0.25, width: 0.14, height: 0.28 }],
+    clearZones: [{ x: 0.66, y: 0.50, width: 0.12, height: 0.22 }],
   },
   'f1-C': {
     slots: [
-      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.27, y: 0.39, bottom: 0.52, h: 0.26, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.24, y: 0.31, bottom: 0.44, h: 0.26, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.65, y: 0.52, bottom: 0.58, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [],
   },
   'f1-D': {
@@ -99,10 +99,11 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   },
   'f2-A': {
     slots: [
-      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.38, bottom: 0.50, h: 0.24, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
-      { type: 'lights', spriteKey: 'lights', x: 0.41, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.52, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.20, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
+      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.34, bottom: 0.46, h: 0.24, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
+      { type: 'lights', spriteKey: 'lights', x: 0.43, y: 0.36, bottom: 0.45, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'lights', spriteKey: 'lights', x: 0.51, y: 0.36, bottom: 0.45, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside second' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.82, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.54, y: 0.68, bottom: 0.74, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [{ x: 0.44, y: 0.68, width: 0.12, height: 0.24 }],
   },
   'f2-B': {
@@ -110,14 +111,14 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
       { type: 'bed', spriteKey: 'bed', x: 0.36, y: 0.38, bottom: 0.50, h: 0.24, w: ITEM_SLOT_WIDTHS.bed, facing: 'down' },
       { type: 'lights', spriteKey: 'lights', x: 0.54, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
       { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.48, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.65, bottom: 0.71, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
   },
   'f2-C': {
     slots: [
-      { type: 'workplace', spriteKey: 'workplace', x: 0.26, y: 0.41, bottom: 0.52, h: 0.22, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
-      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.50, y: 0.86, bottom: 0.92, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'up', itemFacing: 'back' },
+      { type: 'workplace', spriteKey: 'workplace', x: 0.25, y: 0.34, bottom: 0.45, h: 0.22, w: ITEM_SLOT_WIDTHS.workplace, facing: 'down' },
+      { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.78, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.52, y: 0.52, bottom: 0.58, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [],
   },
   'f2-D': {
@@ -186,10 +187,10 @@ export function getRoomSlotDefinition(
 ): RoomSlotDefinition | undefined {
   const type = canonicalItemType(item);
   const matches = ROOM_SLOTS[getRoomTemplateId(room, roomItems)].slots.filter((slot) => slot.type === type);
-  const roleMatch = item.role ? matches.find((slot) => slot.role === item.role) : undefined;
-  if (roleMatch) return roleMatch;
   const sameTypeItems = roomItems.filter((candidate) => canonicalItemType(candidate) === type);
   const occurrence = item.id ? Math.max(0, sameTypeItems.findIndex((candidate) => candidate.id === item.id)) : 0;
+  const roleMatches = item.role ? matches.filter((slot) => slot.role === item.role) : [];
+  if (roleMatches[occurrence]) return roleMatches[occurrence];
   return matches[Math.min(occurrence, Math.max(0, matches.length - 1))];
 }
 

@@ -5,7 +5,7 @@
  *
  * Rules:
  * - Opens under the top area and pushes the floor plan down (never covers it).
- * - Selector with 3 stops: 1M · 6M · 1Y (default 1M).
+ * - Selector with 3 stops: 1W · 1M · 1Y (default 1M).
  * - Total savings = monthly saving × months.
  * - Displays "Save RM {amount}" (Lora 18, sage-600) and hint "Tap again to play."
  * - Letting go of the slider does NOT play.
@@ -37,20 +37,20 @@ interface FastForwardPanelProps {
 }
 
 const STOPS: SliderStop[] = [
-  { value: 0, label: '1M' },
-  { value: 1, label: '6M' },
+  { value: 0, label: '1W' },
+  { value: 1, label: '1M' },
   { value: 2, label: '1Y' },
 ];
 
 const STOP_INDEX_TO_PERIOD: Record<number, FastForwardPeriod> = {
-  0: '1M',
-  1: '6M',
+  0: '1W',
+  1: '1M',
   2: '1Y',
 };
 
 const PERIOD_TO_STOP_INDEX: Record<FastForwardPeriod, number> = {
-  '1M': 0,
-  '6M': 1,
+  '1W': 0,
+  '1M': 1,
   '1Y': 2,
 };
 

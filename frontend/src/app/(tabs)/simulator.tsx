@@ -99,9 +99,12 @@ export default function SimulatorScreen() {
   const [initialSimulation] = useState(loadSimulationState);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [rooms, setRooms] = useState<StoredRoom[]>(() => normalizeStoredRooms(initialLayout?.rooms));
-  const [items, setItems] = useState<StoredPlacedItem[]>(() =>
-    (initialLayout?.items && initialLayout.items.length > 0 ? initialLayout.items : MOCK_SIMULATOR_ITEMS).map((item) => ({ ...item, roomId: migrateRoomId(item.roomId) }))
-  );
+  const [items, setItems] = useState<StoredPlacedItem[]>(() => {
+    const initialRooms = normalizeStoredRooms(initialLayout?.rooms);
+    const loaded = (initialLayout?.items && initialLayout.items.length > 0 ? initialLayout.items : MOCK_SIMULATOR_ITEMS)
+      .map((item) => ({ ...item, roomId: migrateRoomId(item.roomId) }));
+    return tidyFloorItems(tidyFloorItems(loaded, initialRooms, 1).items, initialRooms, 2).items;
+  });
   const [currentFloor, setCurrentFloor] = useState<FloorNumber>(initialSimulation?.viewedFloor ?? 1);
   const currentFloorRef = useRef(currentFloor);
   useEffect(() => { currentFloorRef.current = currentFloor; }, [currentFloor]);
@@ -167,8 +170,6 @@ export default function SimulatorScreen() {
     // Logged-in furniture is real data and must never be restored from LocalStorage.
     items: householdId ? items.filter((item) => item.category === 'Appliances') : items,
   }), [householdId, rooms, items]);
-  useEffect(() => saveSimulationState({ simSpeed, simulatedMinutes, avatarVariant, viewedFloor: currentFloor }),
-    [avatarVariant, currentFloor, simSpeed, simulatedMinutes]);
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -254,7 +255,9 @@ export default function SimulatorScreen() {
   const transitionStartedRef = useRef(false);
   const reelRunRef = useRef<WeekReelRun | null>(null);
   const reelCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [selectedFastForward, setSelectedFastForward] = useState<FastForwardPeriod>('1M');
+  const [selectedFastForward, setSelectedFastForward] = useState<FastForwardPeriod>(initialSimulation?.fastForwardPeriod ?? '1M');
+  useEffect(() => saveSimulationState({ simSpeed, simulatedMinutes, avatarVariant, viewedFloor: currentFloor, fastForwardPeriod: selectedFastForward }),
+    [avatarVariant, currentFloor, selectedFastForward, simSpeed, simulatedMinutes]);
   const [isWeekReelPlaying, setIsWeekReelPlaying] = useState(false);
   const [weekReelView, setWeekReelView] = useState<{ segment: WeekReelSegment; savingsRm: number } | null>(null);
   const [reducedWeekSummary, setReducedWeekSummary] = useState<ReturnType<typeof getReducedMotionSummary> | null>(null);
@@ -283,9 +286,7 @@ export default function SimulatorScreen() {
     setIsWeekReelPlaying(false);
     setWeekReelView(null);
     setReducedWeekSummary(null);
-    const baseBill = monthlyBillRmRef.current;
-    const targetMax = Math.max(237, Math.round(baseBill * 2.2));
-    setAnimatedBillRm(targetMax);
+    setAnimatedBillRm(null);
     if (!run) return;
     avatarTargetRef.current = null;
     avatarPathQueueRef.current = [];
@@ -382,13 +383,11 @@ export default function SimulatorScreen() {
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
       setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, overallProgress));
       const baseBill = monthlyBillRmRef.current;
-      const targetMax = Math.max(237, Math.round(baseBill * 2.2));
-      const tickingBill = Math.round(baseBill + (targetMax - baseBill) * overallProgress);
-      setAnimatedBillRm(tickingBill);
+      setAnimatedBillRm(baseBill);
       if (segmentProgress < 1) return;
       if (run.index === run.segments.length - 1) {
         run.completing = true;
-        setAnimatedBillRm(targetMax);
+        setAnimatedBillRm(null);
         setWeekReelView({ segment: run.segments[run.index], savingsRm: run.totalSavingsRm });
         setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, 1));
         reelCompletionTimerRef.current = setTimeout(completeWeekReel, reduceMotion ? 0 : 700);
@@ -561,10 +560,9 @@ export default function SimulatorScreen() {
     if (isWeekReelPlaying || reducedWeekSummary) { stopWeekReel(); return; }
     const segments = buildWeekReel(routineBlocks);
     const totalSavingsRm = calcTotalSavings(CURRENT_MONTHLY_SAVINGS_RM, selectedFastForward);
-    const targetMax = Math.max(237, Math.round(monthlyBillRm * 2.2));
     if (reduceMotion) {
       setReducedWeekSummary(getReducedMotionSummary(routineBlocks, totalSavingsRm));
-      setAnimatedBillRm(targetMax);
+      setAnimatedBillRm(null);
       setAiReportVisible(true);
       return;
     }
@@ -1059,7 +1057,7 @@ export default function SimulatorScreen() {
         onSave={handleSaveAppliance} onCancel={handleCancelApplianceSheet} onDelete={handleDeleteItem} />
       <FurnitureDetailsSheet visible={furnitureSheetVisible} item={editingFurniture} rooms={setupRooms}
         onSave={handleSaveFurniture} onCancel={() => { setFurnitureSheetVisible(false); setEditingFurniture(null); }} onDelete={handleDeleteItem} />
-      {aiReportVisible && <AIAnalysisReportModal visible appliances={appliancesForBillModal} onClose={() => {
+      {aiReportVisible && <AIAnalysisReportModal visible appliances={items} onClose={() => {
         setAiReportVisible(false);
         setSuggestionVisible(true);
       }} />}

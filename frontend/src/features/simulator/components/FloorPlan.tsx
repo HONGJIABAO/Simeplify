@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
-import { DoorOpen, Hand, UserRound } from 'lucide-react-native';
+import { DoorOpen, Hand, Plus, UserRound } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -26,6 +26,7 @@ import {
   getSlotRect,
 } from '../logic/roomLayout';
 import { getFloorSpriteSizes } from '../logic/spriteSizing';
+import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
 import {
   footprintOverlapArea,
   getDoorKeepOuts,
@@ -100,6 +101,8 @@ export function FloorPlan({
   const [containerSize, setContainerSize] = useState({ width: 350, height: 350 });
   const [settledZoom, setSettledZoom] = useState(1);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [revealedRoomIds, setRevealedRoomIds] = useState<Set<string>>(() => new Set());
+  const roomTagTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -121,6 +124,31 @@ export function FloorPlan({
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => () => {
+    Object.values(roomTagTimers.current).forEach(clearTimeout);
+  }, []);
+
+  const setRoomTagVisible = (roomId: string, visible: boolean) => {
+    const existing = roomTagTimers.current[roomId];
+    if (existing) clearTimeout(existing);
+    setRevealedRoomIds((current) => {
+      const next = new Set(current);
+      if (visible) next.add(roomId);
+      else next.delete(roomId);
+      return next;
+    });
+    if (visible) {
+      roomTagTimers.current[roomId] = setTimeout(() => {
+        setRevealedRoomIds((current) => {
+          const next = new Set(current);
+          next.delete(roomId);
+          return next;
+        });
+        delete roomTagTimers.current[roomId];
+      }, 3000);
+    }
+  };
 
   useEffect(() => {
     floor2Opacity.value = withTiming(currentFloor === 2 ? 1 : 0, {
@@ -265,6 +293,7 @@ export function FloorPlan({
               isHovered={hoveredRoomId === room.id}
               isEditMode={isEditMode}
               isOccupied={avatarState.currentFloor === floor && avatarState.currentRoomId === room.id}
+              onTagVisibilityChange={setRoomTagVisible}
               onPress={onRoomPress}
             />
           );
@@ -339,7 +368,8 @@ export function FloorPlan({
         {floorItems.map((item) => {
           const room = floorRooms.find((candidate) => candidate.id === item.roomId);
           if (!room) return null;
-          const uniformItemSize = spriteSizes.item;
+          const isSmallLight = ['light_bulb', 'lights'].includes(item.type) || ['light_bulb', 'light'].includes(item.spriteKey);
+          const uniformItemSize = spriteSizes.item * (isSmallLight ? 0.5 : 1);
           const isFurniture = item.category === 'Furniture';
           const isOn = !isFurniture && (activeApplianceIds.includes(item.id) || item.alwaysOn || item.isOn);
           return (
@@ -361,6 +391,25 @@ export function FloorPlan({
               onRotate={onRotateItem}
               onMoveEnd={onMoveItemEnd}
             />
+          );
+        })}
+
+        {floorRooms.map((room) => {
+          const rect = layout.rooms.find((candidate) => candidate.slot === room.slot);
+          if (!rect || !(isEditMode || hoveredRoomId === room.id || revealedRoomIds.has(room.id))) return null;
+          const theme = ROOM_TYPE_SETTINGS[room.type];
+          const occupied = avatarState.currentFloor === floor && avatarState.currentRoomId === room.id;
+          return (
+            <View key={`tag-${room.id}`} pointerEvents="none" style={[styles.roomTag, {
+              left: rect.x * width + 8,
+              top: rect.y * height + 10,
+              maxWidth: rect.width * width - 16,
+            }]}>
+              {room.isSetUp ? <View style={[styles.roomTagDot, { backgroundColor: theme.accentColor }]} />
+                : <Plus size={14} color="#57534E" strokeWidth={1.5} />}
+              <Text style={styles.roomTagText} numberOfLines={1}>{room.isSetUp ? room.name : 'Tap to set up'}</Text>
+              {occupied && room.isSetUp && <View style={styles.roomInUse}><Text style={styles.roomInUseText}>In use</Text></View>}
+            </View>
           );
         })}
 
@@ -570,4 +619,11 @@ const styles = StyleSheet.create({
   solarImage: { width: 52, height: 52 },
   solarBadge: { minHeight: 20, marginTop: 3, paddingHorizontal: 9, borderRadius: 9999, backgroundColor: '#566549', justifyContent: 'center' },
   solarBadgeText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#F5F5F4' },
+  roomTag: { position: 'absolute', minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#FFFFFF', borderRadius: 9999, paddingHorizontal: 9, paddingVertical: 4,
+    borderWidth: 1, borderColor: '#E7E5E4', zIndex: 3000, elevation: 20 },
+  roomTagDot: { width: 7, height: 7, borderRadius: 4 },
+  roomTagText: { flexShrink: 1, fontFamily: 'SourceSans3_600SemiBold', fontSize: 12, color: '#292524' },
+  roomInUse: { backgroundColor: '#E0E6D9', borderRadius: 9999, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 2 },
+  roomInUseText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 11, color: '#566549' },
 });

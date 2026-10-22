@@ -15,6 +15,7 @@ export function ApplianceSuggestionSheet({ visible, onApply, onClose }: Applianc
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay} pointerEvents="box-none">
+        <View style={styles.phoneFrame}>
         <EditSheetSurface>
           <View style={styles.recommendationImage}>
             <Image source={SOLAR_RECOMMENDATION_SOURCE} style={styles.image} contentFit="contain" />
@@ -33,13 +34,15 @@ export function ApplianceSuggestionSheet({ visible, onApply, onClose }: Applianc
             </Pressable>
           </View>
         </EditSheetSurface>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingBottom: 64 },
+  overlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 64 },
+  phoneFrame: { width: '100%', maxWidth: 430 },
   recommendationImage: { height: 76, borderRadius: 22, backgroundColor: '#F6E8D8', borderWidth: 1, borderColor: '#E6C39B', alignItems: 'center', justifyContent: 'center' },
   image: { width: 94, height: 70 },
   closeButton: { position: 'absolute', top: 4, right: 4, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.86)' },

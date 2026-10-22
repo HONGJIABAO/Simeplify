@@ -93,11 +93,16 @@ test('real room rows are preserved and are not duplicated by default furnishing'
   assert.equal(furnished.find((item) => item.roomId === rooms[0].id)?.id, 'real-row');
 });
 
-test('floor-plan item art uses one uniform 2.2x scale while the avatar stays separate', () => {
+test('floor-plan base art uses 2.2x scale while the avatar stays separate', () => {
   const sizes = getFloorSpriteSizes(350);
   assert.equal(FLOOR_ITEM_SCALE, 2.2);
   assert.equal(sizes.item, FLOOR_SPRITE_BASE_SIZE.item * 2.2);
   assert.notEqual(sizes.item, sizes.avatar);
+});
+
+test('floor plan renders bulbs and lamps at half the standard item size', () => {
+  const floorPlan = readFileSync(resolve(FRONTEND_ROOT, 'src/features/simulator/components/FloorPlan.tsx'), 'utf8');
+  assert.match(floorPlan, /isSmallLight[\s\S]*uniformItemSize = spriteSizes\.item \* \(isSmallLight \? 0\.5 : 1\)/);
 });
 
 test('free drag clamps the item centre so the enlarged square stays inside its room', () => {
@@ -151,12 +156,12 @@ test('every sprite manifest require points to an existing file', () => {
 test('ROOM_SLOTS contains the requested fixed centres, widths, and facing', () => {
   assert.deepEqual(Object.keys(ROOM_SLOTS), ['f1-A', 'f1-B', 'f1-C', 'f1-D', 'f2-A', 'f2-B', 'f2-C', 'f2-D']);
   assert.deepEqual(ROOM_SLOTS['f1-A'].slots.find((slot) => slot.type === 'tv'),
-    { type: 'tv', spriteKey: 'tv', x: 0.46, y: 0.35, bottom: 0.44, h: 0.18, w: 0.15, facing: 'down' });
+    { type: 'tv', spriteKey: 'tv', x: 0.43, y: 0.21, bottom: 0.30, h: 0.18, w: 0.15, facing: 'down' });
   assert.equal(ROOM_SLOTS['f1-A'].slots.filter((slot) => slot.type === 'table').length, 1);
   assert.equal(ROOM_SLOTS['f1-B'].slots.find((slot) => slot.type === 'refrigerator').x, 0.22);
-  assert.equal(ROOM_SLOTS['f1-C'].slots.find((slot) => slot.type === 'washing_machine').x, 0.27);
+  assert.equal(ROOM_SLOTS['f1-C'].slots.find((slot) => slot.type === 'washing_machine').x, 0.24);
   assert.equal(ROOM_SLOTS['f1-D'].slots.find((slot) => slot.type === 'water_heater').x, 0.75);
-  assert.equal(ROOM_SLOTS['f2-C'].slots.find((slot) => slot.type === 'workplace').x, 0.26);
+  assert.equal(ROOM_SLOTS['f2-C'].slots.find((slot) => slot.type === 'workplace').x, 0.25);
   assert.equal(ROOM_SLOTS['f2-B'].slots.some((slot) => slot.type === 'workplace'), false);
 });
 

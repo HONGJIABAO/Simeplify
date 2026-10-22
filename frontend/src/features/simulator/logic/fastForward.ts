@@ -4,24 +4,24 @@
  * Source: docs/Feature_Requirements.md SIM-04, docs/Workflow.md W3c, docs/design.md Unit 12 §3c.
  *
  * Rules:
- * - Time stops: 1M (1 month), 6M (6 months), 1Y (12 months).
+ * - Time stops: 1W (1 week), 1M (1 month), 1Y (12 months).
  * - Total savings = monthly saving × months.
  * - With no swap and no solar, savings is RM 0.
- * - Animation duration: 4 s (1M), 6 s (6M), 8 s (1Y).
+ * - Animation duration: 3 s (1W), 4 s (1M), 8 s (1Y).
  * - Animation never alters calculated savings. Reads and writes no data.
  */
 
-export type FastForwardPeriod = '1M' | '6M' | '1Y';
+export type FastForwardPeriod = '1W' | '1M' | '1Y';
 
 export const PERIOD_MONTHS: Record<FastForwardPeriod, number> = {
+  '1W': 7 / 30,
   '1M': 1,
-  '6M': 6,
   '1Y': 12,
 };
 
 export const PERIOD_DURATIONS_MS: Record<FastForwardPeriod, number> = {
+  '1W': 3000,
   '1M': 4000,
-  '6M': 6000,
   '1Y': 8000,
 };
 
