@@ -407,7 +407,15 @@ on conflict (id) do update set
   end_time      = excluded.end_time,
   appliances_on = excluded.appliances_on;
 
--- 4.9. Bills History (Past 5 months of Electricity & Water for Scanner 5-month Chart)
+-- 4.9. Bills History (3 sample bills for the past 3 consecutive months: TNB Electricity & Air Selangor Water)
+delete from public.bills
+where household_id = 'd3b00000-0000-0000-0000-000000000002'::uuid
+  and id not in (
+    'd3b00000-0000-0000-0006-000000000001'::uuid,
+    'd3b00000-0000-0000-0006-000000000002'::uuid,
+    'd3b00000-0000-0000-0006-000000000003'::uuid
+  );
+
 insert into public.bills (
   id,
   household_id,
@@ -418,22 +426,47 @@ insert into public.bills (
   amount,
   analysis
 ) values
-  -- Electricity (Past 5 billing cycles)
-  ('d3b00000-0000-0000-0006-000000000001'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/tnb_2026_06.pdf', 'electricity', '2026-06-01'::date, 430, 119.80, '{"summary":"Summer baseline electricity usage.","comparison":{"mom_change_pct":0,"actual_usage":430,"previous_usage":null},"tips":["Use timers on air conditioning."],"estimate_kwh":450,"lower_than_estimate":true}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/tnb_2026_07.pdf', 'electricity', '2026-07-01'::date, 415, 113.70, '{"summary":"Usage down 3.5% vs previous month.","comparison":{"mom_change_pct":-3.5,"actual_usage":415,"previous_usage":430},"tips":["Keep aircon at 24°C."],"estimate_kwh":430,"lower_than_estimate":true}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000003'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/tnb_2026_08.pdf', 'electricity', '2026-08-01'::date, 395, 106.10, '{"summary":"Consistent downward trend in electricity consumption.","comparison":{"mom_change_pct":-4.8,"actual_usage":395,"previous_usage":415},"tips":["Unplug standby electronics."],"estimate_kwh":410,"lower_than_estimate":true}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000004'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/tnb_2026_09.pdf', 'electricity', '2026-09-01'::date, 380, 100.40, '{"summary":"Great energy savings. Usage is 3.8% lower than last month.","comparison":{"mom_change_pct":-3.8,"actual_usage":380,"previous_usage":395},"tips":["Clean AC air filters regularly."],"estimate_kwh":390,"lower_than_estimate":true}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000005'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/tnb_2026_10.pdf', 'electricity', '2026-10-01'::date, 350, 89.20, '{"summary":"Outstanding energy conservation! Usage is 7.9% lower than last month and beats your Simulator estimate.","comparison":{"mom_change_pct":-7.9,"actual_usage":350,"previous_usage":380},"tips":["Maintain 24°C inverter setpoint.","Use ceiling fan for airflow."],"estimate_kwh":375,"lower_than_estimate":true}'::jsonb),
-  -- Water (Past 5 billing cycles)
-  ('d3b00000-0000-0000-0006-000000000006'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/air_selangor_2026_06.pdf', 'water', '2026-06-01'::date, 18, 15.20, '{"summary":"Normal residential water consumption.","comparison":{"mom_change_pct":0,"actual_usage":18,"previous_usage":null},"tips":["Limit shower times."]}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000007'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/air_selangor_2026_07.pdf', 'water', '2026-07-01'::date, 17, 14.30, '{"summary":"Water consumption steady.","comparison":{"mom_change_pct":-5.5,"actual_usage":17,"previous_usage":18},"tips":["Check toilet flappers for leaks."]}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000008'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/air_selangor_2026_08.pdf', 'water', '2026-08-01'::date, 16, 13.50, '{"summary":"Usage down 5.9%.","comparison":{"mom_change_pct":-5.9,"actual_usage":16,"previous_usage":17},"tips":["Turn off tap while soaping."]}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000009'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/air_selangor_2026_09.pdf', 'water', '2026-09-01'::date, 16, 13.50, '{"summary":"Usage consistent with previous month.","comparison":{"mom_change_pct":0,"actual_usage":16,"previous_usage":16},"tips":["Water plants early in the morning."]}'::jsonb),
-  ('d3b00000-0000-0000-0006-000000000010'::uuid, 'd3b00000-0000-0000-0000-000000000002'::uuid, 'd3b00000-0000-0000-0000-000000000002/air_selangor_2026_10.pdf', 'water', '2026-10-01'::date, 15, 12.60, '{"summary":"Excellent water conservation! Usage is 6.25% lower than last month with zero leaks detected.","comparison":{"mom_change_pct":-6.25,"actual_usage":15,"previous_usage":16},"tips":["Keep up the short shower habit.","Use aerators on sink taps."]}'::jsonb)
-on conflict (household_id, type, billing_month) do update set
-  usage    = excluded.usage,
-  amount   = excluded.amount,
-  analysis = excluded.analysis;
+  -- Air Selangor Water Bill (August 2026)
+  (
+    'd3b00000-0000-0000-0006-000000000001'::uuid,
+    'd3b00000-0000-0000-0000-000000000002'::uuid,
+    '',
+    'water',
+    '2026-08-01'::date,
+    16,
+    13.50,
+    '{"summary":"Normal residential water consumption.","comparison":{"mom_change_pct":0,"actual_usage":16,"previous_usage":null},"tips":["Keep up the short shower habit."]}'::jsonb
+  ),
+  -- TNB Electricity Bill (September 2026 - Previous Month Baseline)
+  (
+    'd3b00000-0000-0000-0006-000000000002'::uuid,
+    'd3b00000-0000-0000-0000-000000000002'::uuid,
+    '',
+    'electricity',
+    '2026-09-01'::date,
+    380,
+    100.40,
+    '{"summary":"Great energy savings. Consistent downward trend in electricity consumption.","comparison":{"mom_change_pct":-3.8,"actual_usage":380,"previous_usage":395},"tips":["Clean AC air filters regularly."],"estimate_kwh":390,"lower_than_estimate":true}'::jsonb
+  ),
+  -- TNB Electricity Bill (October 2026 - Latest Month with Simulator Estimate)
+  (
+    'd3b00000-0000-0000-0006-000000000003'::uuid,
+    'd3b00000-0000-0000-0000-000000000002'::uuid,
+    '',
+    'electricity',
+    '2026-10-01'::date,
+    350,
+    89.20,
+    '{"summary":"Outstanding energy conservation! Usage is 7.9% lower than last month and beats your Simulator estimate.","comparison":{"mom_change_pct":-7.9,"actual_usage":350,"previous_usage":380},"tips":["Maintain 24°C inverter setpoint.","Use ceiling fan for airflow."],"estimate_kwh":380,"lower_than_estimate":true}'::jsonb
+  )
+on conflict (id) do update set
+  household_id  = excluded.household_id,
+  file_path     = excluded.file_path,
+  type          = excluded.type,
+  billing_month = excluded.billing_month,
+  usage         = excluded.usage,
+  amount        = excluded.amount,
+  analysis      = excluded.analysis;
 
 -- 4.10. Water Alerts
 insert into public.alerts (
@@ -445,11 +478,12 @@ insert into public.alerts (
 ) values (
   'd3b00000-0000-0000-0007-000000000001'::uuid,
   'd3b00000-0000-0000-0000-000000000002'::uuid,
-  'd3b00000-0000-0000-0006-000000000010'::uuid,
+  'd3b00000-0000-0000-0006-000000000001'::uuid,
   'normal',
   'Water usage is within normal residential bounds.'
 )
 on conflict (id) do update set
+  bill_id = excluded.bill_id,
   level   = excluded.level,
   message = excluded.message;
 

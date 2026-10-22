@@ -93,7 +93,7 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
   assert.equal(blocksError, null, `Day blocks error: ${blocksError?.message}`);
   assert.equal(blocks.length, 5, `Expected 5 day blocks, got ${blocks.length}`);
 
-  // 7. Bills Verification (10 bills: 5 electric, 5 water)
+  // 7. Bills Verification (3 sample bills: 2 electric, 1 water)
   const { data: bills, error: billsError } = await client
     .from('bills')
     .select('*')
@@ -101,11 +101,11 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
     .order('billing_month', { ascending: false });
 
   assert.equal(billsError, null, `Bills error: ${billsError?.message}`);
-  assert.equal(bills.length, 10, `Expected 10 bills, got ${bills.length}`);
+  assert.equal(bills.length, 3, `Expected 3 bills, got ${bills.length}`);
   const electricBills = bills.filter((b) => b.type === 'electricity');
   const waterBills = bills.filter((b) => b.type === 'water');
-  assert.equal(electricBills.length, 5);
-  assert.equal(waterBills.length, 5);
+  assert.equal(electricBills.length, 2);
+  assert.equal(waterBills.length, 1);
 
   // 8. Alerts Verification
   const { data: alerts, error: alertsError } = await client
