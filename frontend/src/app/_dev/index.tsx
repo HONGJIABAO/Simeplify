@@ -23,7 +23,7 @@ const SCREENS = [
   { id: 'S5.2d', title: 'Bin: Gallery Upload', route: '/bin/upload', status: 'Ready' },
   { id: 'S5.3a', title: 'Bin: Result - Paper (+10 pts)', route: '/bin/result?binType=paper', status: 'Ready' },
   { id: 'S5.3b', title: 'Bin: Result - Plastic (+10 pts)', route: '/bin/result?binType=plastic', status: 'Ready' },
-  { id: 'S5.3c', title: 'Bin: Result - Glass & Metal (+10 pts)', route: '/bin/result?binType=glass_metal', status: 'Ready' },
+  { id: 'S5.3c', title: 'Bin: Result - Glass (+10 pts)', route: '/bin/result?binType=glass_metal', status: 'Ready' },
   { id: 'S5.3d', title: 'Bin: Result - General Waste (0 pts)', route: '/bin/result?binType=general', status: 'Ready' },
   { id: 'S5.3e', title: 'Bin: Result - Daily Limit Reached', route: '/bin/result?binType=paper&state=daily-limit', status: 'Ready' },
   { id: 'S5.3f', title: 'Bin: Result - Low Confidence', route: '/bin/result?state=low-confidence', status: 'Ready' },
