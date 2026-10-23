@@ -581,7 +581,7 @@ export function CommunityDashboard({
               <Text style={styles.lockPromptTime}>Action needed before tomorrow</Text>
             </View>
             <Text style={styles.lockPromptDesc}>
-              Complete any task below to unlock your leaf. If tomorrow arrives without unlocking, 1 deed will be penalized (Recycling Points are never deducted):
+              Complete any task below to unlock your leaf. If tomorrow arrives without any action, your leaf drops 1 status, penalizes 1 deed, and unlocks (Recycling Points are unaffected):
             </Text>
             <View style={styles.lockQuickActionsRow}>
               <Pressable

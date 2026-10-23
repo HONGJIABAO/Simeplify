@@ -12,9 +12,11 @@ import {
   CheckCircle2,
   Clock,
   Leaf,
+  Lock,
   Recycle,
   RotateCcw,
   Sparkles,
+  Unlock,
   Vote,
   X,
   Zap,
@@ -239,7 +241,7 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                       Advance Next Day (+1 Day)
                     </Text>
                     <Text style={styles.presetHint}>
-                      Simulate transition to next day: triggers Leaf lock & daily check
+                      Transition to next day: if locked with no action, drops 1 status & unlocks
                     </Text>
                   </View>
                 </Pressable>
@@ -347,6 +349,25 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                     <Text style={styles.actionBtnSecondaryTitle}>Sort an item cleanly in bin</Text>
                     <Text style={styles.actionBtnSecondarySub}>
                       +10 recycling pts & +10 monthly pts (Now: {currentHousehold.recyclingPts} pts)
+                    </Text>
+                  </View>
+                </Pressable>
+
+                {/* Toggle Leaf Lock State */}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setIsLeafLocked((prev) => !prev)}
+                  style={({ pressed }) => [styles.actionBtnSecondary, pressed && styles.pressed]}
+                >
+                  {isLeafLocked ? <Unlock size={16} color="#566549" /> : <Lock size={16} color="#D97706" />}
+                  <View style={styles.flexOne}>
+                    <Text style={styles.actionBtnSecondaryTitle}>
+                      {isLeafLocked ? 'Unlock leaf manually' : 'Lock leaf (Test locked status)'}
+                    </Text>
+                    <Text style={styles.actionBtnSecondarySub}>
+                      {isLeafLocked
+                        ? 'Currently 🔒 Locked. Advance day without action to test -1 stage drop & unlock.'
+                        : 'Currently 🔓 Unlocked. Tap to lock leaf.'}
                     </Text>
                   </View>
                 </Pressable>

@@ -19,10 +19,13 @@ import { DEMO_HOUSEHOLD_ID } from './authSession';
 import {
   INITIAL_DATA_BY_MONTH,
   MONTH_REWARDS,
+  downgradeLeafStage,
   type LeafStage,
   type MockHousehold,
   type MonthRewardDef,
 } from './services/mockEcoData';
+
+export { downgradeLeafStage };
 
 export interface MonthSummary {
   month: string; // YYYY-MM
@@ -188,29 +191,35 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
       // If advancing to a different date:
       if (newDate !== oldDate) {
         const deedsOnOldDay = deedsByDate[oldDate] ?? 0;
-        // Requirement 4 & 5: If failed to unlock before following day, penalty applies ONLY to deeds
-        if (isLeafLocked || deedsOnOldDay === 0) {
+        // When leaf was locked and user had no action all day:
+        // Next day directly downgrades 1 status and enters unlocked state!
+        const wasLockedWithoutAction = isLeafLocked && deedsOnOldDay === 0;
+
+        if (wasLockedWithoutAction) {
           updateCurrentHousehold((h) => {
             const nextDeeds = Math.max(0, h.monthlyDeeds - 1);
+            const nextStage = downgradeLeafStage(h.leafStage);
             return {
               ...h,
               monthlyDeeds: nextDeeds,
-              leafStage: 'dry' as LeafStage,
+              leafStage: nextStage,
               penaltyDeedsLost: h.penaltyDeedsLost + 1,
               // STRICT RULE (Requirement 5): recyclingPts is untouched!
               recyclingPts: h.recyclingPts,
             };
           });
           setPenaltyNotice(
-            'Missed-day penalty applied: -1 deed. Your Recycling Points remain safe and unaffected.'
+            'Missed-day penalty applied: leaf stage dropped by 1 level (-1 deed). Living Leaf is now unlocked for today.'
           );
+          // Unlock status on next day!
+          setIsLeafLocked(false);
+          setLockPromptVisible(false);
         } else {
           setPenaltyNotice(null);
+          // When not locked-without-action, new day enters locked state awaiting today's action
+          setIsLeafLocked(true);
+          setLockPromptVisible(true);
         }
-
-        // On the new day, leaf temporarily enters locked/shrunk state until an action is performed
-        setIsLeafLocked(true);
-        setLockPromptVisible(true);
       }
 
       // If jumping to a new month like November 2026 that has not been initialized yet:
@@ -239,8 +248,8 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Advance Next Day: advances 1 calendar day and executes real day rollover penalty.
-  // Requirement 4 & 5: If the user fails to perform the unlocking action before the following day arrives,
-  // they must be penalized by losing 1 Deed. Miss-day penalty MUST ONLY deduct Deeds (recyclingPts unaffected).
+  // When leaf status was locked, and user had NO action for the whole day (deedsOnOldDay === 0):
+  // Next day directly downgrades by one status, and enters unlocked status!
   const advanceNextDay = useCallback(() => {
     const oldDate = demoDate;
     const oldMonth = oldDate.slice(0, 7);
@@ -251,32 +260,34 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
 
     setDemoDateState(newDate);
 
-    // Requirement 4 & 5:
-    // If the previous day remained locked (action not performed before following day arrives)
-    // or had 0 actions completed: penalize 1 Deed only.
-    if (isLeafLocked || deedsOnOldDay === 0) {
+    const wasLockedWithoutAction = isLeafLocked && deedsOnOldDay === 0;
+
+    if (wasLockedWithoutAction) {
       updateCurrentHousehold((h) => {
         const nextDeeds = Math.max(0, h.monthlyDeeds - 1);
+        const nextStage = downgradeLeafStage(h.leafStage);
         const nextLost = h.penaltyDeedsLost + 1;
         return {
           ...h,
           monthlyDeeds: nextDeeds,
-          leafStage: 'dry' as LeafStage,
+          leafStage: nextStage,
           penaltyDeedsLost: nextLost,
           // STRICT RULE (Requirement 5): recyclingPts is strictly unaffected by missed days
           recyclingPts: h.recyclingPts,
         };
       });
       setPenaltyNotice(
-        'Missed-day penalty applied: -1 deed lost. Your Recycling Points remain unaffected.'
+        'Missed-day penalty applied: leaf stage dropped by 1 level (-1 deed). Living Leaf is now unlocked for today.'
       );
+      // Unlock status on next day!
+      setIsLeafLocked(false);
+      setLockPromptVisible(false);
     } else {
       setPenaltyNotice(null);
+      // On normal transition to next day, Leaf temporarily enters visually shrunk/locked state awaiting today's action
+      setIsLeafLocked(true);
+      setLockPromptVisible(true);
     }
-
-    // Requirement 4: On transition to next day, Leaf temporarily enters visually shrunk/locked state
-    setIsLeafLocked(true);
-    setLockPromptVisible(true);
 
     // Initialize new month if crossing boundary
     if (newMonth !== oldMonth) {
