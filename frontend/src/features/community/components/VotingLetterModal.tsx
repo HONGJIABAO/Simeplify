@@ -70,10 +70,10 @@ export function VotingLetterModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.scrimOverlay}>
+      <View style={styles.scrimOverlay} className="flex-1 justify-end items-center">
         <Pressable style={styles.scrimPressable} onPress={onClose} />
 
-        <View style={styles.sheetContainer}>
+        <View style={styles.sheetContainer} className="max-w-md mx-auto w-full">
           {/* Top Drag Handle */}
           <View style={styles.dragHandle} />
 

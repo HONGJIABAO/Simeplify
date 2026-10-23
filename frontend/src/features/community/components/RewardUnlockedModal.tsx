@@ -43,8 +43,8 @@ export function RewardUnlockedModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.contentCard}>
+      <View style={styles.modalBackdrop} className="flex-1 justify-center items-center p-4">
+        <View style={styles.contentCard} className="max-w-md mx-auto w-full">
           {/* Top Bar with Close X */}
           <View style={styles.topBar}>
             <View style={{ width: 36 }} />

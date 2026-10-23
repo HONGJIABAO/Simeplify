@@ -57,9 +57,12 @@ interface EcoHabitContextType {
   todayDeedsCount: number; // 0..2
   penaltyNotice: string | null;
   currentHousehold: MockHousehold;
+  isLeafLocked: boolean;
+  lockPromptVisible: boolean;
   setDemoDate: (newDate: string) => void;
   advanceNextDay: () => void;
   completeGreenAction: () => boolean;
+  addDeed: (source?: string) => boolean;
   sortRecycleItem: () => void;
   quickRecyclePts: (amount?: number) => void;
   restoreDeed: () => boolean;
@@ -68,6 +71,9 @@ interface EcoHabitContextType {
   toggleCommunityRate: () => void;
   isCommunityRateAbove60: boolean;
   dismissPenaltyNotice: () => void;
+  dismissLockPrompt: () => void;
+  unlockLeaf: () => void;
+  setIsLeafLocked: React.Dispatch<React.SetStateAction<boolean>>;
   getMonthSummary: (isoMonthKey: string) => MonthSummary;
   isVotingVisible: boolean;
   countdown: CountdownState;
@@ -99,6 +105,11 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
   });
 
   const todayDeedsCount = deedsByDate[demoDate] ?? 0;
+
+  // Track Leaf Status "Next Day" Lock (Requirement 4)
+  // When system detects a transition to the next day, leaf temporarily enters locked/shrunk state
+  const [isLeafLocked, setIsLeafLocked] = useState<boolean>(false);
+  const [lockPromptVisible, setLockPromptVisible] = useState<boolean>(false);
 
   // Track vote status per month: '2026-08', '2026-09', '2026-10', '2026-11'
   const [hasVotedByMonth, setHasVotedByMonth] = useState<Record<string, boolean>>({
@@ -167,12 +178,40 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
     [currentMonthKey]
   );
 
-  // Demo Date Jump: only changes simulated "today". Keeps per-month and per-day data.
-  // Does NOT apply penalties for skipped days.
+  // Demo Date Jump: changes simulated "today"
   const setDemoDate = useCallback(
     (newDate: string) => {
+      const oldDate = demoDate;
       const newMonth = newDate.slice(0, 7);
       setDemoDateState(newDate);
+
+      // If advancing to a different date:
+      if (newDate !== oldDate) {
+        const deedsOnOldDay = deedsByDate[oldDate] ?? 0;
+        // Requirement 4 & 5: If failed to unlock before following day, penalty applies ONLY to deeds
+        if (isLeafLocked || deedsOnOldDay === 0) {
+          updateCurrentHousehold((h) => {
+            const nextDeeds = Math.max(0, h.monthlyDeeds - 1);
+            return {
+              ...h,
+              monthlyDeeds: nextDeeds,
+              leafStage: 'dry' as LeafStage,
+              penaltyDeedsLost: h.penaltyDeedsLost + 1,
+              // STRICT RULE (Requirement 5): recyclingPts is untouched!
+              recyclingPts: h.recyclingPts,
+            };
+          });
+          setPenaltyNotice(
+            'Missed-day penalty applied: -1 deed. Your Recycling Points remain safe and unaffected.'
+          );
+        } else {
+          setPenaltyNotice(null);
+        }
+
+        // On the new day, leaf temporarily enters locked/shrunk state until an action is performed
+        setIsLeafLocked(true);
+        setLockPromptVisible(true);
+      }
 
       // If jumping to a new month like November 2026 that has not been initialized yet:
       setHouseholdsByMonth((prev) => {
@@ -182,7 +221,7 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
             monthlyDeeds: 0,
             leafStage: 'dry',
             penaltyDeedsLost: 0,
-            recyclingPts: 0,
+            recyclingPts: h.recyclingPts, // keep accumulated recycling points safe
             monthlyPoints: 0,
             energySaved: 0,
             lastActionDate: newDate,
@@ -196,11 +235,12 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
         return prev;
       });
     },
-    []
+    [demoDate, deedsByDate, isLeafLocked, updateCurrentHousehold]
   );
 
   // Advance Next Day: advances 1 calendar day and executes real day rollover penalty.
-  // If the previous day had 0 counted actions: apply missed-day penalty once.
+  // Requirement 4 & 5: If the user fails to perform the unlocking action before the following day arrives,
+  // they must be penalized by losing 1 Deed. Miss-day penalty MUST ONLY deduct Deeds (recyclingPts unaffected).
   const advanceNextDay = useCallback(() => {
     const oldDate = demoDate;
     const oldMonth = oldDate.slice(0, 7);
@@ -211,26 +251,32 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
 
     setDemoDateState(newDate);
 
-    if (deedsOnOldDay === 0) {
+    // Requirement 4 & 5:
+    // If the previous day remained locked (action not performed before following day arrives)
+    // or had 0 actions completed: penalize 1 Deed only.
+    if (isLeafLocked || deedsOnOldDay === 0) {
       updateCurrentHousehold((h) => {
         const nextDeeds = Math.max(0, h.monthlyDeeds - 1);
-        const nextStage: LeafStage = h.leafStage === 'lush' ? 'healthy' : 'dry';
-        const nextPoints = Math.max(0, h.monthlyPoints - DEED_POINTS);
         const nextLost = h.penaltyDeedsLost + 1;
         return {
           ...h,
           monthlyDeeds: nextDeeds,
-          leafStage: nextStage,
-          monthlyPoints: nextPoints,
+          leafStage: 'dry' as LeafStage,
           penaltyDeedsLost: nextLost,
+          // STRICT RULE (Requirement 5): recyclingPts is strictly unaffected by missed days
+          recyclingPts: h.recyclingPts,
         };
       });
       setPenaltyNotice(
-        `Missed-day penalty applied: -1 deed, -${DEED_POINTS} pts, and leaf stage dropped. Sort items to restore!`
+        'Missed-day penalty applied: -1 deed lost. Your Recycling Points remain unaffected.'
       );
     } else {
       setPenaltyNotice(null);
     }
+
+    // Requirement 4: On transition to next day, Leaf temporarily enters visually shrunk/locked state
+    setIsLeafLocked(true);
+    setLockPromptVisible(true);
 
     // Initialize new month if crossing boundary
     if (newMonth !== oldMonth) {
@@ -241,7 +287,7 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
             monthlyDeeds: 0,
             leafStage: 'dry',
             penaltyDeedsLost: 0,
-            recyclingPts: 0,
+            recyclingPts: h.recyclingPts,
             monthlyPoints: 0,
             energySaved: 0,
             lastActionDate: newDate,
@@ -255,33 +301,51 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
         return prev;
       });
     }
-  }, [demoDate, deedsByDate, updateCurrentHousehold]);
+  }, [demoDate, deedsByDate, isLeafLocked, updateCurrentHousehold]);
 
-  // Complete a green action (max 2 per day)
+  // Requirement 3 & 4: Whenever a task is completed in Simulator, Bin, or Scanner,
+  // it automatically adds/updates 1 Deed in Community and unlocks the Living Leaf if locked!
+  const addDeed = useCallback(
+    (_source?: string): boolean => {
+      const currentCount = deedsByDate[demoDate] ?? 0;
+      const nextCount = currentCount + 1;
+      setDeedsByDate((prev) => ({
+        ...prev,
+        [demoDate]: nextCount,
+      }));
+
+      // Requirement 4: Completing an action immediately unlocks the Living Leaf!
+      setIsLeafLocked(false);
+      setLockPromptVisible(false);
+
+      const nextStage: LeafStage = nextCount === 1 ? 'healthy' : 'lush';
+
+      updateCurrentHousehold((h) => ({
+        ...h,
+        monthlyDeeds: h.monthlyDeeds + 1,
+        monthlyPoints: h.monthlyPoints + DEED_POINTS,
+        leafStage: nextStage,
+        lastActionDate: demoDate,
+      }));
+
+      return true;
+    },
+    [deedsByDate, demoDate, updateCurrentHousehold]
+  );
+
+  // Complete a green action (triggers deed add and unlocks leaf)
   const completeGreenAction = useCallback((): boolean => {
-    const currentCount = deedsByDate[demoDate] ?? 0;
-    if (currentCount >= MAX_DEEDS_PER_DAY) {
-      return false; // 3rd action gives no deed or points
-    }
+    return addDeed('manual_action');
+  }, [addDeed]);
 
-    const nextCount = currentCount + 1;
-    setDeedsByDate((prev) => ({
-      ...prev,
-      [demoDate]: nextCount,
-    }));
+  const unlockLeaf = useCallback(() => {
+    setIsLeafLocked(false);
+    setLockPromptVisible(false);
+  }, []);
 
-    const nextStage: LeafStage = nextCount === 1 ? 'healthy' : 'lush';
-
-    updateCurrentHousehold((h) => ({
-      ...h,
-      monthlyDeeds: h.monthlyDeeds + 1,
-      monthlyPoints: h.monthlyPoints + DEED_POINTS,
-      leafStage: nextStage,
-      lastActionDate: demoDate,
-    }));
-
-    return true;
-  }, [deedsByDate, demoDate, updateCurrentHousehold]);
+  const dismissLockPrompt = useCallback(() => {
+    setLockPromptVisible(false);
+  }, []);
 
   // Add recycling points & monthly points
   const quickRecyclePts = useCallback(
@@ -411,6 +475,8 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
     setHouseholdsByMonth(copy);
     setDemoDateState('2026-10-23');
     setDeedsByDate({ '2026-10-23': 1 });
+    setIsLeafLocked(false);
+    setLockPromptVisible(false);
     setHasVotedByMonth({
       '2026-08': true,
       '2026-09': true,
@@ -561,9 +627,12 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
       todayDeedsCount,
       penaltyNotice,
       currentHousehold,
+      isLeafLocked,
+      lockPromptVisible,
       setDemoDate,
       advanceNextDay,
       completeGreenAction,
+      addDeed,
       sortRecycleItem,
       quickRecyclePts,
       restoreDeed,
@@ -572,6 +641,9 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
       toggleCommunityRate,
       isCommunityRateAbove60,
       dismissPenaltyNotice,
+      dismissLockPrompt,
+      unlockLeaf,
+      setIsLeafLocked,
       getMonthSummary,
       isVotingVisible,
       countdown,
@@ -582,9 +654,12 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
       todayDeedsCount,
       penaltyNotice,
       currentHousehold,
+      isLeafLocked,
+      lockPromptVisible,
       setDemoDate,
       advanceNextDay,
       completeGreenAction,
+      addDeed,
       sortRecycleItem,
       quickRecyclePts,
       restoreDeed,
@@ -593,6 +668,9 @@ export function EcoHabitProvider({ children }: { children: React.ReactNode }) {
       toggleCommunityRate,
       isCommunityRateAbove60,
       dismissPenaltyNotice,
+      dismissLockPrompt,
+      unlockLeaf,
+      setIsLeafLocked,
       getMonthSummary,
       isVotingVisible,
       countdown,

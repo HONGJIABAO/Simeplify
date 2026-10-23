@@ -34,10 +34,12 @@ import {
 import { useAuthSession } from '@/lib/authSession';
 import { fetchBinState, type BinState } from '@/lib/services/binService';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
+import { useEcoHabit } from '@/lib/ecoHabitContext';
 
 export default function BinHomeScreen() {
   const router = useRouter();
   const { session } = useAuthSession();
+  const { currentHousehold } = useEcoHabit();
   const householdId = session.profile?.household_id;
   const { hasUnread } = useUnreadNotifications(householdId);
 
@@ -59,10 +61,11 @@ export default function BinHomeScreen() {
     }, [loadState])
   );
 
-  const points = binState?.points ?? mockEcoProgress.points;
+  // Requirement 1: Eco Progress Points synchronized with Community page Recycling Pts
+  const points = currentHousehold.recyclingPts;
   const milestoneTarget = binState?.milestoneTarget ?? mockEcoProgress.milestoneTarget;
   const milestoneName = binState?.milestoneName ?? mockEcoProgress.milestoneName;
-  const itemsDiverted = binState?.itemsDiverted ?? mockEcoProgress.itemsDiverted;
+  const itemsDiverted = binState?.itemsDiverted ?? Math.max(0, Math.floor(points / 10));
   const scans = binState ? binState.recentScans : mockRecentScans;
 
   const progress = milestoneTarget > 0 ? points / milestoneTarget : 0;

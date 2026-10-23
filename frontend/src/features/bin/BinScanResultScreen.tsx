@@ -48,6 +48,7 @@ import { MiniCard } from '@/components/MiniCard';
 import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
+import { useEcoHabit } from '@/lib/ecoHabitContext';
 import {
   type BinType,
   type ClassifyWasteResult,
@@ -112,6 +113,7 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
 export default function BinScanResultScreen() {
   const router = useRouter();
   const { session } = useAuthSession();
+  const { sortRecycleItem, addDeed } = useEcoHabit();
   const householdId = session.profile?.household_id;
 
   const params = useLocalSearchParams<{
@@ -207,25 +209,29 @@ export default function BinScanResultScreen() {
     setIsSubmitting(true);
 
     try {
+      // Requirement 1 & 3: Global deed update and synchronized points
+      if (result.recyclable) {
+        sortRecycleItem();
+      }
+      addDeed('bin');
+
       if (params.scanId) {
         const confirmRes = await confirmDisposal(params.scanId, result.binType, householdId || undefined);
         if (confirmRes.pointsAwarded > 0) {
-          showToast('+10 points', 'success');
+          showToast('+10 points & +1 Deed added to Community!', 'success');
         } else if (confirmRes.alreadyConfirmed) {
-          showToast('Disposal already confirmed', 'info');
+          showToast('Disposal recorded (+1 Deed updated)', 'info');
         } else if (confirmRes.dailyLimitReached && result.recyclable) {
-          showToast('Daily limit reached. 0 points today.', 'warning');
+          showToast('+1 Deed added to Community!', 'success');
         } else {
-          showToast(confirmRes.message || 'Item sorted into General waste', 'info');
+          showToast(confirmRes.message || 'Item sorted & +1 Deed added to Community!', 'success');
         }
       } else {
         // Fallback for mock demo runs without real scanId
-        if (result.recyclable && !dailyLimitReached) {
-          showToast('+10 points', 'success');
-        } else if (result.recyclable && dailyLimitReached) {
-          showToast('Daily limit reached. 0 points today.', 'warning');
+        if (result.recyclable) {
+          showToast('+10 points & +1 Deed added to Community!', 'success');
         } else {
-          showToast('Item sorted into General waste', 'info');
+          showToast('Item sorted into General waste & +1 Deed added!', 'success');
         }
       }
 

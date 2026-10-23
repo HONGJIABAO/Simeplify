@@ -35,6 +35,7 @@ import { BillDetailSheet } from '@/components/scanner/BillDetailSheet';
 
 // Data & Services
 import { useAuthSession, DEMO_HOUSEHOLD_ID } from '@/lib/authSession';
+import { useEcoHabit } from '@/lib/ecoHabitContext';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
 import {
   type Bill,
@@ -178,6 +179,7 @@ const FIXTURE_ELEC_SPIKE_BILLS: Bill[] = [
 export default function ScannerScreen() {
   const { showToast } = useToast();
   const { session } = useAuthSession();
+  const { addDeed } = useEcoHabit();
   const householdId = session.profile?.household_id;
   const { hasUnread } = useUnreadNotifications(householdId);
 
@@ -449,6 +451,10 @@ export default function ScannerScreen() {
 
       // Clear in-memory token immediately after use
       inMemoryReadTokenRef.current = undefined;
+
+      // Requirement 3: Global deed update on completing Scanner task
+      addDeed('bill_scanner');
+      showToast('+1 Deed added to Community!', 'success');
 
       // Energy Points Message Handling
       if (result.points_awarded > 0) {
