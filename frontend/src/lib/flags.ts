@@ -39,8 +39,7 @@ export const RESULT_AT: string = '2026-10-29T09:00:00+08:00';
 // TODO(open-item 10 / Workflow item 10): Solar "See how" route is undefined in v1. Button triggers "coming soon" toast.
 export const SOLAR_SEE_HOW_ROUTE: string | null = null;
 
-// TODO(open-item 17 / page_refined §5 item 17): Leaf dial shows deeds / 3. Lush starts at 2+, but COM-03 caps daily points at 3.
-export const LEAF_DAILY_DEED_CAP: number = 3;
+export const LEAF_DAILY_DEED_CAP: number = 2;
 
 // TODO(open-item 1 / Workflow item 1): Monthly neighborhood points target to unlock community reward (mock example).
 export const COMMUNITY_MONTH_TARGET_PTS: number = 50000;

@@ -303,7 +303,7 @@ export default function ComponentGalleryScreen() {
             <ListItem
               leftIcon={<Leaf size={20} color="#566549" strokeWidth={1.5} />}
               title="Green Deeds Today"
-              rightValue={<Badge tone="sage">2 / 3</Badge>}
+              rightValue={<Badge tone="sage">2 / 2</Badge>}
               showDivider={false}
             />
           </Card>

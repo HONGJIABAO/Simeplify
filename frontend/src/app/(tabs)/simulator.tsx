@@ -1144,4 +1144,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
   undoTidyText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },
   dragGhostRoot: { position: Platform.OS === 'web' ? 'fixed' as any : 'absolute', width: 52, height: 52, opacity: 0.88, zIndex: 10000, elevation: 50 },
+  pressed: {
+    opacity: 0.78,
+  },
 });
