@@ -52,6 +52,7 @@ import { buildWeekReel, getReducedMotionSummary, getReelSavings, getReelTargetDa
 import { calcTotalSavings, isFastForwardPeriod } from '@/features/simulator/logic/fastForward';
 import { furnishEmptyRooms } from '@/features/simulator/logic/mockHomeData';
 import { applySwapToItem, buildEnergyReport, buildSwapSuggestionCards, type SwapSuggestionCard } from '@/features/simulator/logic/energyReport';
+import { getSimulatorBillCardMonthlyTotal } from '@/features/simulator/logic/billDisplay';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
 import { SUPABASE_URL } from '@/lib/supabase';
@@ -616,6 +617,10 @@ export default function SimulatorScreen() {
       tariff: activeTariff,
     });
   }, [items, applianceTypes, schedules, routineBlocks, session.household, activeTariff]);
+  const billCardMonthlyBillRm = useMemo(
+    () => getSimulatorBillCardMonthlyTotal(monthlyBillRm, solarApplied),
+    [monthlyBillRm, solarApplied],
+  );
   const energyReport = useMemo(() => buildEnergyReport(items, monthlyBillRm), [items, monthlyBillRm]);
   const swapSuggestionCards = useMemo(() => buildSwapSuggestionCards(energyReport.topRows), [energyReport.topRows]);
   useEffect(() => {
@@ -1085,13 +1090,14 @@ export default function SimulatorScreen() {
       ?? rooms.find((r) => r.id === targetId || r.type === targetId);
     return targetRoom?.name ?? (targetId.charAt(0).toUpperCase() + targetId.slice(1));
   }, [rooms, setupRooms, weekReelView]);
-  const isSuggestionSheetVisible = aiReportVisible || postSwapAiReportVisible || swapSuggestionVisible || solarSuggestionVisible;
+  const isSuggestionSheetVisible = aiReportVisible || postSwapAiReportVisible || swapSuggestionVisible
+    || (solarSuggestionVisible && !solarApplied);
   const isFloorPlanCompacted = isEditMode || isSuggestionSheetVisible;
 
   return <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
     <View style={styles.mobileShell}>
       <View style={styles.mainContainer}>
-        <BillCard monthlyBillRm={monthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
+        <BillCard monthlyBillRm={billCardMonthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
           activeFastForward={selectedFastForward}
           isFastForwardPlaying={isWeekReelPlaying || Boolean(reducedWeekSummary)}
           fastForwardSavingsRm={weekReelView?.savingsRm ?? (reducedWeekSummary ? reducedWeekSummary.finalSavingsRm : null)}
@@ -1196,7 +1202,7 @@ export default function SimulatorScreen() {
         onClose={() => {
           if (postSwapAiReportVisible) {
             setPostSwapAiReportVisible(false);
-            setSolarSuggestionVisible(true);
+            if (!solarApplied) setSolarSuggestionVisible(true);
           } else {
             setAiReportVisible(false);
             setSwapSuggestionVisible(true);
@@ -1205,9 +1211,9 @@ export default function SimulatorScreen() {
       {swapSuggestionVisible && <SwapSuggestionSheet visible suggestions={swapSuggestionCards}
         onApply={handleApplyEnergySwap} onClose={() => {
           setSwapSuggestionVisible(false);
-          setSolarSuggestionVisible(true);
+          if (!solarApplied) setSolarSuggestionVisible(true);
         }} />}
-      {solarSuggestionVisible && <ApplianceSuggestionSheet visible onClose={() => setSolarSuggestionVisible(false)} onApply={() => {
+      {solarSuggestionVisible && !solarApplied && <ApplianceSuggestionSheet visible onClose={() => setSolarSuggestionVisible(false)} onApply={() => {
         setSolarApplied(true);
         setSolarSuggestionVisible(false);
         showToast('Solar is now active on your floor plan', 'success');
@@ -1216,7 +1222,8 @@ export default function SimulatorScreen() {
         onClose={() => { setNamingModalVisible(false); setNamingRoom(null); setPendingRoomAction(null); }} />
       <TidyUpSheet visible={tidySheetVisible} onConfirm={handleTidyFloor} onClose={() => setTidySheetVisible(false)} />
       <BillModal visible={billModalVisible} onClose={() => setBillModalVisible(false)} appliances={appliancesForBillModal}
-        totalKwh={totalKwh} rooms={setupRooms as any} onAddAppliances={() => { setBillModalVisible(false); setIsEditMode(true); }} />
+        period={selectedFastForward} monthlyBillRmOverride={billCardMonthlyBillRm} totalKwh={totalKwh} rooms={setupRooms as any}
+        onAddAppliances={() => { setBillModalVisible(false); setIsEditMode(true); }} />
       <MyDayTimelineSheet visible={timelineVisible} onClose={() => setTimelineVisible(false)} blocks={routineBlocks}
         rooms={setupRooms} appliances={appliancesForBillModal} onAddBlockPress={() => { setTimelineVisible(false); setAddBlockVisible(true); }}
         onEditBlockPress={(block) => { setTimelineVisible(false); setSelectedBlockForEdit(block); setEditBlockVisible(true); }}

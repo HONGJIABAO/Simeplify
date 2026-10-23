@@ -19,6 +19,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -128,23 +129,12 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Brand illustration */}
-          <View style={styles.illustrationWrapper}>
-            <View style={styles.blobTan} />
-            <View style={styles.blobSage} />
-            <View style={styles.sproutBadge}>
-              <Svg width={36} height={36} viewBox="0 0 36 36">
-                <Path
-                  d="M18 28V15M18 15C18 9 26 8 26 8C26 14 20 15 18 15ZM18 19C18 15 12 14 12 14C12 19 16 20 18 19ZM14 28H22"
-                  stroke="#566549"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </Svg>
-            </View>
-          </View>
+          {/* Brand logo */}
+          <Image
+            source={require('../../../assets/sprites/logo/app_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
 
           {/* Heading */}
           <Text style={styles.title}>Welcome</Text>
@@ -327,43 +317,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Brand illustration
-  illustrationWrapper: {
-    width: 140,
-    height: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  blobTan: {
-    position: 'absolute',
+  // Brand logo
+  logo: {
     width: 100,
     height: 100,
-    borderRadius: 50,
-    backgroundColor: '#f6e8d8', // tan-100
-    top: 10,
-    left: 10,
-  },
-  blobSage: {
-    position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#e0e6d9', // sage-100
-    bottom: 10,
-    right: 10,
-  },
-  sproutBadge: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
+    resizeMode: 'contain',
+    marginBottom: 16,
+    alignSelf: 'center',
   },
 
   title: {
