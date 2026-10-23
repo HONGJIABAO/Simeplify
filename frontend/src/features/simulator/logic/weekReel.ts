@@ -86,8 +86,8 @@ export function getReelSavings(totalSavingsRm: number, dayIndex: number, segment
 export function getReelTargetDate(start: Date, period: ReelPeriod, progress: number): Date {
   const end = new Date(start.getTime());
   if (period === '1Y') end.setFullYear(end.getFullYear() + 1);
-  else if (period === '1W') end.setDate(end.getDate() + 7);
-  else end.setMonth(end.getMonth() + 1);
+  else if (period === '1M') end.setMonth(end.getMonth() + 1);
+  else end.setDate(end.getDate() + 7);
   return new Date(start.getTime() + (end.getTime() - start.getTime()) * Math.max(0, Math.min(1, progress)));
 }
 

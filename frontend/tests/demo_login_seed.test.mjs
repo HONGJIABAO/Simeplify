@@ -75,14 +75,14 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
     );
 
   assert.equal(appliancesError, null, `Appliances query error: ${appliancesError?.message}`);
-  assert.equal(appliances.length, 23, `Expected 23 appliances, got ${appliances.length}`);
+  assert.equal(appliances.length, 24, `Expected 24 appliances, got ${appliances.length}`);
 
   const { data: furniture, error: furnitureError } = await client
     .from('furniture_items')
     .select('*')
     .eq('household_id', householdId);
   assert.equal(furnitureError, null, `Furniture query error: ${furnitureError?.message}`);
-  assert.equal(furniture.length, 9, `Expected 9 furniture items, got ${furniture.length}`);
+  assert.equal(furniture.length, 10, `Expected 10 furniture items, got ${furniture.length}`);
 
   // 6. Day Blocks Verification (5 blocks)
   const { data: blocks, error: blocksError } = await client

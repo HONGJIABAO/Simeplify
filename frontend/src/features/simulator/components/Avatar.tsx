@@ -39,18 +39,7 @@ export function Avatar({
   const pixelX = normX * canvasWidth;
   const pixelY = normY * canvasHeight;
 
-  // Smooth position animation
-  const [posAnim] = useState(() => new Animated.ValueXY({ x: pixelX, y: pixelY }));
   const [visibilityAnim] = useState(() => new Animated.Value(visible ? 1 : 0));
-
-  useEffect(() => {
-    Animated.timing(posAnim, {
-      toValue: { x: pixelX, y: pixelY },
-      duration: reduceMotion ? 0 : 500,
-      easing: Easing.inOut(Easing.ease),
-      useNativeDriver: true,
-    }).start();
-  }, [pixelX, pixelY, posAnim, reduceMotion]);
 
   useEffect(() => {
     Animated.timing(visibilityAnim, {
@@ -60,39 +49,6 @@ export function Avatar({
       useNativeDriver: true,
     }).start();
   }, [reduceMotion, visibilityAnim, visible]);
-
-  // Walking bob oscillation
-  const [bobAnim] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (isWalking && !reduceMotion) {
-      const bobLoop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(bobAnim, {
-            toValue: -2,
-            duration: 300,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(bobAnim, {
-            toValue: 1,
-            duration: 300,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      bobLoop.start();
-      return () => bobLoop.stop();
-    } else {
-      Animated.timing(bobAnim, {
-        toValue: 0,
-        duration: reduceMotion ? 0 : 300,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isWalking, bobAnim, reduceMotion]);
 
   // Sleeping "zZ" pulse
   const [zzAnim] = useState(() => new Animated.Value(0));
@@ -121,7 +77,9 @@ export function Avatar({
     }
   }, [isSleeping, reduceMotion, zzAnim]);
 
-  const zIndex = isSleeping ? 250 : Math.floor(normY * 100) + 20;
+  // The resident is always drawn in front of the appliance being used; room
+  // tags remain the final overlay at z-index 3000.
+  const zIndex = 280;
 
   return (
     <Animated.View
@@ -139,8 +97,8 @@ export function Avatar({
           zIndex,
           opacity: dimmed ? Animated.multiply(visibilityAnim, 0.45) : visibilityAnim,
           transform: [
-            { translateX: posAnim.x },
-            { translateY: Animated.add(posAnim.y, bobAnim) },
+            { translateX: pixelX },
+            { translateY: pixelY },
           ],
         },
       ]}

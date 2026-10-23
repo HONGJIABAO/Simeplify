@@ -203,3 +203,43 @@ export function getFloorSpriteSizes(planWidth: number) {
     labelFont: Math.max(12, Math.min(14, 12 * visualScale)),
   };
 }
+
+/** Visible alpha bounds used by the floor-plan placement helpers. The renderer
+ * keeps a square transparent canvas, so placement must use these painted
+ * dimensions rather than the canvas dimensions. */
+export const FLOOR_VISIBLE_CONTENT_BOUNDS: Record<string, { width: number; height: number }> = {
+  refrigerator: { width: 162, height: 279 },
+  washing_machine: { width: 205, height: 256 },
+  water_heater: { width: 202, height: 235 },
+  bed: { width: 227, height: 164 },
+  lights: { width: 150, height: 201 },
+  light_bulb: { width: 157, height: 336 },
+  sink: { width: 133, height: 200 },
+};
+
+export interface FloorVisibleContentSize {
+  pictureWidth: number;
+  pictureHeight: number;
+  visibleWidth: number;
+  visibleHeight: number;
+}
+
+/**
+ * Return the visible-content and full picture size at a floor-plan width.
+ * Small light sprites intentionally use the existing half-size rendering.
+ */
+export function getFloorVisibleContentSize(
+  spriteKey: string,
+  planWidth = 390,
+  small = false,
+): FloorVisibleContentSize {
+  const bounds = FLOOR_VISIBLE_CONTENT_BOUNDS[spriteKey] ?? { width: 200, height: 200 };
+  const picture = getFloorSpriteSizes(planWidth).item * (small ? 0.5 : 1);
+  const scale = Math.min(picture / bounds.width, picture / bounds.height);
+  return {
+    pictureWidth: picture,
+    pictureHeight: picture,
+    visibleWidth: bounds.width * scale,
+    visibleHeight: bounds.height * scale,
+  };
+}

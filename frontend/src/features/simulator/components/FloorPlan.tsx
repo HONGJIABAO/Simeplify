@@ -30,7 +30,8 @@ import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
 import {
   footprintOverlapArea,
   getDoorKeepOuts,
-  getItemLocalFootprint,
+  getVisibleContentFootprint,
+  getPlacementLayer,
   INNER_FLOOR_RECT,
   isFootprintInside,
   getRoomTemplateId,
@@ -260,18 +261,35 @@ export function FloorPlan({
   const renderFloor = (floor: FloorNumber) => {
     const layout = getFloorPlanLayout(floor);
     const floorRooms = rooms.filter((room) => room.floor === floor);
-    const visibleRoomIds = new Set(floorRooms.filter((room) => room.isSetUp).map((room) => room.id));
-    const floorItems = sortItemsForRoom(arrangedItems.filter((item) => visibleRoomIds.has(item.roomId)));
+    const floorItems = floorRooms.flatMap((room) =>
+      sortItemsForRoom(arrangedItems.filter((item) => item.roomId === room.id), room)
+    );
     const debugViolations: string[] = [];
     if (debugLayout) {
       for (const room of floorRooms.filter((candidate) => candidate.isSetUp)) {
         const roomRect = getSlotRect(room.slot);
         const roomItems = floorItems.filter((item) => item.roomId === room.id);
         const keepOuts = getDoorKeepOuts(room.slot, roomRect.width * width, roomRect.height * height);
+        const footprints = roomItems
+          .filter((item) => getPlacementLayer(item) !== 'ceiling')
+          .map((item) => ({ item, footprint: getVisibleContentFootprint(item, room, width, height, roomItems) }));
         for (const item of roomItems) {
-          const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+          const footprint = getVisibleContentFootprint(item, room, width, height, roomItems);
           if (!isFootprintInside(footprint, INNER_FLOOR_RECT)) debugViolations.push(`${room.name}: ${item.name} outside inner floor`);
           if (keepOuts.some((keepOut) => footprintOverlapArea(footprint, keepOut) > 0)) debugViolations.push(`${room.name}: ${item.name} in doorway`);
+        }
+        for (let index = 0; index < footprints.length; index += 1) {
+          for (let other = index + 1; other < footprints.length; other += 1) {
+            const first = footprints[index];
+            const second = footprints[other];
+            const smallerArea = Math.min(
+              first.footprint.width * first.footprint.height,
+              second.footprint.width * second.footprint.height,
+            );
+            if (smallerArea > 0 && footprintOverlapArea(first.footprint, second.footprint) > smallerArea * 0.10) {
+              debugViolations.push(`${room.name}: ${first.item.name} overlaps ${second.item.name}`);
+            }
+          }
         }
       }
     }
@@ -337,7 +355,7 @@ export function FloorPlan({
                 }]} />
               ))}
               {roomItems.map((item) => {
-                const footprint = getItemLocalFootprint(item, room, width, height, roomItems);
+                const footprint = getVisibleContentFootprint(item, room, width, height, roomItems);
                 return (
                   <React.Fragment key={`${item.id}-footprint`}>
                     <View pointerEvents="none" style={[styles.debugFootprint, {
@@ -394,25 +412,6 @@ export function FloorPlan({
           );
         })}
 
-        {floorRooms.map((room) => {
-          const rect = layout.rooms.find((candidate) => candidate.slot === room.slot);
-          if (!rect || !(isEditMode || hoveredRoomId === room.id || revealedRoomIds.has(room.id))) return null;
-          const theme = ROOM_TYPE_SETTINGS[room.type];
-          const occupied = avatarState.currentFloor === floor && avatarState.currentRoomId === room.id;
-          return (
-            <View key={`tag-${room.id}`} pointerEvents="none" style={[styles.roomTag, {
-              left: rect.x * width + 8,
-              top: rect.y * height + 10,
-              maxWidth: rect.width * width - 16,
-            }]}>
-              {room.isSetUp ? <View style={[styles.roomTagDot, { backgroundColor: theme.accentColor }]} />
-                : <Plus size={14} color="#57534E" strokeWidth={1.5} />}
-              <Text style={styles.roomTagText} numberOfLines={1}>{room.isSetUp ? room.name : 'Tap to set up'}</Text>
-              {occupied && room.isSetUp && <View style={styles.roomInUse}><Text style={styles.roomInUseText}>In use</Text></View>}
-            </View>
-          );
-        })}
-
         {avatarState.currentFloor === floor && walkPath.length > 1 && (
           <Svg pointerEvents="none" width={width} height={height} style={StyleSheet.absoluteFill}>
             <Polyline
@@ -453,6 +452,27 @@ export function FloorPlan({
             <Text style={styles.awayTagText}>Away</Text>
           </View>
         )}
+
+        {/* Room names are the final, non-interactive floor overlay. Rendering
+            them last makes the stacking contract explicit on every platform. */}
+        {floorRooms.map((room) => {
+          const rect = layout.rooms.find((candidate) => candidate.slot === room.slot);
+          if (!rect || !(isEditMode || hoveredRoomId === room.id || revealedRoomIds.has(room.id))) return null;
+          const theme = ROOM_TYPE_SETTINGS[room.type];
+          const occupied = avatarState.currentFloor === floor && avatarState.currentRoomId === room.id;
+          return (
+            <View key={`tag-${room.id}`} pointerEvents="none" style={[styles.roomTag, {
+              left: rect.x * width + 8,
+              top: rect.y * height + 10,
+              maxWidth: rect.width * width - 16,
+            }]}>
+              {room.isSetUp ? <View style={[styles.roomTagDot, { backgroundColor: theme.accentColor }]} />
+                : <Plus size={14} color="#57534E" strokeWidth={1.5} />}
+              <Text style={styles.roomTagText} numberOfLines={1}>{room.isSetUp ? room.name : 'Tap to set up'}</Text>
+              {occupied && room.isSetUp && <View style={styles.roomInUse}><Text style={styles.roomInUseText}>In use</Text></View>}
+            </View>
+          );
+        })}
       </>
     );
   };

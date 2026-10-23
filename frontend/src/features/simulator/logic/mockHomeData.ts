@@ -56,6 +56,7 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   appliance('f1-fridge-kitchen', 'f1-B', 'refrigerator', 'Hitachi Refrigerator', 150, { brand: 'Hitachi', alwaysOn: true }),
   appliance('f1-bulb-b', 'f1-B', 'light_bulb', 'Kitchen light', 9),
   furniture('f1-sink-kitchen', 'f1-B', 'sink', 'Kitchen Sink'),
+  furniture('f1-table-kitchen', 'f1-B', 'table', 'Kitchen Table', 'kitchen table'),
   appliance('f1-ac-kitchen', 'f1-B', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin' }),
 
   appliance('f1-washer-laundry', 'f1-C', 'washing_machine', 'Washing Machine', 500),
@@ -68,6 +69,7 @@ const DEFAULT_ITEMS: FixtureItem[] = [
 
   furniture('f2-bed-master', 'f2-A', 'bed', 'Bed'),
   appliance('f2-lamp-master', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', role: 'bedside right' }),
+  appliance('f2-fan-master', 'f2-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 4 }),
   appliance('f2-bulb-a', 'f2-A', 'light_bulb', 'Master bedroom light', 9),
   appliance('f2-ac-master', 'f2-A', 'air_conditioner', 'Panasonic Air Conditioner', 1000, { brand: 'Panasonic' }),
 

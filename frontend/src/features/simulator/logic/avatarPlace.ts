@@ -37,10 +37,45 @@ export interface AvatarPlacement {
   interactionItemId: string | null;
   facingLeft: boolean;
   pose: 'stand';
+  shouldWalk: boolean;
 }
+
+// TODO(open-item): replace keyword matching when routine blocks store a stable activity kind.
+export const BLOCK_PRIMARY_ITEM = {
+  watchingTv: 'sofa',
+  shower: 'water_heater',
+  breakfastOrKitchen: 'refrigerator',
+  laundry: 'washing_machine',
+  workingOrStudying: 'workplace',
+  chargingPhone: null,
+  sleeping: 'bed',
+  fallback: null,
+} as const;
 
 function itemType(item: Pick<StoredPlacedItem, 'type' | 'spriteKey'>) {
   return item.type || item.spriteKey;
+}
+
+/** Resolve legacy fixture references (for example f1-fridge-kitchen) to the
+ * persisted appliance type used by the logged-in household. */
+function referenceType(reference: string): string | null {
+  const value = reference.toLowerCase();
+  if (value.includes('fridge') || value.includes('refrigerator')) return 'refrigerator';
+  if (value.includes('washing') || value.includes('washer')) return 'washing_machine';
+  if (value.includes('shower') || value.includes('water_heater') || value.includes('heater')) return 'water_heater';
+  if (value.includes('aircon') || value.includes('air_conditioner') || value.includes('ac-')) return 'air_conditioner';
+  if (value.includes('workplace') || value.includes('desk')) return 'workplace';
+  if (value.includes('router') || value.includes('wifi')) return 'router';
+  if (value.includes('tv') || value.includes('television')) return 'tv';
+  if (value.includes('fan')) return 'fan';
+  if (value.includes('lamp')) return 'lights';
+  if (value.includes('bulb') || value.includes('light')) return 'light_bulb';
+  return null;
+}
+
+function matchesApplianceReference(item: StoredPlacedItem, references: Set<string>): boolean {
+  if (references.has(item.id) || references.has(item.type) || references.has(item.spriteKey)) return true;
+  return [...references].some((reference) => referenceType(reference) === itemType(item));
 }
 
 function roomCenter(room: Pick<StoredRoom, 'slot'>) {
@@ -49,8 +84,8 @@ function roomCenter(room: Pick<StoredRoom, 'slot'>) {
 }
 
 /**
- * Resolves one target for an active block. There is no intermediate route:
- * the Simulator moves straight toward this point and then remains still.
+ * Resolves one final use target for an active block. The Simulator's existing
+ * walk graph supplies the doorway/stair route to this point.
  */
 export function resolveAvatarPlacement(
   block: Pick<RoutineBlock, 'name' | 'iconType' | 'applianceIds' | 'avatarWalks'>,
@@ -59,30 +94,38 @@ export function resolveAvatarPlacement(
 ): AvatarPlacement {
   const activity = block.name.toLowerCase();
   const isTv = activity.includes('tv') || activity.includes('watching');
+  const isLivingEvening = activity.includes('living') || activity.includes('evening');
   const isShower = block.iconType === 'shower' || activity.includes('shower');
   const isWork = activity.includes('working') || activity.includes('studying') || activity.includes('work');
   const isCharging = activity.includes('charging phone') || block.avatarWalks === false;
   const isSleeping = block.iconType === 'sleep' || activity.includes('sleep');
+  const isKitchen = block.iconType === 'meal' || activity.includes('breakfast') || activity.includes('cooking') || activity.includes('kitchen');
+  const isLaundry = activity.includes('laundry') || activity.includes('washing clothes');
 
   const selectedIds = new Set(block.applianceIds);
   let active = roomItems.filter((item) => item.category === 'Appliances'
-    && (selectedIds.has(item.id) || selectedIds.has(item.type))).map((item) => item.id);
-  if (active.length === 0) {
-    const defaultTypes = isTv
+    && matchesApplianceReference(item, selectedIds)).map((item) => item.id);
+  const defaultTypes = isTv || isLivingEvening
       ? new Set(['tv', 'lights', 'light_bulb', 'air_conditioner'])
       : isShower
         ? new Set(['water_heater'])
+        : isKitchen
+          ? new Set(['refrigerator'])
+          : isLaundry
+            ? new Set(['washing_machine'])
         : isWork || isCharging
           ? new Set(['workplace'])
           : new Set<string>();
-    active = roomItems.filter((item) => item.category === 'Appliances' && defaultTypes.has(itemType(item))).map((item) => item.id);
-  }
+  const contextual = roomItems.filter((item) => item.category === 'Appliances' && defaultTypes.has(itemType(item))).map((item) => item.id);
+  active = [...new Set([...active, ...contextual])];
 
   let interactionItem: StoredPlacedItem | undefined;
-  if (isTv) interactionItem = roomItems.find((item) => itemType(item) === 'sofa');
-  else if (isShower) interactionItem = roomItems.find((item) => itemType(item) === 'water_heater');
-  else if (isWork && !isCharging) interactionItem = roomItems.find((item) => itemType(item) === 'workplace');
-  else if (isSleeping) interactionItem = roomItems.find((item) => itemType(item) === 'bed');
+  if (isTv || isLivingEvening) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.watchingTv);
+  else if (isShower) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.shower);
+  else if (isKitchen) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.breakfastOrKitchen);
+  else if (isLaundry) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.laundry);
+  else if (isWork && !isCharging) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.workingOrStudying);
+  else if (isSleeping) interactionItem = roomItems.find((item) => itemType(item) === BLOCK_PRIMARY_ITEM.sleeping);
 
   const target = interactionItem ? getItemUseSpot(interactionItem, room, roomItems) : roomCenter(room);
   return {
@@ -91,6 +134,7 @@ export function resolveAvatarPlacement(
     interactionItemId: interactionItem?.id ?? null,
     facingLeft: interactionItem ? target.x > interactionItem.posX : false,
     pose: 'stand',
+    shouldWalk: !isCharging && block.avatarWalks !== false,
   };
 }
 

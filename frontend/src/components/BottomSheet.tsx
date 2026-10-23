@@ -31,6 +31,7 @@ export interface BottomSheetProps {
   variant?: BottomSheetVariant;
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  instantOnReducedMotion?: boolean;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -43,6 +44,7 @@ export function BottomSheet({
   variant = 'modal',
   children,
   contentStyle,
+  instantOnReducedMotion = false,
 }: BottomSheetProps) {
   const [reduceMotion, setReduceMotion] = useState(false);
   const [mounted, setMounted] = useState(visible);
@@ -90,6 +92,15 @@ export function BottomSheet({
   };
 
   useEffect(() => {
+    if (reduceMotion && instantOnReducedMotion) {
+      translateY.value = visible ? 0 : SCREEN_HEIGHT;
+      opacity.value = visible ? 1 : 0;
+      if (!visible) {
+        const timer = setTimeout(() => setMounted(false), 0);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
     if (visible) {
       if (reduceMotion) {
         translateY.value = 0;
@@ -117,7 +128,7 @@ export function BottomSheet({
         );
       }
     }
-  }, [visible, reduceMotion, opacity, translateY]);
+  }, [visible, reduceMotion, instantOnReducedMotion, opacity, translateY]);
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
