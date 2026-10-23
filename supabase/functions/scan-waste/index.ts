@@ -4,6 +4,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { GeminiRequestError, requestGeminiContent } from "../_shared/gemini.ts";
 
 interface ClassificationResult {
   item_name: string;
@@ -203,10 +204,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // 6. Gemini Vision Classification
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    const geminiBackupApiKey = Deno.env.get("GEMINI_API_KEY_BACKUP") || "";
     let classification: ClassificationResult;
 
-    if (!geminiApiKey) {
+    if (!geminiApiKey && !geminiBackupApiKey) {
       // Deterministic fallback/mock mode when GEMINI_API_KEY is not set in local test runs
       classification = getDeterministicMockClassification(imagePath);
     } else {
@@ -217,8 +219,6 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-
       const systemPrompt = `You are an expert waste sorting assistant for Malaysian household recycling systems (4-stream system).
 Analyze the provided image and classify the primary waste item into EXACTLY ONE of the four valid bin_type values:
 - "paper" (Blue bin: cardboard, cartons, envelopes, books, clean paper)
@@ -238,10 +238,11 @@ Output strictly valid JSON with this exact schema:
 Return only JSON with no markdown wrapping.`;
 
       try {
-        const geminiRes = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const geminiData = await requestGeminiContent({
+          apiKey: geminiApiKey,
+          backupApiKey: geminiBackupApiKey,
+          model,
+          body: {
             contents: [
               {
                 parts: [
@@ -259,35 +260,30 @@ Return only JSON with no markdown wrapping.`;
               response_mime_type: "application/json",
               temperature: 0.2,
             },
-          }),
+          },
         });
+        const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(rawText);
 
-        if (!geminiRes.ok) {
-          const errText = await geminiRes.text();
-          console.error(`Gemini API error (${geminiRes.status}):`, errText);
-          classification = getDeterministicMockClassification(imagePath);
-        } else {
-          const geminiData = await geminiRes.json();
-          const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-          const parsed = JSON.parse(rawText);
+        const binType = VALID_BINS.includes(parsed.bin_type) ? parsed.bin_type : "general";
+        const isRecyclable = binType !== "general" && Boolean(parsed.is_recyclable);
+        let confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.9;
+        if (confidence > 1 && confidence <= 100) confidence = confidence / 100;
+        if (confidence < 0 || confidence > 1) confidence = 0.9;
 
-          const binType = VALID_BINS.includes(parsed.bin_type) ? parsed.bin_type : "general";
-          const isRecyclable = binType !== "general" && Boolean(parsed.is_recyclable);
-          let confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.9;
-          if (confidence > 1 && confidence <= 100) confidence = confidence / 100;
-          if (confidence < 0 || confidence > 1) confidence = 0.9;
-
-          classification = {
-            item_name: String(parsed.item_name || "Identified Waste Item"),
-            material: String(parsed.material || "Recyclable Material"),
-            bin_type: binType,
-            is_recyclable: isRecyclable,
-            confidence: Number(confidence.toFixed(3)),
-            tips: String(parsed.tips || "Ensure item is clean and sorted correctly."),
-          };
-        }
+        classification = {
+          item_name: String(parsed.item_name || "Identified Waste Item"),
+          material: String(parsed.material || "Recyclable Material"),
+          bin_type: binType,
+          is_recyclable: isRecyclable,
+          confidence: Number(confidence.toFixed(3)),
+          tips: String(parsed.tips || "Ensure item is clean and sorted correctly."),
+        };
       } catch (geminiError) {
-        console.error("Gemini Vision processing error:", geminiError);
+        const safeError = geminiError instanceof GeminiRequestError
+          ? { status: geminiError.status, code: geminiError.code }
+          : { status: null, code: "invalid_response" };
+        console.error("Gemini Vision processing failed:", safeError);
         classification = getDeterministicMockClassification(imagePath);
       }
     }

@@ -3,18 +3,7 @@
  * Expo Router Server Route for Gemini AI PDF Utility Bill Extraction & Anomaly Analysis.
  */
 
-const GEMINI_API_KEY =
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY ||
-  process.env.GEMINI_API_KEY ||
-  '';
-
-const CANDIDATE_MODELS = [
-  'gemini-1.5-pro',
-  'gemini-3.1-pro-preview',
-  'gemini-3.5-flash',
-  'gemini-3-flash-preview',
-  'gemini-3.5-flash-lite',
-];
+import { GeminiServerError, requestGeminiFromServer } from '../../server/geminiServer';
 
 const EXTRACT_PROMPT = `You are an information extraction system for Malaysian utility bills (TNB electricity and Air Selangor/Syabas water bills).
 
@@ -120,6 +109,9 @@ export function detectBillAnomaly(
 
 export async function POST(request: Request) {
   try {
+    const geminiApiKey = process.env.GEMINI_API_KEY || '';
+    const geminiBackupApiKey = process.env.GEMINI_API_KEY_BACKUP || '';
+    const geminiModel = process.env.GEMINI_MODEL || '';
     const body = await request.json();
     const { fileBase64, mimeType = 'application/pdf', previousBills = [] } = body;
 
@@ -130,8 +122,15 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!GEMINI_API_KEY) {
+    if (!geminiApiKey && !geminiBackupApiKey) {
       return new Response(JSON.stringify({ error: 'Missing Gemini API Key' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!geminiModel) {
+      return new Response(JSON.stringify({ error: 'Missing Gemini model configuration' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -161,55 +160,27 @@ export async function POST(request: Request) {
       },
     };
 
+    const data = await requestGeminiFromServer({
+      apiKey: geminiApiKey,
+      backupApiKey: geminiBackupApiKey,
+      model: geminiModel,
+      body: requestPayload,
+    });
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     let extracted: any = null;
-    let lastError = '';
 
-    for (const model of CANDIDATE_MODELS) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-        });
-
-        if (!res.ok) {
-          lastError = await res.text();
-          continue;
-        }
-
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) continue;
-
-        let jsonStr = text.trim();
-        if (jsonStr.startsWith('```')) {
-          jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-        }
-
-        extracted = JSON.parse(jsonStr);
-        if (
-          extracted &&
-          (extracted.usage_kwh != null ||
-            extracted.usage_m3 != null ||
-            extracted.current_bill_rm != null ||
-            extracted.total_payable_rm != null ||
-            extracted.billing_month ||
-            extracted.usage ||
-            extracted.amount)
-        ) {
-          break;
-        }
-      } catch (err: any) {
-        lastError = err.message;
+    if (text) {
+      let jsonStr = text.trim();
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
       }
+      extracted = JSON.parse(jsonStr);
     }
 
     if (!extracted) {
       return new Response(
         JSON.stringify({
           error: 'Could not extract bill values with Gemini AI',
-          details: lastError,
         }),
         { status: 422, headers: { 'Content-Type': 'application/json' } }
       );
@@ -273,9 +244,12 @@ export async function POST(request: Request) {
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+  } catch (err: unknown) {
+    const safeError = err instanceof GeminiServerError
+      ? { error: 'Gemini request failed', code: err.code, status: err.status }
+      : { error: 'Bill analysis failed' };
+    return new Response(JSON.stringify(safeError), {
+      status: err instanceof GeminiServerError && err.status === 429 ? 429 : 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }

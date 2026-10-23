@@ -19,9 +19,6 @@ import {
   Lock,
   Tv,
   Armchair,
-  Snowflake,
-  Fan,
-  Lightbulb,
   MoreVertical,
   Plus,
   Info,
@@ -32,6 +29,8 @@ import { Button } from '@/components/Button';
 import { StoredRoom } from '../logic/storage';
 import { getRoomDisplayName } from '../logic/roomData';
 import { RoutineBlock, ApplianceInUse } from '../logic/myDayLogic';
+import { getSpriteSource } from '../logic/spriteMap';
+import { Sprite } from './Sprite';
 import { Appliance } from '@/lib/mockData';
 
 interface MyDayTimelineSheetProps {
@@ -81,19 +80,55 @@ function getBlockIconBg(iconType: RoutineBlock['iconType']) {
   }
 }
 
-function getApplianceIcon(icon?: ApplianceInUse['icon']) {
-  const props = { size: 16, color: '#57534E', strokeWidth: 1.5 };
-  switch (icon) {
-    case 'ac':
-      return <Snowflake {...props} />;
-    case 'fan':
-      return <Fan {...props} />;
-    case 'light':
-      return <Lightbulb {...props} />;
-    case 'tv':
-    default:
-      return <Tv {...props} />;
+const LEGACY_ICON_SPRITE_KEYS: Record<NonNullable<ApplianceInUse['icon']>, string> = {
+  ac: 'air_conditioner',
+  fan: 'fan',
+  light: 'lights',
+  tv: 'tv',
+};
+
+function getRoutineApplianceSpriteKey({
+  name,
+  type,
+  spriteKey,
+  icon,
+}: {
+  name: string;
+  type?: Appliance['type'];
+  spriteKey?: string;
+  icon?: ApplianceInUse['icon'];
+}) {
+  if (spriteKey && getSpriteSource(spriteKey)) return spriteKey;
+
+  const normalizedName = name.toLowerCase();
+  if (normalizedName.includes('ceiling light') || normalizedName.includes('light bulb')) return 'light_bulb';
+  if (normalizedName.includes('water heater') || normalizedName.includes('shower')) return 'water_heater';
+  if (normalizedName.includes('washing machine')) return 'washing_machine';
+  if (normalizedName.includes('refrigerator') || normalizedName.includes('fridge')) return 'refrigerator';
+  if (normalizedName.includes('router') || normalizedName.includes('wi-fi')) return 'router';
+  if (normalizedName.includes('workplace') || normalizedName.includes('computer')) return 'workplace';
+
+  if (type && getSpriteSource(type)) return type;
+  return icon ? LEGACY_ICON_SPRITE_KEYS[icon] : null;
+}
+
+function RoutineApplianceThumbnail({
+  name,
+  type,
+  spriteKey,
+  icon,
+}: {
+  name: string;
+  type?: Appliance['type'];
+  spriteKey?: string;
+  icon?: ApplianceInUse['icon'];
+}) {
+  const resolvedKey = getRoutineApplianceSpriteKey({ name, type, spriteKey, icon });
+  if (!resolvedKey || !getSpriteSource(resolvedKey)) {
+    return <Tv size={16} color="#57534E" strokeWidth={1.5} />;
   }
+
+  return <Sprite type={resolvedKey} size={24} />;
 }
 
 const LEGACY_APPLIANCE_HINTS: Record<string, string[]> = {
@@ -305,12 +340,11 @@ export function MyDayTimelineSheet({
                         <View key={app.id} style={styles.applianceInUseRow}>
                           <View style={styles.applianceInUseLeft}>
                             <View style={styles.applianceInUseIconBox}>
-                              {getApplianceIcon(
-                                app.type === 'air_conditioner' ? 'ac' :
-                                app.type === 'fan' ? 'fan' :
-                                app.type === 'lights' ? 'light' :
-                                app.type === 'tv' ? 'tv' : undefined
-                              )}
+                              <RoutineApplianceThumbnail
+                                name={app.name}
+                                type={app.type}
+                                spriteKey={app.spriteKey}
+                              />
                             </View>
                             <View>
                               <Text style={styles.applianceInUseName}>{app.name}</Text>
@@ -325,7 +359,10 @@ export function MyDayTimelineSheet({
                         <View key={app.id} style={styles.applianceInUseRow}>
                           <View style={styles.applianceInUseLeft}>
                             <View style={styles.applianceInUseIconBox}>
-                              {getApplianceIcon(app.icon)}
+                              <RoutineApplianceThumbnail
+                                name={app.name}
+                                icon={app.icon}
+                              />
                             </View>
                             <View>
                               <Text style={styles.applianceInUseName}>

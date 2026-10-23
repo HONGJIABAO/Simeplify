@@ -30,7 +30,7 @@ Windows users: use WSL2 for Docker and the Supabase CLI if you have problems.
 | Service | What to get | Where it goes |
 |---|---|---|
 | Supabase | A project. Copy the **Project URL**, the **anon key**, and the **project ref** | App `.env` (URL and anon key only). Project ref for `supabase link`. |
-| Google AI Studio (Gemini) | A Gemini API key | **Supabase secret only.** Never in the app, never in git. |
+| Google AI Studio (Gemini) | A main Gemini API key and an optional backup key | **Server environment only:** an Expo API Route environment or Supabase Edge Function secret. Never use an `EXPO_PUBLIC_` name and never commit a key. |
 | Expo (EAS) | A free account | Only when you build a test app or release |
 
 The **service role key** of Supabase is a secret too. Never put it in the app.
@@ -185,12 +185,16 @@ npx supabase functions new classify_waste
 
 ### Secrets
 
-Local (`supabase/functions/.env`, add to `.gitignore`):
+Local Edge Functions (`supabase/functions/.env`, already ignored by git):
 
 ```bash
-GEMINI_API_KEY=your-gemini-key
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_API_KEY=
+GEMINI_API_KEY_BACKUP=
+GEMINI_MODEL=gemini-3.6-flash
 ```
+
+The same three server-only names may be placed in ignored `frontend/.env` for
+the Expo API Route. Client screens and services must never read these values.
 
 Run locally:
 
@@ -201,15 +205,19 @@ npx supabase functions serve --env-file supabase/functions/.env
 Production:
 
 ```bash
-npx supabase secrets set GEMINI_API_KEY=your-gemini-key
-npx supabase secrets set GEMINI_MODEL=gemini-3.5-flash
+npx supabase secrets set --env-file supabase/functions/.env
 ```
 
-**Model name:** the product notes say `gemini-2.5-flash` was shut down on 16 October 2026 and returns a 404 error, and that `gemini-3.5-flash` is the replacement. I could not confirm this from here, so check the current list at https://ai.google.dev/gemini-api/docs/models before you set it. The model name is only read from `GEMINI_MODEL`, never written in code, so you can change it without an app update.
+**Model name:** `gemini-2.0-flash` was shut down on 1 June 2026. This project
+uses `gemini-3.6-flash`, Google's listed replacement at the time of this update.
+The model name is read only from `GEMINI_MODEL`, so it can change without a
+client app update. Recheck the current model list before future deployments.
 
 ### Function rules
 
 - The app calls the function. The function calls Gemini. The app never calls Gemini.
+- The main key is tried first. Quota/429 or invalid-key failures retry once with `GEMINI_API_KEY_BACKUP`.
+- Gemini keys are sent in the server-side `x-goog-api-key` header and are never logged.
 - Check the user's login inside each function (`Authorization` header).
 - Send Gemini only the data it needs. The AI must not invent RM amounts or percents.
 - Deed cap: `award_energy_points` and `confirm_disposal` count today's deeds and give points only for the first 3 (Malaysia time).

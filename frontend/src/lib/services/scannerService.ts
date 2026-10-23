@@ -19,10 +19,7 @@ import {
   type BillAnalysis,
   normalizeBillingMonth,
 } from '../../features/scanner/logic/scannerCore';
-import {
-  extractBillDataWithGemini,
-  detectBillAnomaly,
-} from './geminiService';
+import { detectBillAnomaly } from './geminiService';
 
 export * from '../../features/scanner/logic/scannerCore';
 
@@ -230,32 +227,16 @@ export async function uploadBill(
 }
 
 /**
- * Invokes analyze-bill in 'read' mode or calls Gemini OCR directly.
+ * Invokes analyze-bill in 'read' mode. Gemini OCR runs only in the authenticated
+ * Edge Function; the client never receives a Gemini credential.
  * Extracts bill fields and generates a signed HMAC read token.
  * Writes NO rows to bills, alerts, deeds, or points.
  */
 export async function readBill(
   filePath: string,
-  fileBase64?: string,
-  mimeType: string = 'application/pdf'
+  _fileBase64?: string,
+  _mimeType: string = 'application/pdf'
 ): Promise<ReadBillResult> {
-  // If base64 is available, extract directly using Gemini AI with model failover
-  if (fileBase64) {
-    try {
-      const extracted = await extractBillDataWithGemini(fileBase64, mimeType);
-      return {
-        type: extracted.billType,
-        provider: extracted.provider,
-        billing_month: extracted.billingMonth,
-        usage: extracted.usage,
-        amount: extracted.amount,
-        ai_read_token: `token_${Date.now()}`,
-      };
-    } catch (geminiErr: any) {
-      console.warn('Direct Gemini extraction warning:', geminiErr?.message);
-    }
-  }
-
   // Attempt Supabase Edge Function invoke if reachable
   const reachable = await isSupabaseReachable();
   if (reachable) {
@@ -269,7 +250,7 @@ export async function readBill(
 
       const { data, error } = await withTimeout(
         invokePromise,
-        2500,
+        30000,
         { data: null, error: new Error('Edge function read timed out') } as any
       );
 
@@ -303,11 +284,11 @@ export async function readBill(
       }
     } catch (err: any) {
       if (err.code === 'daily_limit_reached') throw err;
-      console.warn('analyze-bill function invoke failed, fallback OCR:', err?.message);
+      console.warn('analyze-bill function invoke failed:', err?.message);
     }
   }
 
-  // If base64 was not passed earlier or edge function failed, return 0 instead of fabricated numbers
+  // If the Edge Function is unavailable, return empty values instead of fabricating OCR output.
   return {
     type: filePath.toLowerCase().includes('water') ? 'water' : 'electricity',
     provider: filePath.toLowerCase().includes('water') ? 'Air Selangor' : 'TNB',

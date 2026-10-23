@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
 import { computeHouseholdEstimateKwh } from "../_shared/billCalc.ts";
 import { createBillReadToken, verifyBillReadToken } from "../_shared/billToken.ts";
+import { GeminiRequestError, requestGeminiContent } from "../_shared/gemini.ts";
 
 // Rate Limit Constants
 // TODO(open-item 6): Confirm daily limits for bill reading and reanalysis per household
@@ -299,9 +300,10 @@ Deno.serve(async (req: Request) => {
       let extractedUsage = 0;
       let extractedAmount = 0;
 
-      const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+      const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
+      const geminiBackupApiKey = Deno.env.get("GEMINI_API_KEY_BACKUP") || "";
 
-      if (geminiApiKey) {
+      if (geminiApiKey || geminiBackupApiKey) {
         const buffer = await fileBlob.arrayBuffer();
         const base64Data = uint8ArrayToBase64(new Uint8Array(buffer));
         const mimeType = fileBlob.type || "image/jpeg";
@@ -312,8 +314,6 @@ Deno.serve(async (req: Request) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-
         const prompt = `You are a utility bill document analysis specialist in Malaysia.
 Extract data from this bill (TNB electricity or Air Selangor / state water bill).
 Output strictly JSON matching this schema:
@@ -327,10 +327,11 @@ Output strictly JSON matching this schema:
 Return only JSON.`;
 
         try {
-          const geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          const geminiData = await requestGeminiContent({
+            apiKey: geminiApiKey,
+            backupApiKey: geminiBackupApiKey,
+            model,
+            body: {
               contents: [
                 {
                   parts: [
@@ -340,21 +341,15 @@ Return only JSON.`;
                 },
               ],
               generationConfig: { response_mime_type: "application/json", temperature: 0.1 },
-            }),
+            },
           });
-
-          if (geminiRes.ok) {
-            const gJson = await geminiRes.json();
-            const textPart = gJson.candidates?.[0]?.content?.parts?.[0]?.text;
-            const parsed = JSON.parse(textPart);
-            extractedType = parsed.type === "water" ? "water" : "electricity";
-            extractedProvider = parsed.provider || (extractedType === "water" ? "Air Selangor" : "Tenaga Nasional Berhad");
-            extractedMonth = normalizeBillingMonth(parsed.billing_month);
-            extractedUsage = Number(parsed.usage) || 0;
-            extractedAmount = Number(parsed.amount) || 0;
-          } else {
-            throw new Error(`Gemini returned status ${geminiRes.status}`);
-          }
+          const textPart = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          const parsed = JSON.parse(textPart);
+          extractedType = parsed.type === "water" ? "water" : "electricity";
+          extractedProvider = parsed.provider || (extractedType === "water" ? "Air Selangor" : "Tenaga Nasional Berhad");
+          extractedMonth = normalizeBillingMonth(parsed.billing_month);
+          extractedUsage = Number(parsed.usage) || 0;
+          extractedAmount = Number(parsed.amount) || 0;
         } catch (e: any) {
           if (Deno.env.get("ALLOW_TEST_FALLBACK") === "true") {
             const fb = getDeterministicTestOCR(filePath);
@@ -364,8 +359,12 @@ Return only JSON.`;
             extractedUsage = fb.usage;
             extractedAmount = fb.amount;
           } else {
+            const safeError = e instanceof GeminiRequestError
+              ? { status: e.status, code: e.code }
+              : { status: null, code: "invalid_response" };
+            console.error("Gemini OCR extraction failed:", safeError);
             return new Response(
-              JSON.stringify({ error: `OCR extraction failed: ${e?.message || "Gemini error"}` }),
+              JSON.stringify({ error: "OCR extraction failed" }),
               { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }

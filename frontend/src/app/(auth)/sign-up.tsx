@@ -45,6 +45,7 @@ import {
 } from 'lucide-react-native';
 import { useToast } from '@/components/Toast';
 import { signUp, UserGender } from '@/lib/authSession';
+import { detectRealLocation, LocationServiceError } from '@/lib/services/locationService';
 
 
 const MALAYSIAN_STATES = [
@@ -101,12 +102,43 @@ export default function SignUpScreen() {
   const isCityValid = city.trim().length > 0;
 
   const isFormComplete = isEmailValid && isPasswordValid && isStateValid && isCityValid;
+  const [isLocating, setIsLocating] = useState(false);
 
-  const handleUseLocation = () => {
-    setStateName('Selangor');
-    setCity('Petaling Jaya');
-    setStreet('18, Jalan SS 2/6, SS 2');
-    showToast('Location set to Petaling Jaya, Selangor', 'success');
+  const handleUseLocation = async () => {
+    if (isLocating) return;
+    setIsLocating(true);
+    try {
+      const loc = await detectRealLocation();
+      if (loc.state) {
+        setStateName(loc.state);
+      }
+      if (loc.city) {
+        setCity(loc.city);
+      }
+      if (loc.street) {
+        setStreet(loc.street);
+      }
+
+      const summaryParts = [loc.city, loc.state].filter(Boolean);
+      const summaryText = summaryParts.length > 0 ? summaryParts.join(', ') : 'Location detected';
+      showToast(`Location set to ${summaryText}`, 'success');
+    } catch (err: any) {
+      if (err instanceof LocationServiceError) {
+        if (err.reason === 'NOT_MALAYSIA') {
+          if (err.detectedLocation?.city) setCity(err.detectedLocation.city);
+          if (err.detectedLocation?.street) setStreet(err.detectedLocation.street);
+          showToast(err.message, 'info');
+        } else if (err.reason === 'PERMISSION_DENIED') {
+          showToast(err.message, 'error');
+        } else {
+          showToast(err.message, 'error');
+        }
+      } else {
+        showToast('Unable to detect location. Please enter your address manually.', 'error');
+      }
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   const handleCreateAccount = async () => {
@@ -363,15 +395,26 @@ export default function SignUpScreen() {
           {/* "Use my location" button */}
           <Pressable
             onPress={handleUseLocation}
+            disabled={isLocating}
             accessibilityRole="button"
             accessibilityLabel="Use my location"
             style={({ pressed }) => [
               styles.locationButton,
-              pressed && styles.locationButtonPressed,
+              pressed && !isLocating && styles.locationButtonPressed,
+              isLocating && styles.locationButtonDisabled,
             ]}
           >
-            <Navigation size={16} color="#292524" strokeWidth={1.5} />
-            <Text style={styles.locationButtonText}>Use my location</Text>
+            {isLocating ? (
+              <>
+                <ActivityIndicator size="small" color="#292524" />
+                <Text style={styles.locationButtonText}>Detecting location...</Text>
+              </>
+            ) : (
+              <>
+                <Navigation size={16} color="#292524" strokeWidth={1.5} />
+                <Text style={styles.locationButtonText}>Use my location</Text>
+              </>
+            )}
           </Pressable>
 
           {/* State picker */}
@@ -813,6 +856,9 @@ const styles = StyleSheet.create({
   },
   locationButtonPressed: {
     backgroundColor: '#ebe9e3',
+  },
+  locationButtonDisabled: {
+    opacity: 0.6,
   },
   locationButtonText: {
     fontFamily: 'SourceSans3_600SemiBold',

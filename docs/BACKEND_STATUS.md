@@ -112,17 +112,17 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 ### Detailed Edge Function Check
 | Function | Exists? | Checks User Login? | Secrets Only for Gemini? | Enforces Deed Cap / Limits? | Service Role Writes? | Returns Clean Errors? | Status |
 |---|---|---|---|---|---|---|---|
-| `scan-waste` (covers `classify_waste` & `confirm_disposal`) | Yes ([index.ts](file:///c:/laragon/www/Simeplify/supabase/functions/scan-waste/index.ts)) | Yes: verifies Bearer JWT via `supabaseAnon.auth.getUser()` (lines 106-129) | Yes: `Deno.env.get("GEMINI_API_KEY")`, `Deno.env.get("GEMINI_MODEL")` (lines 206, 213) | Yes: max 3 deeds/day in `Asia/Kuala_Lumpur` (lines 320-349) | Yes: writes `waste_scans`, `deeds`, and `points` via `supabaseAdmin` (lines 291-365) | Yes: JSON with HTTP 400, 401, 403, 405, 500 (lines 87, 109, 125, 173) | DONE |
-| `analyze-bill` (covers `read_bill`, `analyze_bill`, `award_energy_points`) | Yes ([index.ts](file:///c:/laragon/www/Simeplify/supabase/functions/analyze-bill/index.ts)) | Yes: verifies Bearer JWT via `supabaseAnon.auth.getUser()` (lines 77-100) | Yes: `Deno.env.get("GEMINI_API_KEY")`, `Deno.env.get("GEMINI_MODEL")` (lines 164, 173) | Yes: energy points (+50) awarded once/billing month (lines 306-358); water level = higher of MoM and volume (lines 383-420) | Yes: writes `bills`, `alerts`, `deeds`, and `points` via `supabaseAdmin` (lines 280, 320, 337, 449, 478) | Yes: JSON with HTTP 400, 401, 403, 405, 500 (lines 58, 79, 96, 151) | DONE |
+| `scan-waste` (covers `classify_waste` & `confirm_disposal`) | Yes ([index.ts](file:///c:/laragon/www/Simeplify/supabase/functions/scan-waste/index.ts)) | Yes: verifies Bearer JWT via `supabaseAnon.auth.getUser()` | Yes: server-only `GEMINI_API_KEY`, `GEMINI_API_KEY_BACKUP`, and `GEMINI_MODEL`; one backup retry for quota/invalid key | Yes: max 3 deeds/day in `Asia/Kuala_Lumpur` | Yes: writes `waste_scans`, `deeds`, and `points` via `supabaseAdmin` | Yes: sanitized errors; Gemini keys and raw key-bearing URLs are never logged | DONE |
+| `analyze-bill` (covers `read_bill`, `analyze_bill`, `award_energy_points`) | Yes ([index.ts](file:///c:/laragon/www/Simeplify/supabase/functions/analyze-bill/index.ts)) | Yes: verifies Bearer JWT via `supabaseAnon.auth.getUser()` | Yes: server-only `GEMINI_API_KEY`, `GEMINI_API_KEY_BACKUP`, and `GEMINI_MODEL`; one backup retry for quota/invalid key | Yes: energy points (+50) awarded once/billing month; water level = higher of MoM and volume limits | Yes: writes `bills`, `alerts`, `deeds`, and `points` via `supabaseAdmin` | Yes: sanitized errors; Gemini keys and raw key-bearing URLs are never logged | DONE |
 | Standalone `classify_waste` | No (merged into `scan-waste`) | N/A | N/A | N/A | N/A | N/A | PARTIAL (consolidated) |
 | Standalone `confirm_disposal` | No (merged into `scan-waste`) | N/A | N/A | N/A | N/A | N/A | PARTIAL (consolidated) |
 | Standalone `read_bill` | No (merged into `analyze-bill`) | N/A | N/A | N/A | N/A | N/A | PARTIAL (consolidated) |
 | Standalone `award_energy_points` | No (merged into `analyze-bill` & cron) | N/A | N/A | N/A | N/A | N/A | PARTIAL (consolidated) |
 
-- **Edge Function Bug - Deprecated Fallback Model String:**
-  - *Severity:* Low (only triggers if `GEMINI_MODEL` secret is unset).
-  - *Evidence:* `const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";` ([scan-waste/index.ts:213](file:///c:/laragon/www/Simeplify/supabase/functions/scan-waste/index.ts#L213) and [analyze-bill/index.ts:173](file:///c:/laragon/www/Simeplify/supabase/functions/analyze-bill/index.ts#L173)).
-  - *Smallest fix:* Replace fallback `"gemini-2.5-flash"` with `"gemini-3.5-flash"`.
+- **Gemini configuration:** both Edge Functions require `GEMINI_MODEL` and use
+  `gemini-3.6-flash` from the environment. No model fallback is compiled into
+  client code. The shared transport retries once with the backup key only for
+  quota/429 or invalid-key failures.
 
 ---
 
@@ -150,7 +150,7 @@ Configured in [supabase/migrations/20261020000001_storage_buckets.sql](file:///c
 |---|---|---|
 | **Service role key not in the app or in git** | YES | In `frontend/src`: `git grep -i "service_role" frontend/src` returned 0 matches. In git commits `c6e6705`, `8a30832`, `473067a`: local test scripts contain only the standard local Docker Supabase demo secret (`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...****`). |
 | **`.env` and `supabase/functions/.env` ignored by git** | YES | `git check-ignore frontend/.env frontend/.env.local supabase/functions/.env .env` confirmed all four paths are git-ignored. |
-| **No Gemini call from the app** | YES | `git grep -i "googleapis" frontend/src` returned 0 matches. Gemini is called strictly from Supabase Edge Functions. |
+| **No Gemini call from client code** | YES | Screens and client services contain no Google Gemini endpoint or public Gemini key. Gemini is called only by Supabase Edge Functions and the isolated Expo `+api.ts` server route helper. |
 | **No secret in git history** | YES | `git log -p \| Select-String "AIzaSy"` returned 0 matches. No real Google Gemini or production Supabase secrets exist in git history. |
 | **RLS on every table** | YES | All 16 tables in [20261020000000_initial_schema.sql:425-472](file:///c:/laragon/www/Simeplify/supabase/migrations/20261020000000_initial_schema.sql#L425-L472) have explicit `enable row level security` AND `force row level security`. |
 | **The app cannot write points or deeds** | YES | [20261020000000_initial_schema.sql:733, 746](file:///c:/laragon/www/Simeplify/supabase/migrations/20261020000000_initial_schema.sql#L733): `revoke insert, update, delete on public.deeds from authenticated;` and `revoke insert, update, delete on public.points from authenticated;`. |

@@ -22,7 +22,6 @@ import {
   Image,
   AccessibilityInfo,
   Platform,
-  Alert,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,7 +42,6 @@ import {
   Sprout,
   Recycle,
   Droplets,
-  RotateCcw,
   AlertCircle,
   RefreshCw,
   Check,
@@ -54,8 +52,7 @@ import { MiniCard } from '@/components/MiniCard';
 import { Header } from '@/components/Header';
 import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
-import { classifyWasteWithGemini, type GeminiWasteResult } from '@/lib/services/geminiService';
-import { uploadAndScanWaste } from '@/lib/services/binService';
+import { uploadAndScanWaste, type WasteScanResult } from '@/lib/services/binService';
 import { getBinVisualInfo } from '@/lib/mockData';
 
 type ScreenState = 'camera' | 'analyzing' | 'result' | 'error';
@@ -105,9 +102,7 @@ export default function BinScannerScreen() {
   // Screen state starts straight in camera mode!
   const [screenState, setScreenState] = useState<ScreenState>('camera');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
-  const [result, setResult] = useState<GeminiWasteResult | null>(null);
+  const [result, setResult] = useState<WasteScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const { showToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -209,9 +204,6 @@ export default function BinScannerScreen() {
       if (!pickerResult.canceled && pickerResult.assets?.[0]) {
         const asset = pickerResult.assets[0];
         setImageUri(asset.uri);
-        setImageBase64(asset.base64 || null);
-        setImageMimeType(asset.mimeType || 'image/jpeg');
-
         // Automatically start AI analysis
         analyzeImage(asset.base64 || '', asset.mimeType || 'image/jpeg', asset.uri);
       }
@@ -243,9 +235,6 @@ export default function BinScannerScreen() {
       const base64 = dataUrl.split(',')[1];
 
       setImageUri(dataUrl);
-      setImageBase64(base64);
-      setImageMimeType('image/jpeg');
-
       // Stop camera while analyzing
       stopWebCamera();
 
@@ -270,9 +259,6 @@ export default function BinScannerScreen() {
         const mime = file.type || 'image/jpeg';
 
         setImageUri(dataUrl);
-        setImageBase64(base64);
-        setImageMimeType(mime);
-
         stopWebCamera();
         analyzeImage(base64, mime, dataUrl);
       };
@@ -293,9 +279,6 @@ export default function BinScannerScreen() {
       if (!pickerResult.canceled && pickerResult.assets?.[0]) {
         const asset = pickerResult.assets[0];
         setImageUri(asset.uri);
-        setImageBase64(asset.base64 || null);
-        setImageMimeType(asset.mimeType || 'image/jpeg');
-
         stopWebCamera();
         analyzeImage(asset.base64 || '', asset.mimeType || 'image/jpeg', asset.uri);
       }
@@ -304,26 +287,24 @@ export default function BinScannerScreen() {
     }
   };
 
-  // Perform Gemini AI Classification
+  // Perform Gemini AI classification through the authenticated Edge Function.
   const analyzeImage = async (base64: string, mime: string, uri: string) => {
     setScreenState('analyzing');
 
     try {
-      const geminiResult = await classifyWasteWithGemini(base64, mime);
-      setResult(geminiResult);
-      setScreenState('result');
-
-      // Non-blocking background log to Supabase (never fails the UI)
-      if (householdId && uri) {
-        uploadAndScanWaste(householdId, uri, {
-          fileName: `scan_${Date.now()}.jpg`,
-          base64Data: base64,
-        }).catch((err) => {
-          console.warn('Background Supabase scan log ignored:', err?.message);
-        });
+      if (!householdId) {
+        throw new Error('Sign in and join a household before scanning waste.');
       }
+
+      const scanResult = await uploadAndScanWaste(householdId, uri, {
+        fileName: `scan_${Date.now()}.jpg`,
+        mimeType: mime,
+        base64Data: base64 || undefined,
+      });
+      setResult(scanResult);
+      setScreenState('result');
     } catch (err: any) {
-      console.error('Gemini classification error:', err);
+      console.error('Waste classification failed:', err);
       setErrorMessage(
         err?.message || 'Could not classify item. Please ensure the item is clearly visible.'
       );
@@ -335,7 +316,6 @@ export default function BinScannerScreen() {
   const handleScanAnother = () => {
     setResult(null);
     setImageUri(null);
-    setImageBase64(null);
     setErrorMessage('');
     setScreenState('camera');
 
@@ -553,7 +533,7 @@ export default function BinScannerScreen() {
   // RENDER: Result state
   // =========================================================================
   if (screenState === 'result' && result) {
-    const binInfo = getBinVisualInfo(result.binType, result.material, result.identifiedItem);
+    const binInfo = getBinVisualInfo(result.binType, result.material, result.itemName);
 
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -566,7 +546,7 @@ export default function BinScannerScreen() {
                 source={{ uri: imageUri }}
                 style={styles.resultPhotoImage}
                 resizeMode="cover"
-                accessibilityLabel={`Scanned ${result.identifiedItem} photo`}
+                accessibilityLabel={`Scanned ${result.itemName} photo`}
               />
             )}
             <View style={styles.scanCompleteBadge}>
@@ -575,7 +555,7 @@ export default function BinScannerScreen() {
             </View>
             <View style={styles.itemOverlay}>
               <View style={styles.itemNamePill}>
-                <Text style={styles.itemNameText}>{result.identifiedItem}</Text>
+                <Text style={styles.itemNameText}>{result.itemName}</Text>
               </View>
             </View>
           </View>
@@ -599,7 +579,7 @@ export default function BinScannerScreen() {
             {/* Identified item card */}
             <MiniCard style={styles.resultMiniCard}>
               <Text style={styles.resultLabel}>Identified Item</Text>
-              <Text style={styles.resultValue}>{result.identifiedItem}</Text>
+              <Text style={styles.resultValue}>{result.itemName}</Text>
             </MiniCard>
 
             {/* Target Bin card */}
@@ -627,7 +607,7 @@ export default function BinScannerScreen() {
                 </View>
                 <View style={styles.adviceContent}>
                   <Text style={styles.adviceHeading}>Disposal Tip</Text>
-                  <Text style={styles.adviceBody}>{result.disposalTip}</Text>
+                  <Text style={styles.adviceBody}>{result.tips}</Text>
                 </View>
               </View>
             </MiniCard>

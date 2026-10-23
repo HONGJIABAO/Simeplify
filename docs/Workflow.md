@@ -43,7 +43,7 @@ Order for a new user:
 | Supabase Auth | Sign up, login, saved session. |
 | Supabase Database | Stores all user data. Row Level Security (RLS): a user can only read and write their own household data. |
 | Supabase Storage | Stores bill files (photo or PDF) and waste photos. |
-| Supabase Edge Functions | 3 functions: `scan-waste` (waste classification), `confirm-disposal` (points and deeds on "I threw it"), and `analyze-bill` (with 3 modes: `read` for OCR & signed token, `analyze` for server estimate/anomaly calculation & upserting bill/alerts/deeds/points, and `reanalyze` for re-running AI insight). Call the Gemini API. The API key is stored as a Supabase secret, never in the app. The model name is one config value, so it can change without an app update. |
+| Supabase Edge Functions | 3 functions: `scan-waste` (waste classification), `confirm-disposal` (points and deeds on "I threw it"), and `analyze-bill` (with 3 modes: `read` for OCR & signed token, `analyze` for server estimate/anomaly calculation & upserting bill/alerts/deeds/points, and `reanalyze` for re-running AI insight). Call the Gemini API. Main and backup keys are server secrets, never public app variables. Quota/429 or invalid-key failures retry once with the backup. The model name is one config value, so it can change without an app update. |
 | Scheduled job (pg_cron) | Month-start and month-end notifications, and month-end points settlement and reward result. |
 
 Rules:
@@ -582,7 +582,7 @@ Not decided yet:
 6. **Water limits:** Confirm that the volume limits scale with household size (value × residents ÷ 3), and check the Air Selangor tariff before launch.
 7. **AFA value:** It changes every month. Someone must update `tariff_rates` each month.
 8. **Generation charge above 1,500 kWh:** Sources disagree if the higher rate applies to all kWh or only to the kWh above 1,500. Version 1 uses only the kWh above 1,500.
-9. **Gemini model name:** `gemini-2.5-flash` was shut down on 16 October 2026 and returns a 404 error. Use a current Flash model (Google lists `gemini-3.5-flash` as the replacement). Keep the model name in one config value, because Google retires models often.
+9. **Gemini model name:** configured as `gemini-3.6-flash`, the listed replacement for `gemini-2.0-flash` after its 1 June 2026 shutdown. Keep the model name in `GEMINI_MODEL`, because Google retires models often.
 10. **Solar "See how":** Where does the button go?
 11. **Push notifications:** Not in version 1.
 12. **One account per household:** Several members sharing one household are not covered.

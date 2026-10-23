@@ -35,7 +35,6 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
 import { uploadAndScanWaste } from '@/lib/services/binService';
-import { classifyWasteWithGemini } from '@/lib/services/geminiService';
 import { type BinType, getBinInfo } from '@/lib/mockData';
 
 const cartonImage = require('../../../assets/images/plain_carton_box.png');
@@ -145,73 +144,42 @@ export default function BinUploadScreen() {
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      let aiResult: any = null;
-
-      // If user uploaded a custom image with data URI, classify directly with Gemini AI
-      if (selectedItem.image?.uri && typeof selectedItem.image.uri === 'string' && selectedItem.image.uri.startsWith('data:')) {
-        try {
-          aiResult = await classifyWasteWithGemini(selectedItem.image.uri);
-        } catch (aiErr) {
-          console.warn('Gemini classification fallback on custom image:', aiErr);
-        }
+      if (!householdId) {
+        throw new Error('Sign in and join a household before scanning waste.');
       }
 
-      const finalBinType = aiResult?.binType || selectedItem.binType;
-      const finalItemName = aiResult?.identifiedItem || selectedItem.name;
-      const finalMaterial =
-        aiResult?.material ||
-        (finalBinType === 'paper'
-          ? 'Cardboard / Paperboard'
-          : finalBinType === 'plastic'
-          ? 'PET / Plastic'
-          : finalBinType === 'glass_metal'
-          ? 'Glass'
-          : 'Organic / Residual Waste');
-      const finalConfidence = aiResult?.confidence ?? 0.94;
-      const finalTip =
-        aiResult?.disposalTip ||
-        (finalBinType === 'general'
-          ? 'Dispose in general waste bin.'
-          : 'Rinse and dry before placing in the recycling bin.');
-      const finalRecyclable =
-        typeof aiResult?.isRecyclable === 'boolean'
-          ? aiResult.isRecyclable
-          : finalBinType !== 'general';
-
-      // Optional background sync with Supabase (silently catches network error if offline)
-      if (householdId) {
-        uploadAndScanWaste(householdId, selectedItem.image, {
-          fileName: selectedItem.fileName,
-        }).catch((err) => {
-          console.warn('Background Supabase scan log ignored:', err?.message);
-        });
+      const resolvedImage = Image.resolveAssetSource(selectedItem.image);
+      const imageUri = selectedItem.image?.uri || resolvedImage?.uri;
+      if (!imageUri) {
+        throw new Error('The selected image could not be opened.');
       }
 
-      const isCustomUri = selectedItem.image?.uri;
+      const dataUriMatch = typeof imageUri === 'string'
+        ? imageUri.match(/^data:([^;]+);base64,(.+)$/)
+        : null;
+      const scanResult = await uploadAndScanWaste(householdId, imageUri, {
+        fileName: selectedItem.fileName,
+        mimeType: dataUriMatch?.[1] || 'image/jpeg',
+        base64Data: dataUriMatch?.[2],
+      });
+
       router.push({
         pathname: '/bin/result' as any,
         params: {
-          binType: finalBinType,
-          itemName: finalItemName,
-          material: finalMaterial,
-          confidence: finalConfidence.toString(),
-          tips: finalTip,
-          isRecyclable: finalRecyclable ? 'true' : 'false',
-          pointsAwarded: finalRecyclable ? '10' : '0',
-          imageUri: isCustomUri ? selectedItem.image.uri : undefined,
+          binType: scanResult.binType,
+          itemName: scanResult.itemName,
+          material: scanResult.material,
+          confidence: scanResult.confidence.toString(),
+          tips: scanResult.tips,
+          isRecyclable: scanResult.isRecyclable ? 'true' : 'false',
+          pointsAwarded: scanResult.pointsAwarded.toString(),
+          scanId: scanResult.scanId,
+          imageUri,
         },
       });
     } catch (err: any) {
-      console.error('Scan failed:', err);
-      // Fallback navigation with selected item data
-      router.push({
-        pathname: '/bin/result' as any,
-        params: {
-          binType: selectedItem.binType,
-          itemName: selectedItem.name,
-          imageUri: selectedItem.image?.uri ? selectedItem.image.uri : undefined,
-        },
-      });
+      console.error('Waste scan failed:', err);
+      showToast(err?.message || 'Could not scan this image. Please try again.', 'error');
     } finally {
       setIsAnalyzing(false);
     }
