@@ -7,6 +7,14 @@
  * Functions so credentials never enter the browser or native app bundle.
  */
 
+// @ts-ignore -- explicit extension keeps this module directly importable by Node tests.
+import type { AIRoutineAnalysisResult } from '../../features/scanner/logic/scannerCore.ts';
+// @ts-ignore -- explicit extension keeps this module directly importable by Node tests.
+import type { SimulatorRoutineProfile } from '../../features/simulator/logic/simulatorBridge.ts';
+
+// @ts-ignore -- explicit extension keeps this module directly importable by Node tests.
+export type { AIRoutineAnalysisResult } from '../../features/scanner/logic/scannerCore.ts';
+
 export interface BillAnomalyResult {
   isAnomaly: boolean;
   anomalyType: 'none' | 'leak_detected' | 'spike_detected';
@@ -76,4 +84,184 @@ export function detectBillAnomaly(
         }
       : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// AI Routine Analysis: Bridge between Simulator & Bill Scanner
+// ---------------------------------------------------------------------------
+
+export interface BillRoutineInput {
+  type: 'electricity' | 'water';
+  amount: number;
+  usage: number;
+  billingMonth?: string;
+  provider?: string;
+}
+
+/**
+ * Deterministic local fallback generator that adheres to the exact same rules and output format
+ * as the Gemini AI prompt. Ensures 100% reliable insights even in offline dev environments.
+ */
+export function generateLocalRoutineAnalysis(
+  billData: BillRoutineInput,
+  routineProfile: SimulatorRoutineProfile
+): AIRoutineAnalysisResult {
+  const actualCostRm = Math.round(billData.amount * 100) / 100;
+  const estimatedCostRm = Math.round(routineProfile.estimatedMonthlyCostRm * 100) / 100;
+  const diff = Math.round((actualCostRm - estimatedCostRm) * 100) / 100;
+  const pct = estimatedCostRm > 0 ? Math.round((diff / estimatedCostRm) * 100) : 0;
+
+  if (billData.type === 'electricity') {
+    // Electricity analysis
+    if (diff <= 5) {
+      return {
+        discrepancyRm: diff,
+        discrepancyPct: pct,
+        discrepancyType: diff < -5 ? 'under_estimate' : 'matches_estimate',
+        conclusion: `Great job! Your bill of RM ${Math.round(actualCostRm)} matches your routine estimate of RM ${Math.round(estimatedCostRm)}. Your household is adhering well to your simulated schedule!`,
+        culpritAppliances: [],
+        culpritHabits: [],
+        actionRecommendation: 'Keep maintaining your daily schedule in the Simulator.',
+        severity: 'normal',
+        estimatedCostRm,
+        actualCostRm,
+        utilityType: 'electricity',
+      };
+    }
+
+    if (diff <= 25) {
+      // Minor Discrepancy (~RM 10 to RM 20 over estimate): minor appliances (lights, fan)
+      const light = routineProfile.appliances.find(
+        (a) => a.type.includes('light') || a.name.toLowerCase().includes('light') || a.name.toLowerCase().includes('lamp')
+      );
+      const fan = routineProfile.appliances.find(
+        (a) => a.type.includes('fan') || a.name.toLowerCase().includes('fan')
+      );
+
+      const culpritApp = light || fan || routineProfile.appliances[0];
+      const culpritName = culpritApp
+        ? `${culpritApp.name}${culpritApp.roomName ? ` in ${culpritApp.roomName}` : ''}`
+        : 'living room lights';
+
+      const culpritShort = light
+        ? `${light.roomName ? `${light.roomName.toLowerCase()} ` : ''}lights`
+        : fan
+        ? `${fan.name} in ${fan.roomName}`
+        : 'minor appliances';
+
+      return {
+        discrepancyRm: diff,
+        discrepancyPct: pct,
+        discrepancyType: 'minor_over_estimate',
+        conclusion: `Your bill is RM ${Math.round(diff)} higher than your routine estimate. Based on your profile, you might have left the ${culpritShort} on overnight a few times. Please check!`,
+        culpritAppliances: culpritApp ? [culpritApp.name] : ['Living room light'],
+        culpritHabits: ['Leaving lights or fans running overnight'],
+        actionRecommendation: `Check switch timers before sleeping and verify if ${culpritName} is turned off when leaving the room.`,
+        severity: 'minor',
+        estimatedCostRm,
+        actualCostRm,
+        utilityType: 'electricity',
+      };
+    }
+
+    // Major Discrepancy (> RM 25 over estimate): high-drain appliances (air conditioner, refrigerator)
+    const ac = routineProfile.appliances.find(
+      (a) => a.type.includes('air') || a.name.toLowerCase().includes('air') || a.name.toLowerCase().includes('ac')
+    );
+    const fridge = routineProfile.appliances.find(
+      (a) => a.type.includes('fridge') || a.type.includes('refrigerator') || a.name.toLowerCase().includes('refrigerator')
+    );
+
+    const culpritApp = ac || fridge || routineProfile.appliances.find((a) => a.isHighDrain) || routineProfile.appliances[0];
+    const culpritLabel = culpritApp ? `${culpritApp.name}${culpritApp.roomName ? ` (${culpritApp.roomName})` : ''}` : 'Bedroom Aircond';
+
+    let conclusionText = '';
+    if (ac) {
+      conclusionText = `Your bill is significantly higher (+RM ${Math.round(diff)} vs estimate). Since you rely heavily on your ${ac.name}${ac.roomName ? ` in ${ac.roomName}` : ''}, check if it was left running while you were out or set to an excessively low temperature.`;
+    } else if (fridge) {
+      conclusionText = `Your bill is significantly higher (+RM ${Math.round(diff)} vs estimate). Since your ${fridge.name} runs 24/7, check if the door gasket is leaking cold air or if cooling appliances were left on longer than scheduled.`;
+    } else {
+      conclusionText = `Your bill is significantly higher (+RM ${Math.round(diff)} vs estimate). High-drain appliances from your profile (${culpritLabel}) may have operated for extra hours outside your scheduled routine.`;
+    }
+
+    return {
+      discrepancyRm: diff,
+      discrepancyPct: pct,
+      discrepancyType: 'major_over_estimate',
+      conclusion: conclusionText,
+      culpritAppliances: culpritApp ? [culpritApp.name] : ['Air Conditioner'],
+      culpritHabits: ['Leaving cooling appliances active while away', 'Running air conditioning below 24°C'],
+      actionRecommendation: `Review your away schedule in the Simulator and ensure air conditioners use a 1-hour sleep timer.`,
+      severity: 'major',
+      estimatedCostRm,
+      actualCostRm,
+      utilityType: 'electricity',
+    };
+  }
+
+  // Water analysis
+  if (diff <= 4) {
+    return {
+      discrepancyRm: diff,
+      discrepancyPct: pct,
+      discrepancyType: diff < -4 ? 'under_estimate' : 'matches_estimate',
+      conclusion: `Your water bill of RM ${actualCostRm.toFixed(2)} aligns nicely with your routine estimate of RM ${estimatedCostRm.toFixed(2)}. Great water conservation habits!`,
+      culpritAppliances: [],
+      culpritHabits: [],
+      actionRecommendation: 'Maintain your current daily shower routine.',
+      severity: 'normal',
+      estimatedCostRm,
+      actualCostRm,
+      utilityType: 'water',
+    };
+  }
+
+  if (diff <= 16) {
+    // Water minor (~RM 5 to RM 15 over estimate): minor habits (longer shower, dripping faucet, running tap)
+    const showerBlock = routineProfile.routineBlocks.find(
+      (b) => b.iconType === 'shower' || b.name.toLowerCase().includes('shower')
+    );
+    const minShower = showerBlock?.minutesPerShower || 8;
+
+    return {
+      discrepancyRm: diff,
+      discrepancyPct: pct,
+      discrepancyType: 'minor_over_estimate',
+      conclusion: `Your bill is RM ${Math.round(diff)} higher than your routine estimate. Based on your profile, minor habits like a dripping faucet, leaving the tap running while brushing teeth, or a slightly longer shower than your scheduled ${minShower}-minute routine might be the cause.`,
+      culpritAppliances: ['Bathroom Sink / Tap', 'Water Heater Shower'],
+      culpritHabits: ['Longer showers than scheduled', 'Running tap while brushing teeth', 'Slow faucet drip'],
+      actionRecommendation: `Inspect bathroom and kitchen tap aerators for minor drips and aim to keep showers within ${minShower} minutes.`,
+      severity: 'minor',
+      estimatedCostRm,
+      actualCostRm,
+      utilityType: 'water',
+    };
+  }
+
+  // Water major (> RM 16 over estimate): severe issues (concealed pipe leakage, running toilet flapper)
+  return {
+    discrepancyRm: diff,
+    discrepancyPct: pct,
+    discrepancyType: 'major_over_estimate',
+    conclusion: `Your bill is significantly higher (+RM ${Math.round(diff)} vs estimate). This large discrepancy strongly suggests severe issues like a concealed pipe leakage or a continuously running toilet flapper in your bathroom fixtures.`,
+    culpritAppliances: ['Toilet Cistern & Flapper', 'Concealed Water Piping'],
+    culpritHabits: ['Undetected plumbing leakages'],
+    actionRecommendation: 'Perform a water meter leak test: close all taps and observe if your water meter continues spinning.',
+    severity: 'major',
+    estimatedCostRm,
+    actualCostRm,
+    utilityType: 'water',
+  };
+}
+
+/**
+ * Produces the client-side offline fallback for routine analysis. Gemini-backed
+ * bill analysis is performed by the authenticated analyze-bill Edge Function;
+ * this client module must never read an API key or call Gemini directly.
+ */
+export async function analyzeBillRoutineWithGemini(
+  billData: BillRoutineInput,
+  routineProfile: SimulatorRoutineProfile
+): Promise<AIRoutineAnalysisResult> {
+  return generateLocalRoutineAnalysis(billData, routineProfile);
 }

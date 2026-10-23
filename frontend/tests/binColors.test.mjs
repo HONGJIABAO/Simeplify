@@ -41,7 +41,7 @@ test('scan-result cards use the same dynamic visual mapping and merged labels', 
   const cameraScreen = readFileSync(resolve(ROOT, 'src/features/bin/BinScannerScreen.tsx'), 'utf8');
   const homeScreen = readFileSync(resolve(ROOT, 'src/features/bin/BinHomeScreen.tsx'), 'utf8');
   assert.match(resultScreen, /getBinVisualInfo\(result\.binType, result\.material, result\.itemName\)/);
-  assert.match(cameraScreen, /getBinVisualInfo\(result\.binType, result\.material, result\.identifiedItem\)/);
+  assert.match(cameraScreen, /getBinVisualInfo\(result\.binType, result\.material, result\.itemName\)/);
   assert.match(resultScreen, /\{binInfo\.name\}/);
   assert.match(cameraScreen, /\{binInfo\.name\}/);
   assert.match(homeScreen, /backgroundColor: bin\.color/);

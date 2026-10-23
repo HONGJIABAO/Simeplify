@@ -12,9 +12,11 @@ import {
   CheckCircle2,
   Clock,
   Leaf,
+  Lock,
   Recycle,
   RotateCcw,
   Sparkles,
+  Unlock,
   Vote,
   X,
   Zap,
@@ -32,8 +34,12 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
   const {
     demoDate,
     setDemoDate,
+    advanceNextDay,
     todayDeedsCount,
     currentHousehold,
+    isLeafLocked,
+    unlockLeaf,
+    setIsLeafLocked,
     isVotingVisible,
     countdown,
     penaltyNotice,
@@ -104,6 +110,12 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                 <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Deeds Today</Text>
                   <Text style={styles.statValue}>{todayDeedsCount} / {MAX_DEEDS_PER_DAY}</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Leaf Status</Text>
+                  <Text style={[styles.statValue, isLeafLocked ? styles.statValueAlert : styles.statValueGreen]}>
+                    {isLeafLocked ? '🔒 Locked (Next Day)' : `${currentHousehold.leafStage.toUpperCase()} (Unlocked)`}
+                  </Text>
                 </View>
                 <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Leaf Stage</Text>
@@ -214,6 +226,26 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                   </View>
                 </Pressable>
 
+                {/* Advance Next Day */}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => advanceNextDay()}
+                  style={({ pressed }) => [
+                    styles.presetBtn,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Calendar size={15} color="#566549" />
+                  <View style={styles.btnTextCol}>
+                    <Text style={styles.presetTitle}>
+                      Advance Next Day (+1 Day)
+                    </Text>
+                    <Text style={styles.presetHint}>
+                      Transition to next day: if locked with no action, drops 1 status & unlocks
+                    </Text>
+                  </View>
+                </Pressable>
+
                 {/* Skip Day (Oct 25) */}
                 <Pressable
                   accessibilityRole="button"
@@ -240,7 +272,7 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                         demoDate === '2026-10-25' && styles.presetHintActive,
                       ]}
                     >
-                      Triggers missed-day penalty (-1 deed, -10 pts, stage drops)
+                      Triggers missed-day penalty (-1 deed). Recycling points remain unaffected.
                     </Text>
                   </View>
                 </Pressable>
@@ -317,6 +349,25 @@ export function EcoDemoControlModal({ visible, onClose }: EcoDemoControlModalPro
                     <Text style={styles.actionBtnSecondaryTitle}>Sort an item cleanly in bin</Text>
                     <Text style={styles.actionBtnSecondarySub}>
                       +10 recycling pts & +10 monthly pts (Now: {currentHousehold.recyclingPts} pts)
+                    </Text>
+                  </View>
+                </Pressable>
+
+                {/* Toggle Leaf Lock State */}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setIsLeafLocked((prev) => !prev)}
+                  style={({ pressed }) => [styles.actionBtnSecondary, pressed && styles.pressed]}
+                >
+                  {isLeafLocked ? <Unlock size={16} color="#566549" /> : <Lock size={16} color="#D97706" />}
+                  <View style={styles.flexOne}>
+                    <Text style={styles.actionBtnSecondaryTitle}>
+                      {isLeafLocked ? 'Unlock leaf manually' : 'Lock leaf (Test locked status)'}
+                    </Text>
+                    <Text style={styles.actionBtnSecondarySub}>
+                      {isLeafLocked
+                        ? 'Currently 🔒 Locked. Advance day without action to test -1 stage drop & unlock.'
+                        : 'Currently 🔓 Unlocked. Tap to lock leaf.'}
                     </Text>
                   </View>
                 </Pressable>

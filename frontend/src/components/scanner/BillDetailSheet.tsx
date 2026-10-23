@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking } from 'react-native';
+import { useRouter } from 'expo-router';
 import { FileText, AlertTriangle, Trash2, RefreshCw, ExternalLink } from 'lucide-react-native';
 import { BottomSheet } from '../BottomSheet';
 import { Button } from '../Button';
 import { MiniCard } from '../MiniCard';
 import { Badge } from '../Badge';
+import { AIRoutineAnalysisCard } from './AIRoutineAnalysisCard';
 import { type Bill, getBillFileUrl, formatBillingMonthDisplay } from '@/lib/services/scannerService';
+import { getSimulatorRoutineProfile } from '@/features/simulator/logic/simulatorBridge';
+import { generateLocalRoutineAnalysis } from '@/lib/services/geminiService';
 import { formatMoney, formatUsage } from '@/lib/formatters';
 
 export interface BillDetailProps {
@@ -60,10 +64,28 @@ export function BillDetailSheet({
     }
   };
 
+  const router = useRouter();
   const comparison = bill.analysis?.comparison;
   const isAnomaly = bill.alertLevel && bill.alertLevel !== 'normal';
   const displayTitle = bill.type === 'electricity' ? 'Electricity' : 'Water';
   const displayMonth = formatBillingMonthDisplay(bill.billing_month);
+
+  const routineAnalysis = useMemo(() => {
+    if (bill.analysis?.routine_analysis) {
+      return bill.analysis.routine_analysis;
+    }
+    const routineProfile = getSimulatorRoutineProfile(bill.type);
+    return generateLocalRoutineAnalysis(
+      {
+        type: bill.type,
+        amount: bill.amount,
+        usage: bill.usage,
+        billingMonth: bill.billing_month,
+        provider: bill.provider || undefined,
+      },
+      routineProfile
+    );
+  }, [bill]);
 
   return (
     <BottomSheet
@@ -144,6 +166,18 @@ export function BillDetailSheet({
               </View>
             )}
           </MiniCard>
+        )}
+
+        {/* AI Routine Analysis (Bridge between Simulator & Scanner) */}
+        {routineAnalysis && (
+          <AIRoutineAnalysisCard
+            routineAnalysis={routineAnalysis}
+            utilityType={bill.type}
+            onNavigateToSimulator={() => {
+              onClose();
+              router.push('/(tabs)/simulator');
+            }}
+          />
         )}
 
         {/* Saved AI Analysis (read from bills.analysis, no direct AI calls) */}

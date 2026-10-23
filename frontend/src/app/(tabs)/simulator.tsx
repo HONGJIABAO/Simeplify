@@ -55,6 +55,7 @@ import { applySwapToItem, buildEnergyReport, buildSwapSuggestionCards, type Swap
 import { getSimulatorBillCardMonthlyTotal } from '@/features/simulator/logic/billDisplay';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
+import { useEcoHabit } from '@/lib/ecoHabitContext';
 import { SUPABASE_URL } from '@/lib/supabase';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
 import {
@@ -107,6 +108,7 @@ export default function SimulatorScreen() {
   const insets = useSafeAreaInsets();
   const tabBarClearance = 56 + Math.max(insets.bottom, 16) + 8;
   const { showToast } = useToast();
+  const { addDeed } = useEcoHabit();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const [initialLayout] = useState(loadLayoutState);
   const [initialSimulation] = useState(loadSimulationState);
@@ -340,7 +342,9 @@ export default function SimulatorScreen() {
   const completeWeekReel = useCallback(() => {
     stopWeekReel();
     setAiReportVisible(true);
-  }, [stopWeekReel]);
+    addDeed('simulator');
+    showToast('Simulation complete • +1 Deed added to Community!', 'success');
+  }, [stopWeekReel, addDeed, showToast]);
 
   useEffect(() => {
     let lastTime = Date.now();
@@ -851,7 +855,8 @@ export default function SimulatorScreen() {
 
     // Persist room changes to Supabase
     saveRoom(roomId, name, type, true, householdId).catch((err) => console.error('Failed to save room in Supabase:', err));
-    showToast(`Saved room “${name}”`, 'success');
+    addDeed('simulator');
+    showToast(`Saved room “${name}” • +1 Deed added!`, 'success');
   };
 
   const pointerToPlanPosition = (clientX: number, clientY: number): Point | null => {
@@ -1013,7 +1018,9 @@ export default function SimulatorScreen() {
     }
 
     setItems((value) => value.map((item) => item.id === editingAppliance?.id ? saved : item));
-    setApplianceSheetVisible(false); setEditingAppliance(null); showToast(`Saved ${saved.name}`, 'success');
+    setApplianceSheetVisible(false); setEditingAppliance(null);
+    addDeed('simulator');
+    showToast(`Saved ${saved.name} • +1 Deed added!`, 'success');
   };
   const handleCancelApplianceSheet = () => {
     if (editingAppliance?.id.startsWith('pending_')) setItems((value) => value.filter((item) => item.id !== editingAppliance.id));
@@ -1036,7 +1043,9 @@ export default function SimulatorScreen() {
         role: saved.role ?? null,
       }).catch((err) => console.error('Failed to save furniture in Supabase:', err));
     }
-    setFurnitureSheetVisible(false); setEditingFurniture(null); showToast(`Saved ${saved.name}`, 'success');
+    setFurnitureSheetVisible(false); setEditingFurniture(null);
+    addDeed('simulator');
+    showToast(`Saved ${saved.name} • +1 Deed added!`, 'success');
   };
 
   const saveMovedItemPositions = (moved: StoredPlacedItem[]) => Promise.all(moved.map((item) => {
@@ -1062,9 +1071,10 @@ export default function SimulatorScreen() {
     if (tidyUndoTimerRef.current) clearTimeout(tidyUndoTimerRef.current);
     tidyUndoTimerRef.current = setTimeout(() => setTidyUndoItems(null), 6000);
     saveMovedItemPositions(result.moved).catch((err) => console.error('Failed to save tidy positions:', err));
+    addDeed('simulator');
     showToast(result.leftovers.length
-      ? `Tidied ${result.moved.length} items; ${result.leftovers.length} stayed in place`
-      : `Tidied ${result.moved.length} items on ${currentFloor}F`, 'success');
+      ? `Tidied ${result.moved.length} items • +1 Deed added!`
+      : `Tidied items on ${currentFloor}F • +1 Deed added!`, 'success');
   };
 
   const handleUndoTidy = () => {
@@ -1223,7 +1233,8 @@ export default function SimulatorScreen() {
       {solarSuggestionVisible && !solarApplied && <ApplianceSuggestionSheet visible onClose={() => setSolarSuggestionVisible(false)} onApply={() => {
         setSolarApplied(true);
         setSolarSuggestionVisible(false);
-        showToast('Solar is now active on your floor plan', 'success');
+        addDeed('simulator');
+        showToast('Solar active on floor plan • +1 Deed added!', 'success');
       }} />}
       <RoomNamingModal visible={namingModalVisible} room={namingRoom} onSave={handleSaveRoomName}
         onClose={() => { setNamingModalVisible(false); setNamingRoom(null); setPendingRoomAction(null); }} />
@@ -1236,12 +1247,13 @@ export default function SimulatorScreen() {
         onEditBlockPress={(block) => { setTimelineVisible(false); setSelectedBlockForEdit(block); setEditBlockVisible(true); }}
         onSaveSchedule={() => {
           saveRoutineBlocks(routineBlocks);
+          addDeed('simulator');
           if (householdId) {
             saveRoutineBlocksToDb(householdId, routineBlocks)
-              .then(() => showToast('Schedule saved', 'success'))
+              .then(() => showToast('Schedule saved • +1 Deed added!', 'success'))
               .catch((err) => console.error('Failed to save day_blocks to Supabase:', err));
           } else {
-            showToast('Schedule saved', 'success');
+            showToast('Schedule saved • +1 Deed added!', 'success');
           }
         }} />
       <AddBlockSheet visible={addBlockVisible} onClose={() => { setAddBlockVisible(false); setTimelineVisible(true); }}
@@ -1249,12 +1261,13 @@ export default function SimulatorScreen() {
         onSaveBlock={(block) => {
           const newBlocks = [...routineBlocks, { ...block, id: `block_${Date.now()}` }];
           setRoutineBlocks(newBlocks);
+          addDeed('simulator');
           if (householdId) {
             saveRoutineBlocksToDb(householdId, newBlocks).catch((err) =>
               console.error('Failed to save day_blocks to Supabase:', err)
             );
           }
-          showToast(`Added ${block.name}`, 'success');
+          showToast(`Added ${block.name} • +1 Deed added!`, 'success');
         }} />
       <EditBlockSheet visible={editBlockVisible} onClose={() => { setEditBlockVisible(false); setSelectedBlockForEdit(null); setTimelineVisible(true); }}
         block={selectedBlockForEdit} rooms={setupRooms} appliances={appliancesForBillModal} existingBlocks={routineBlocks}

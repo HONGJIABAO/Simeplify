@@ -25,6 +25,12 @@ import {
 
 export type LeafStage = 'dry' | 'healthy' | 'lush';
 
+export function downgradeLeafStage(stage: LeafStage): LeafStage {
+  if (stage === 'lush') return 'healthy';
+  if (stage === 'healthy') return 'dry';
+  return 'dry';
+}
+
 export interface MockHousehold {
   id: string;
   name: string;

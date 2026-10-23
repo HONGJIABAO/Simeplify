@@ -18,6 +18,7 @@ import {
   CloudOff,
   Coins,
   Leaf,
+  Lock,
   Mail,
   ReceiptText,
   Recycle,
@@ -211,6 +212,9 @@ export function CommunityDashboard({
     isVotingVisible,
     countdown,
     resetAll,
+    isLeafLocked,
+    lockPromptVisible,
+    dismissLockPrompt,
   } = useEcoHabit();
 
   const [showDemoControls, setShowDemoControls] = useState(false);
@@ -218,6 +222,13 @@ export function CommunityDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [votePromptVisible, setVotePromptVisible] = useState(false);
   const [hasPromptedThisMonth, setHasPromptedThisMonth] = useState<Record<string, boolean>>({});
+
+  // Prompt user when day transition causes leaf to lock (Requirement 4)
+  useEffect(() => {
+    if (lockPromptVisible) {
+      showToast('Living Leaf is locked for the new day! Complete an action to unlock.', 'warning');
+    }
+  }, [lockPromptVisible, showToast]);
 
   const currentMonthKey = demoDate.slice(0, 7);
   const formattedMonth = monthLabel(demoDate);
@@ -488,33 +499,49 @@ export function CommunityDashboard({
       <View
         style={[
           styles.leafCard,
+          isLeafLocked && styles.leafCardLocked,
           {
-            backgroundColor: stageTheme.cardBg,
-            borderColor: stageTheme.cardBorder,
+            backgroundColor: isLeafLocked ? '#FFFDF8' : stageTheme.cardBg,
+            borderColor: isLeafLocked ? '#FCD34D' : stageTheme.cardBorder,
           },
         ]}
       >
         <View
           style={[
             styles.leafDial,
+            isLeafLocked && styles.leafDialLocked,
             {
-              backgroundColor: stageTheme.dialBg,
-              borderColor: stageTheme.dialBorder,
+              backgroundColor: isLeafLocked ? '#FEF3C7' : stageTheme.dialBg,
+              borderColor: isLeafLocked ? '#F59E0B' : stageTheme.dialBorder,
             },
           ]}
         >
-          <Leaf size={74} color={stageTheme.leafColor} strokeWidth={1.4} />
+          {isLeafLocked ? (
+            <View style={styles.lockedDialCenter}>
+              <Leaf size={52} color="#D97706" strokeWidth={1.4} />
+              <View style={styles.lockIconOverlay}>
+                <Lock size={18} color="#92400E" strokeWidth={2.2} />
+              </View>
+            </View>
+          ) : (
+            <Leaf size={74} color={stageTheme.leafColor} strokeWidth={1.4} />
+          )}
+
           <View
             style={[
               styles.deedBadge,
               {
-                backgroundColor: stageTheme.deedBadgeBg,
+                backgroundColor: isLeafLocked ? '#FEF3C7' : stageTheme.deedBadgeBg,
               },
             ]}
           >
-            <Leaf size={13} color={stageTheme.deedBadgeText} />
-            <Text style={[styles.deedBadgeText, { color: stageTheme.deedBadgeText }]}>
-              {todayDeedsCount} / 2 deeds today
+            {isLeafLocked ? (
+              <Lock size={12} color="#92400E" />
+            ) : (
+              <Leaf size={13} color={stageTheme.deedBadgeText} />
+            )}
+            <Text style={[styles.deedBadgeText, { color: isLeafLocked ? '#92400E' : stageTheme.deedBadgeText }]}>
+              {isLeafLocked ? 'Locked • Action needed' : `${todayDeedsCount} / 2 deeds today`}
             </Text>
           </View>
         </View>
@@ -523,19 +550,70 @@ export function CommunityDashboard({
           style={[
             styles.stagePill,
             {
-              backgroundColor: stageTheme.stagePillBg,
-              borderColor: stageTheme.stagePillBorder,
+              backgroundColor: isLeafLocked ? '#FEF3C7' : stageTheme.stagePillBg,
+              borderColor: isLeafLocked ? '#FCD34D' : stageTheme.stagePillBorder,
             },
           ]}
         >
-          <View style={[styles.stageDot, { backgroundColor: stageTheme.stageDot }]} />
-          <Text style={[styles.stagePillText, { color: stageTheme.stagePillText }]}>
-            {stageName} stage · {todayDeedsCount} today
+          <View style={[styles.stageDot, { backgroundColor: isLeafLocked ? '#D97706' : stageTheme.stageDot }]} />
+          <Text style={[styles.stagePillText, { color: isLeafLocked ? '#92400E' : stageTheme.stagePillText }]}>
+            {isLeafLocked ? 'Locked (Next Day)' : `${stageName} stage · ${todayDeedsCount} today`}
           </Text>
         </View>
 
-        <Text style={styles.heroTitle}>{stageTheme.heroTitle}</Text>
-        <Text style={styles.heroBody}>{stageTheme.heroBody}</Text>
+        <Text style={styles.heroTitle}>
+          {isLeafLocked ? 'Living Leaf is Shrunk & Locked' : stageTheme.heroTitle}
+        </Text>
+        <Text style={styles.heroBody}>
+          {isLeafLocked
+            ? 'A new day has arrived. Your leaf has temporarily shrunk. Perform any action in Simulator, Bin, or Scanner to unlock your leaf and prevent losing a deed!'
+            : stageTheme.heroBody}
+        </Text>
+
+        {/* Requirement 4: Action Prompt Box for Locked State */}
+        {isLeafLocked && (
+          <View style={styles.lockActionPromptBox}>
+            <View style={styles.lockPromptHeader}>
+              <View style={styles.lockBadgeSmall}>
+                <Lock size={12} color="#92400E" strokeWidth={2} />
+                <Text style={styles.lockBadgeSmallText}>Unlock Required</Text>
+              </View>
+              <Text style={styles.lockPromptTime}>Action needed before tomorrow</Text>
+            </View>
+            <Text style={styles.lockPromptDesc}>
+              Complete any task below to unlock your leaf. If tomorrow arrives without any action, your leaf drops 1 status, penalizes 1 deed, and unlocks (Recycling Points are unaffected):
+            </Text>
+            <View style={styles.lockQuickActionsRow}>
+              <Pressable
+                onPress={() => onAction('/(tabs)/bin')}
+                style={styles.lockQuickActionBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Go to Bin to sort item"
+              >
+                <Recycle size={14} color="#566549" />
+                <Text style={styles.lockQuickActionText}>Sort Bin</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onAction('/(tabs)/simulator')}
+                style={styles.lockQuickActionBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Go to Simulator"
+              >
+                <Zap size={14} color="#A97A4A" />
+                <Text style={styles.lockQuickActionText}>Simulator</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onAction('/(tabs)/scanner')}
+                style={styles.lockQuickActionBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Go to Scanner"
+              >
+                <ReceiptText size={14} color="#566549" />
+                <Text style={styles.lockQuickActionText}>Scan Bill</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <View style={styles.stageRow}>
           {['Dry (0)', 'Healthy (1)', 'Lush (2)'].map((label, index) => {
@@ -596,7 +674,7 @@ export function CommunityDashboard({
           </Text>
         </View>
 
-        {/* Missed-day penalty notice */}
+        {/* Missed-day penalty notice (Requirement 5: Miss-Day Penalty Exclusions) */}
         {penaltyNotice && (
           <View style={styles.penaltyNoticeCard}>
             <AlertCircle size={15} color="#92400E" />
@@ -753,10 +831,10 @@ export function CommunityDashboard({
         )}
       </View>
 
-      {/* ── One-Time Voting Dialog / Prompt ─────────────────────────────────── */}
+      {/* ── One-Time Voting Dialog / Prompt (Requirement 2: Mobile-sized modal) ─────────────────────────────────── */}
       <Modal visible={votePromptVisible} transparent animationType="fade" onRequestClose={() => setVotePromptVisible(false)}>
-        <View style={styles.promptScrim}>
-          <View style={styles.promptCard}>
+        <View style={styles.promptScrim} className="flex-1 justify-center items-center p-6">
+          <View style={styles.promptCard} className="max-w-md mx-auto w-full">
             <View style={styles.promptIconCircle}>
               <Vote size={26} color="#8A5F36" />
             </View>
@@ -788,10 +866,10 @@ export function CommunityDashboard({
         </View>
       </Modal>
 
-      {/* ── Official Ballot Modal ───────────────────────────────────────────── */}
+      {/* ── Official Ballot Modal (Requirement 2: Mobile-sized modal) ───────────────────────────────────────────── */}
       <Modal visible={ballotOpen} transparent animationType="fade" onRequestClose={closeBallot}>
-        <View style={styles.scrim}>
-          <View style={styles.sheet}>
+        <View style={styles.scrim} className="flex-1 justify-end items-center">
+          <View style={styles.sheet} className="max-w-md mx-auto w-full">
             <View style={styles.sheetHandle} />
             <View style={styles.sectionHeader}>
               <View style={styles.softPill}>
@@ -1447,8 +1525,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(41,37,36,0.42)',
     justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   sheet: {
+    width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
     maxHeight: '92%',
     backgroundColor: '#FAF6F1',
     borderTopLeftRadius: 30,
@@ -1652,7 +1734,8 @@ const styles = StyleSheet.create({
   },
   promptCard: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 430,
+    alignSelf: 'center',
     backgroundColor: '#FAF6F1',
     borderRadius: 24,
     padding: 22,
@@ -1723,5 +1806,96 @@ const styles = StyleSheet.create({
     fontFamily: 'SourceSans3_700Bold',
     fontSize: 14,
     color: '#FFFFFF',
+  },
+  // Requirement 4: Shrunk / Locked leaf styles and action prompt
+  leafCardLocked: {
+    backgroundColor: '#FFFDF9',
+    borderColor: '#FCD34D',
+    borderWidth: 1.5,
+  },
+  leafDialLocked: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    transform: [{ scale: 0.82 }],
+  },
+  lockedDialCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  lockIconOverlay: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 999,
+    padding: 4,
+    borderWidth: 1.5,
+    borderColor: '#D97706',
+  },
+  lockActionPromptBox: {
+    width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    padding: 14,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  lockPromptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  lockBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  lockBadgeSmallText: {
+    fontFamily: 'SourceSans3_700Bold',
+    fontSize: 11.5,
+    color: '#92400E',
+  },
+  lockPromptTime: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 11,
+    color: '#B45309',
+  },
+  lockPromptDesc: {
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: '#78350F',
+    marginBottom: 10,
+  },
+  lockQuickActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  lockQuickActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingVertical: 8,
+  },
+  lockQuickActionText: {
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 12,
+    color: '#78350F',
   },
 });

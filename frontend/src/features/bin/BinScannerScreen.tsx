@@ -52,6 +52,7 @@ import { MiniCard } from '@/components/MiniCard';
 import { Header } from '@/components/Header';
 import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
+import { useEcoHabit } from '@/lib/ecoHabitContext';
 import { uploadAndScanWaste, type WasteScanResult } from '@/lib/services/binService';
 import { getBinVisualInfo } from '@/lib/mockData';
 
@@ -97,6 +98,7 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
 export default function BinScannerScreen() {
   const router = useRouter();
   const { session } = useAuthSession();
+  const { sortRecycleItem, addDeed } = useEcoHabit();
   const householdId = session.profile?.household_id;
 
   // Screen state starts straight in camera mode!
@@ -334,10 +336,14 @@ export default function BinScannerScreen() {
     setIsSubmitting(true);
 
     try {
+      // Requirement 1 & 3: Global deed update and synchronized points
       if (result?.isRecyclable) {
-        showToast('+10 points', 'success');
+        sortRecycleItem();
+        addDeed('bin_scanner');
+        showToast('+10 points & +1 Deed added to Community!', 'success');
       } else {
-        showToast('Item sorted into General waste', 'info');
+        addDeed('bin_scanner');
+        showToast('Item sorted & +1 Deed added to Community!', 'success');
       }
 
       setTimeout(() => {
