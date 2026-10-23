@@ -69,6 +69,7 @@ const DEFAULT_ITEMS: FixtureItem[] = [
 
   furniture('f2-bed-master', 'f2-A', 'bed', 'Bed'),
   appliance('f2-lamp-master', 'f2-A', 'lights', 'Philips Bedside Lamp', 9, { brand: 'Philips', role: 'bedside right' }),
+  appliance('f2-fan-master', 'f2-A', 'fan', 'KDK Standing Fan', 55, { brand: 'KDK', stars: 4 }),
   appliance('f2-bulb-a', 'f2-A', 'light_bulb', 'Master bedroom light', 9),
   appliance('f2-ac-master', 'f2-A', 'air_conditioner', 'Panasonic Air Conditioner', 1000, { brand: 'Panasonic' }),
 

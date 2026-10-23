@@ -11,6 +11,7 @@ import { getSlotRect, type FractionRect, type RoomSlot } from './roomLayout.ts';
 import { getFloorVisibleContentSize, type FloorVisibleContentSize } from './spriteSizing.ts';
 
 export const BACK_WALL_STRIP: FractionRect = { x: 0, y: 0, width: 1, height: 0.18 };
+export const WALL_ITEM_TOP = 0.04;
 export const INNER_FLOOR_RECT: FractionRect = { x: 0.06, y: 0.20, width: 0.88, height: 0.72 };
 export const DOOR_KEEP_OUT_DEPTH = 0.16;
 export const DOOR_KEEP_OUT_SIDE_MARGIN = 0.06;
@@ -82,23 +83,23 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   },
   'f1-B': {
     slots: [
-      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.22, y: 0.39, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down', placement: 'lean_back' },
+      { type: 'refrigerator', spriteKey: 'refrigerator', x: 0.22, y: 0.18, w: ITEM_SLOT_WIDTHS.refrigerator, facing: 'down', placement: 'lean_back' },
       { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.78, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
       { type: 'sink', spriteKey: 'sink', x: 0.88, y: 0.50, top: 0.30, w: ITEM_SLOT_WIDTHS.sink, facing: 'down', placement: 'lean_right' },
       { type: 'table', spriteKey: 'table', x: 0.50, y: 0.52, bottom: 0.60, h: 0.16, w: ITEM_SLOT_WIDTHS.table, role: 'kitchen table' },
-      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.66, bottom: 0.72, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.42, bottom: 0.48, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ],
     clearZones: [{ x: 0.66, y: 0.50, width: 0.12, height: 0.22 }],
   },
   'f1-C': {
     slots: [
-      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.18, y: 0.39, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down', placement: 'lean_back' },
+      { type: 'washing_machine', spriteKey: 'washing_machine', x: 0.18, y: 0.21, w: ITEM_SLOT_WIDTHS.washing_machine, facing: 'down', placement: 'lean_back' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.65, y: 0.52, bottom: 0.58, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [],
   },
   'f1-D': {
     slots: [
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.20, y: 0.055, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down', placement: 'hang_back' },
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.20, y: 0.21, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down', placement: 'hang_back' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.52, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
       { type: 'toilet', spriteKey: 'toilet', x: 0.22, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
       { type: 'sink', spriteKey: 'sink', x: 0.80, y: 0.78, bottom: 0.88, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
@@ -106,17 +107,18 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   },
   'f2-A': {
     slots: [
-      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.38, w: ITEM_SLOT_WIDTHS.bed, facing: 'down', placement: 'lean_back' },
-      { type: 'lights', spriteKey: 'lights', x: 0.44, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
-      { type: 'lights', spriteKey: 'lights', x: 0.52, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside second' },
+      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.14, w: ITEM_SLOT_WIDTHS.bed, facing: 'down', placement: 'lean_back' },
+      { type: 'lights', spriteKey: 'lights', x: 0.44, y: 0.17, bottom: 0.24, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'lights', spriteKey: 'lights', x: 0.52, y: 0.17, bottom: 0.24, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside second' },
       { type: 'air_conditioner', spriteKey: 'air_conditioner', x: 0.82, y: 0.11, bottom: 0.17, h: 0.12, w: ITEM_SLOT_WIDTHS.air_conditioner, facing: 'down' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.54, y: 0.68, bottom: 0.74, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
+      { type: 'fan', spriteKey: 'fan', x: 0.12, y: 0.80, bottom: 0.91, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
     ], clearZones: [{ x: 0.44, y: 0.68, width: 0.12, height: 0.24 }],
   },
   'f2-B': {
     slots: [
-      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.38, w: ITEM_SLOT_WIDTHS.bed, facing: 'down', placement: 'lean_back' },
-      { type: 'lights', spriteKey: 'lights', x: 0.51, y: 0.41, bottom: 0.50, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
+      { type: 'bed', spriteKey: 'bed', x: 0.24, y: 0.14, w: ITEM_SLOT_WIDTHS.bed, facing: 'down', placement: 'lean_back' },
+      { type: 'lights', spriteKey: 'lights', x: 0.51, y: 0.17, bottom: 0.24, h: 0.18, w: ITEM_SLOT_WIDTHS.lights, role: 'bedside right' },
       { type: 'fan', spriteKey: 'fan', x: 0.86, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.fan },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.50, y: 0.65, bottom: 0.71, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
     ], clearZones: [{ x: 0.43, y: 0.54, width: 0.14, height: 0.38 }],
@@ -130,7 +132,7 @@ export const ROOM_SLOTS: Record<RoomTemplateId, RoomTemplateDefinition> = {
   },
   'f2-D': {
     slots: [
-      { type: 'water_heater', spriteKey: 'water_heater', x: 0.20, y: 0.055, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down', placement: 'hang_back' },
+      { type: 'water_heater', spriteKey: 'water_heater', x: 0.20, y: 0.21, w: ITEM_SLOT_WIDTHS.water_heater, facing: 'down', placement: 'hang_back' },
       { type: 'light_bulb', spriteKey: 'light_bulb', x: 0.55, y: 0.30, bottom: 0.36, h: 0.12, w: ITEM_SLOT_WIDTHS.light_bulb, layer: 'ceiling' },
       { type: 'toilet', spriteKey: 'toilet', x: 0.26, y: 0.77, bottom: 0.88, h: 0.22, w: ITEM_SLOT_WIDTHS.toilet, facing: 'up' },
       { type: 'sink', spriteKey: 'sink', x: 0.82, y: 0.78, bottom: 0.88, h: 0.20, w: ITEM_SLOT_WIDTHS.sink, facing: 'up' },
@@ -235,17 +237,15 @@ export function placeLeanBack(
   planWidth = 390,
   planHeight = 390,
 ): PlacementResult {
-  const roomHeight = roomRect.height * planHeight;
   const innerLeft = (roomRect.x + INNER_FLOOR_RECT.x * roomRect.width) * planWidth;
   const innerRight = (roomRect.x + (INNER_FLOOR_RECT.x + INNER_FLOOR_RECT.width) * roomRect.width) * planWidth;
-  const backWall = (roomRect.y + INNER_FLOOR_RECT.y * roomRect.height) * planHeight;
-  const gap = roomHeight * 0.01;
+  const topEdge = (roomRect.y + WALL_ITEM_TOP * roomRect.height) * planHeight;
   const centerX = clamp(
     (roomRect.x + requestedX * roomRect.width) * planWidth,
     innerLeft + metrics.visibleWidth / 2,
     innerRight - metrics.visibleWidth / 2,
   );
-  const centerY = backWall + gap + metrics.visibleHeight / 2;
+  const centerY = topEdge + metrics.visibleHeight / 2;
   return {
     x: centerX / planWidth,
     y: centerY / planHeight,
@@ -265,15 +265,13 @@ export function placeHangBack(
   planWidth = 390,
   planHeight = 390,
 ): PlacementResult {
-  const roomHeight = roomRect.height * planHeight;
   const innerLeft = (roomRect.x + INNER_FLOOR_RECT.x * roomRect.width) * planWidth;
   const innerRight = (roomRect.x + (INNER_FLOOR_RECT.x + INNER_FLOOR_RECT.width) * roomRect.width) * planWidth;
   const innerBottom = (roomRect.y + (INNER_FLOOR_RECT.y + INNER_FLOOR_RECT.height) * roomRect.height) * planHeight;
-  const backWall = (roomRect.y + INNER_FLOOR_RECT.y * roomRect.height) * planHeight;
-  const gap = roomHeight * 0.01;
+  const topEdge = (roomRect.y + WALL_ITEM_TOP * roomRect.height) * planHeight;
   // The "whole picture" here means the whole painted picture, including a
   // hanging hose/cable; transparent canvas margins are not geometry.
-  const scale = Math.min(1, (innerBottom - (backWall + gap)) / metrics.visibleHeight,
+  const scale = Math.min(1, (innerBottom - topEdge) / metrics.visibleHeight,
     (innerRight - innerLeft) / metrics.visibleWidth);
   const appliedScale = Math.max(0.8, scale);
   const pictureWidth = metrics.pictureWidth * appliedScale;
@@ -285,7 +283,7 @@ export function placeHangBack(
     innerLeft + visibleWidth / 2,
     innerRight - visibleWidth / 2,
   );
-  const centerY = backWall + gap + visibleHeight / 2;
+  const centerY = topEdge + visibleHeight / 2;
   return {
     x: centerX / planWidth,
     y: centerY / planHeight,

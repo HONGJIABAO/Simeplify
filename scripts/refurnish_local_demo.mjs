@@ -18,7 +18,7 @@ const headers = {
 };
 
 async function rest(path, options = {}) {
-  const response = await fetch(`${apiUrl}/rest/v1/${path}`, { headers: { ...headers, ...options.headers }, ...options });
+  const response = await fetch(`${apiUrl}/rest/v1/${path}`, { ...options, headers: { ...headers, ...options.headers } });
   const text = await response.text();
   if (!response.ok) throw new Error(`${options.method ?? 'GET'} ${path}: ${response.status} ${text}`);
   return text ? JSON.parse(text) : null;
@@ -35,7 +35,7 @@ try {
     database: 'local Supabase unavailable',
     demo: DEMO_EMAIL,
     householdId: DEMO_HOUSEHOLD_ID,
-    planned: { appliances: 23, furniture: 9 },
+    planned: { appliances: 24, furniture: 10 },
     roomTypeChanges: { '1C': 'laundry_room', '2C': 'work_room', '1D': 'bathroom', '2D': 'bathroom' },
     note: 'Start local Supabase to compare existing rows and run --apply.',
   }, null, 2));
@@ -68,33 +68,39 @@ const appliances = [
   appliance(1,'1A','air_conditioner','Daikin','Inverter FTKV25N',1000,5,.0928,.0605),
   appliance(2,'1A','tv','Sony','Bravia 4K 55',90,5,.2494,.1155),
   appliance(3,'1A','router','TP-Link','Archer AX55 Wi-Fi 6',15,null,.4988,.0660),
-  appliance(4,'1A','light_bulb','Philips','Ceiling LED',9,5,.2900,.4840),
+  appliance(4,'1A','light_bulb','Philips','Ceiling LED',9,5,.3828,.2420),
   appliance(5,'1A','fan','KDK','Standing Fan',55,4,.0812,.4565),
-  appliance(6,'1B','refrigerator','Hitachi','Inverter Big2',150,5,.6724,.1705),
-  appliance(7,'1B','light_bulb','Philips','Downlight LED',9,5,.7900,.3630),
+  appliance(6,'1B','refrigerator','Hitachi','Inverter Big2',150,5,.6724,.0974),
+  appliance(7,'1B','light_bulb','Philips','Downlight LED',9,5,.7900,.2310),
   appliance(8,'1B','air_conditioner','Daikin','Back Wall AC',1000,5,.9076,.0605),
-  appliance(9,'1C','washing_machine','Panasonic','Top Load',500,4,.1200,.6895),
+  appliance(9,'1C','washing_machine','Panasonic','Top Load',500,4,.0904,.6434),
   appliance(10,'1C','light_bulb','Philips','Ceiling LED',9,5,.3250,.7840),
-  appliance(11,'1D','water_heater','Joven','Instant Rainshower',3500,4,.7700,.5748),
+  appliance(11,'1D','water_heater','Joven','Instant Rainshower',3500,4,.6224,.6434),
   appliance(12,'1D','light_bulb','Philips','Ceiling LED',9,5,.6872,.6850),
-  appliance(13,'2A','lights','Philips','Bedside Lamp',9,5,.2494,.1980),
+  appliance(13,'2A','lights','Philips','Bedside Lamp',9,5,.2544,.0933),
   appliance(14,'2A','light_bulb','Philips','Ceiling LED',9,5,.3132,.3740),
   appliance(15,'2A','air_conditioner','Panasonic','Back Wall AC',1000,5,.4756,.0605),
-  appliance(16,'2B','lights','Philips','Bedside Lamp',9,5,.8068,.2255),
+  appliance(24,'2A','fan','KDK','Standing Fan',55,4,.0696,.4400),
+  appliance(16,'2B','lights','Philips','Bedside Lamp',9,5,.7928,.0933),
   appliance(17,'2B','fan','KDK','Standing Fan',55,4,.9412,.4235),
   appliance(18,'2B','light_bulb','Philips','Ceiling LED',9,5,.7900,.3575),
   appliance(19,'2C','workplace','Dell','Laptop & phone',80,null,.1250,.7030),
   appliance(20,'2C','light_bulb','Philips','Ceiling LED',9,5,.2600,.7840),
   appliance(21,'2C','air_conditioner','Daikin','Back Wall AC',1000,5,.3900,.5995),
-  appliance(22,'2D','water_heater','Panasonic','Home Shower',3500,5,.6440,.5748),
+  appliance(22,'2D','water_heater','Panasonic','Home Shower',3500,5,.6224,.6434),
   appliance(23,'2D','light_bulb','Philips','Ceiling LED',9,5,.6980,.6850),
 ];
 
 const furnitureItems = [
-  furniture(1,'1A','table','coffee table',.2784,.2695), furniture(2,'1A','sofa',null,.2784,.4015,'back'),
-  furniture(3,'1B','sink','kitchen sink',.7900,.2475), furniture(4,'1D','toilet',null,.5792,.8965),
-  furniture(5,'1D','sink',null,.7880,.9010), furniture(6,'2A','bed',null,.1392,.1870),
-  furniture(7,'2B','bed',null,.7312,.2090), furniture(8,'2D','toilet',null,.5936,.8965),
+  furniture(1,'1A','table','coffee table',.2784,.2970),
+  furniture(2,'1A','sofa',null,.2784,.4345,'back'),
+  furniture(3,'1B','sink','kitchen sink',.9204,.2404),
+  furniture(10,'1B','table','kitchen table',.7900,.2860),
+  furniture(4,'1D','toilet',null,.5792,.8965),
+  furniture(5,'1D','sink',null,.7880,.9010),
+  furniture(6,'2A','bed',null,.1392,.0765),
+  furniture(7,'2B','bed',null,.6808,.0765),
+  furniture(8,'2D','toilet',null,.5936,.8965),
   furniture(9,'2D','sink',null,.7952,.9010),
 ];
 

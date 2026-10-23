@@ -75,7 +75,7 @@ test('Demo User Seed: Login and Data Verification for Mei Ling Tan', async () =>
     );
 
   assert.equal(appliancesError, null, `Appliances query error: ${appliancesError?.message}`);
-  assert.equal(appliances.length, 23, `Expected 23 appliances, got ${appliances.length}`);
+  assert.equal(appliances.length, 24, `Expected 24 appliances, got ${appliances.length}`);
 
   const { data: furniture, error: furnitureError } = await client
     .from('furniture_items')

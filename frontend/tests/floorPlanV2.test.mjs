@@ -24,13 +24,14 @@ import {
   getRoomTemplateId,
   getSlotPlanPoint,
   INNER_FLOOR_RECT,
+  WALL_ITEM_TOP,
   isFootprintInside,
   ROOM_SLOTS,
   sortItemsForRoom,
   tidyFloorItems,
   useSpot,
 } from '../src/features/simulator/logic/furnishedLayout.ts';
-import { FLOOR_ITEM_SCALE, FLOOR_SPRITE_BASE_SIZE, getFloorSpriteSizes, getFloorVisibleContentSize } from '../src/features/simulator/logic/spriteSizing.ts';
+import { FLOOR_ITEM_SCALE, FLOOR_SPRITE_BASE_SIZE, FLOOR_VISIBLE_CONTENT_BOUNDS, getFloorSpriteSizes, getFloorVisibleContentSize } from '../src/features/simulator/logic/spriteSizing.ts';
 import { getPlanItemLabel, PLAN_ITEM_LABEL_DURATION_MS } from '../src/features/simulator/logic/itemLabel.ts';
 import { WORKPLACE_DEFAULT_WATTS } from '../src/features/simulator/logic/applianceConstants.ts';
 import {
@@ -199,7 +200,18 @@ test('ROOM_SLOTS contains the requested fixed centres, widths, and facing', () =
   const kitchenBulb = ROOM_SLOTS['f1-B'].slots.find((slot) => slot.type === 'light_bulb');
   assert.deepEqual(kitchenTable,
     { type: 'table', spriteKey: 'table', x: 0.50, y: 0.52, bottom: 0.60, h: 0.16, w: 0.12, role: 'kitchen table' });
-  assert.ok(kitchenTable.bottom < kitchenBulb.bottom, 'kitchen table stays above the light bulb');
+  assert.equal(kitchenBulb.x, kitchenTable.x, 'kitchen bulb has same x as table');
+  assert.ok(kitchenBulb.y < kitchenTable.y, 'kitchen bulb is above the table');
+  assert.ok(kitchenBulb.bottom < kitchenTable.y, 'kitchen bulb bottom stays above table top');
+  const roomB = createDefaultRooms(false).find((r) => r.id === 'f1-B');
+  const itemsB = roomItems(MOCK_SIMULATOR_ITEMS, 'f1-B');
+  const bulbItem = itemsB.find((i) => i.type === 'light_bulb');
+  const tableItem = itemsB.find((i) => i.type === 'table');
+  const bulbFp = getItemLocalFootprint(bulbItem, roomB, PLAN_SIDE, PLAN_SIDE, itemsB);
+  const tableFp = getItemLocalFootprint(tableItem, roomB, PLAN_SIDE, PLAN_SIDE, itemsB);
+  const bulbTableGap = tableFp.y - (bulbFp.y + bulbFp.height);
+  assert.ok(bulbTableGap >= 0.02 && bulbTableGap <= 0.05, `gap between 0.02 and 0.05 of room height, got ${bulbTableGap.toFixed(4)}`);
+  assert.equal(footprintOverlapArea(bulbFp, tableFp), 0, 'kitchen bulb and table must not overlap');
   assert.equal(ROOM_SLOTS['f1-B'].slots.find((slot) => slot.type === 'refrigerator').x, 0.22);
   assert.equal(ROOM_SLOTS['f1-B'].slots.find((slot) => slot.type === 'refrigerator').placement, 'lean_back');
   assert.equal(ROOM_SLOTS['f1-C'].slots.find((slot) => slot.type === 'washing_machine').x, 0.18);
@@ -299,9 +311,9 @@ test('wall placement helpers use visible content edges, not bottom anchors', () 
   const shower = getFloorVisibleContentSize('water_heater', PLAN_SIDE);
   const sink = getFloorVisibleContentSize('sink', PLAN_SIDE);
   const leanBed = placeLeanBack(roomA, 0.24, bed, PLAN_SIDE, PLAN_SIDE);
-  assert.ok(Math.abs((leanBed.y * PLAN_SIDE - bed.visibleHeight / 2) - (0.20 * roomA.height * PLAN_SIDE + 0.01 * roomA.height * PLAN_SIDE)) < 0.01);
+  assert.ok(Math.abs((leanBed.y * PLAN_SIDE - bed.visibleHeight / 2) - (WALL_ITEM_TOP * roomA.height * PLAN_SIDE)) < 0.01);
   const leanFridge = placeLeanBack(roomB, 0.22, fridge, PLAN_SIDE, PLAN_SIDE);
-  assert.ok(Math.abs((leanFridge.y * PLAN_SIDE - fridge.visibleHeight / 2) - (0.20 * roomB.height * PLAN_SIDE + 0.01 * roomB.height * PLAN_SIDE)) < 0.01);
+  assert.ok(Math.abs((leanFridge.y * PLAN_SIDE - fridge.visibleHeight / 2) - (WALL_ITEM_TOP * roomB.height * PLAN_SIDE)) < 0.01);
   const leanWasher = placeLeanBack(getSlotRect('C'), 0.18, washer, PLAN_SIDE, PLAN_SIDE);
   assert.ok(leanWasher.x * PLAN_SIDE - washer.visibleWidth / 2 >= 0.06 * getSlotRect('C').width * PLAN_SIDE - 0.01);
   const showerPlacement = placeHangBack(roomD, 0.20, shower, PLAN_SIDE, PLAN_SIDE);
@@ -351,29 +363,32 @@ test('bedside lamps have a measured visible gap and draw after beds', () => {
   assert.deepEqual(sameBottom.map((item) => item.id), ['bed', 'lamp']);
 });
 
-test('moved visible boxes stay inside the inner floor and report their wall gaps', () => {
+test('every moved item has its top edge at WALL_ITEM_TOP within 0.005', () => {
   const rooms = createDefaultRooms(false);
   const moved = [
-    ['f1-B', 'refrigerator'], ['f1-B', 'sink'], ['f1-C', 'washing_machine'],
-    ['f1-D', 'water_heater'], ['f2-A', 'bed'], ['f2-A', 'lights'],
-    ['f2-B', 'bed'], ['f2-B', 'lights'], ['f2-D', 'water_heater'],
+    ['f1-B', 'refrigerator'],
+    ['f1-C', 'washing_machine'],
+    ['f1-D', 'water_heater'],
+    ['f2-A', 'bed'],
+    ['f2-B', 'bed'],
+    ['f2-D', 'water_heater'],
   ];
   for (const [roomId, type] of moved) {
     const room = rooms.find((candidate) => candidate.id === roomId);
     const items = roomItems(MOCK_SIMULATOR_ITEMS, roomId);
     const item = items.find((candidate) => candidate.type === type);
     const box = getVisibleContentFootprint(item, room, PLAN_SIDE, PLAN_SIDE, items);
-    assert.ok(isFootprintInside(box, INNER_FLOOR_RECT), `${roomId}/${type} visible box must be inside inner floor`);
-    const slot = ROOM_SLOTS[getRoomTemplateId(room, items)].slots.find((candidate) => candidate.type === type);
-    const roomRect = getSlotRect(room.slot);
-    if (slot.placement) {
-      const gap = slot.placement === 'lean_right'
-        ? INNER_FLOOR_RECT.x + INNER_FLOOR_RECT.width - (box.x + box.width)
-        : (box.y - INNER_FLOOR_RECT.y);
-      assert.ok(gap >= -0.005 && gap <= 0.02, `${roomId}/${type} wall gap must be within 0..2%`);
-    }
-    assert.ok(roomRect.width > 0 && roomRect.height > 0);
+    assert.ok(
+      Math.abs(box.y - WALL_ITEM_TOP) <= 0.005,
+      `${roomId}/${type} top edge ${box.y.toFixed(4)} must be at WALL_ITEM_TOP (${WALL_ITEM_TOP}) within 0.005`
+    );
   }
+  const roomB = rooms.find((candidate) => candidate.id === 'f1-B');
+  const bItems = roomItems(MOCK_SIMULATOR_ITEMS, 'f1-B');
+  const sink = bItems.find((candidate) => candidate.type === 'sink');
+  const sinkBox = getVisibleContentFootprint(sink, roomB, PLAN_SIDE, PLAN_SIDE, bItems);
+  const gap = INNER_FLOOR_RECT.x + INNER_FLOOR_RECT.width - (sinkBox.x + sinkBox.width);
+  assert.ok(gap >= -0.005 && gap <= 0.02, `f1-B/sink wall gap must be within 0..2%`);
 });
 
 test('set-up rooms have no grey setup placeholder while dark rooms keep one plus', () => {
@@ -451,6 +466,8 @@ test('useSpot stays inside the inner floor and outside doorway keep-outs', () =>
     ['f1-C', 'washing_machine'],
     ['f2-C', 'workplace'],
     ['f2-A', 'bed'],
+    ['f2-B', 'bed'],
+    ['f2-D', 'water_heater'],
   ];
   for (const [roomId, type] of cases) {
     const room = rooms.find((candidate) => candidate.id === roomId);
@@ -466,6 +483,47 @@ test('useSpot stays inside the inner floor and outside doorway keep-outs', () =>
       .map((candidate) => getItemLocalFootprint(candidate, room, PLAN_SIDE, PLAN_SIDE, items));
     assert.equal(occupied.some((box) => containsPoint(box, local)), false, `${type} use spot must avoid other items`);
   }
+});
+
+test('mock, seed, refurnish script and ROOM_SLOTS positions agree', () => {
+  const seedSql = readFileSync(resolve(FRONTEND_ROOT, '../supabase/seed.sql'), 'utf8');
+  const refurnishScript = readFileSync(resolve(FRONTEND_ROOT, '../scripts/refurnish_local_demo.mjs'), 'utf8');
+
+  const checkItems = [
+    { roomId: 'f1-B', type: 'refrigerator', posX: 0.6724, posY: 0.0974 },
+    { roomId: 'f1-B', type: 'light_bulb', posX: 0.7900, posY: 0.2310 },
+    { roomId: 'f1-C', type: 'washing_machine', posX: 0.0904, posY: 0.6434 },
+    { roomId: 'f1-D', type: 'water_heater', posX: 0.6224, posY: 0.6434 },
+    { roomId: 'f2-A', type: 'bed', posX: 0.1392, posY: 0.0765 },
+    { roomId: 'f2-A', type: 'lights', posX: 0.2544, posY: 0.0933 },
+    { roomId: 'f2-A', type: 'fan', posX: 0.0696, posY: 0.4400 },
+    { roomId: 'f2-B', type: 'bed', posX: 0.6808, posY: 0.0765 },
+    { roomId: 'f2-B', type: 'lights', posX: 0.7928, posY: 0.0933 },
+    { roomId: 'f2-D', type: 'water_heater', posX: 0.6224, posY: 0.6434 },
+  ];
+
+  for (const item of checkItems) {
+    const mockItem = MOCK_SIMULATOR_ITEMS.find((m) => m.roomId === item.roomId && m.type === item.type);
+    assert.ok(mockItem, `Mock item ${item.roomId}/${item.type} exists`);
+    assert.ok(Math.abs(mockItem.posX - item.posX) < 0.001, `Mock ${item.roomId}/${item.type} posX agrees`);
+    assert.ok(Math.abs(mockItem.posY - item.posY) < 0.001, `Mock ${item.roomId}/${item.type} posY agrees`);
+
+    const posXStr = item.posX.toFixed(4).replace('0.', '');
+    const posYStr = item.posY.toFixed(4).replace('0.', '');
+
+    const seedMatches = seedSql.includes(`.${posXStr}`) && seedSql.includes(`.${posYStr}`);
+    assert.ok(seedMatches, `seed.sql must include .${posXStr} and .${posYStr} for ${item.roomId}/${item.type}`);
+
+    const refurnishMatches = refurnishScript.includes(`.${posXStr}`) && refurnishScript.includes(`.${posYStr}`);
+    assert.ok(refurnishMatches, `refurnish script must include .${posXStr} and .${posYStr} for ${item.roomId}/${item.type}`);
+  }
+});
+
+test('no picture size changed (size table unchanged)', () => {
+  assert.deepEqual(FLOOR_VISIBLE_CONTENT_BOUNDS.refrigerator, { width: 162, height: 279 });
+  assert.deepEqual(FLOOR_VISIBLE_CONTENT_BOUNDS.washing_machine, { width: 205, height: 256 });
+  assert.deepEqual(FLOOR_VISIBLE_CONTENT_BOUNDS.water_heater, { width: 202, height: 235 });
+  assert.deepEqual(FLOOR_VISIBLE_CONTENT_BOUNDS.bed, { width: 227, height: 164 });
 });
 
 test('TV, shower, work, charging, and sleep blocks resolve one standing target', () => {
@@ -809,8 +867,8 @@ test('lit appearance has no surface fill or border, appliances stay at full opac
 });
 
 test('default and expanded fixture counts are stable', () => {
-  assert.equal(MOCK_SIMULATOR_ITEMS.length, 33);
-  assert.equal(MOCK_SIMULATOR_ITEMS_ALL.length, 33);
+  assert.equal(MOCK_SIMULATOR_ITEMS.length, 34);
+  assert.equal(MOCK_SIMULATOR_ITEMS_ALL.length, 34);
 });
 
 test('table lamps stay in bedrooms, floor 2 has no TV, and every set-up room has one ceiling bulb', () => {
@@ -999,4 +1057,114 @@ test('the play flow: first tap opens the menu, second tap plays, tap while playi
   assert.equal(state.isEditMode, true);
   assert.equal(state.isPlaying, false);
 });
+
+test('f2-A has exactly one stand_fan, at the bottom-left, with no violation', () => {
+  const room = createDefaultRooms(false).find((r) => r.id === 'f2-A');
+  const items = roomItems(MOCK_SIMULATOR_ITEMS, 'f2-A');
+  const fans = items.filter((item) => item.type === 'fan');
+  assert.equal(fans.length, 1, 'f2-A must have exactly one stand_fan');
+  const fan = fans[0];
+  assert.equal(fan.spriteKey, 'fan');
+  assert.equal(fan.wattage, 55);
+
+  const slot = ROOM_SLOTS['f2-A'].slots.find((s) => s.type === 'fan');
+  assert.ok(slot, 'f2-A must have a fan slot in ROOM_SLOTS');
+  assert.equal(slot.x, 0.12);
+  assert.equal(slot.y, 0.80);
+
+  const roomRect = getSlotRect(room.slot);
+  const fanFp = getItemLocalFootprint(fan, room, PLAN_SIDE, PLAN_SIDE, items);
+
+  // Inside inner floor rectangle (away from walls)
+  assert.ok(isFootprintInside(fanFp, INNER_FLOOR_RECT), 'fan must sit inside inner floor rectangle');
+
+  // Away from doorway keep-outs
+  const doors = getDoorKeepOuts(room.slot, roomRect.width * PLAN_SIDE, roomRect.height * PLAN_SIDE);
+  for (const door of doors) {
+    assert.equal(footprintOverlapArea(fanFp, door), 0, 'fan must avoid doorway keep-outs');
+  }
+
+  // Away from lanes
+  const lanes = ROOM_SLOTS['f2-A'].clearZones;
+  for (const lane of lanes) {
+    assert.equal(footprintOverlapArea(fanFp, lane), 0, 'fan must avoid clear zones/lanes');
+  }
+
+  // Away from stairs
+  assert.notEqual(room.slot, 'C', 'f2-A is not stair room');
+
+  // Away from bed and all other items (no overlap)
+  const otherItems = items.filter((item) => item.id !== fan.id && getPlacementLayer(item) !== 'ceiling');
+  for (const other of otherItems) {
+    const otherFp = getItemLocalFootprint(other, room, PLAN_SIDE, PLAN_SIDE, items);
+    assert.equal(footprintOverlapArea(fanFp, otherFp), 0, `fan must not overlap ${other.type} (${other.id})`);
+  }
+});
+
+test('no other item position changed in any room (compare against current values)', () => {
+  const expectedPositions = {
+    'f1-A': [
+      { type: 'air_conditioner', posX: 0.0928, posY: 0.0605 },
+      { type: 'tv', posX: 0.2494, posY: 0.1155 },
+      { type: 'router', posX: 0.4988, posY: 0.0660 },
+      { type: 'table', posX: 0.2784, posY: 0.2970 },
+      { type: 'sofa', posX: 0.2784, posY: 0.4345 },
+      { type: 'light_bulb', posX: 0.3828, posY: 0.2420 },
+      { type: 'fan', posX: 0.0812, posY: 0.4565 },
+    ],
+    'f1-B': [
+      { type: 'refrigerator', posX: 0.6724, posY: 0.0974 },
+      { type: 'air_conditioner', posX: 0.9076, posY: 0.0605 },
+      { type: 'sink', posX: 0.9204, posY: 0.2404 },
+      { type: 'table', posX: 0.7900, posY: 0.2860 },
+      { type: 'light_bulb', posX: 0.7900, posY: 0.2310 },
+    ],
+    'f1-C': [
+      { type: 'washing_machine', posX: 0.0904, posY: 0.6434 },
+      { type: 'light_bulb', posX: 0.3250, posY: 0.7840 },
+    ],
+    'f1-D': [
+      { type: 'water_heater', posX: 0.6224, posY: 0.6434 },
+      { type: 'light_bulb', posX: 0.6872, posY: 0.6850 },
+      { type: 'toilet', posX: 0.5792, posY: 0.8965 },
+      { type: 'sink', posX: 0.7880, posY: 0.9010 },
+    ],
+    'f2-A': [
+      { type: 'bed', posX: 0.1392, posY: 0.0765 },
+      { type: 'lights', posX: 0.2544, posY: 0.0933 },
+      { type: 'light_bulb', posX: 0.3132, posY: 0.3740 },
+      { type: 'air_conditioner', posX: 0.4756, posY: 0.0605 },
+      { type: 'fan', posX: 0.0696, posY: 0.4400 },
+    ],
+    'f2-B': [
+      { type: 'bed', posX: 0.6808, posY: 0.0765 },
+      { type: 'lights', posX: 0.7928, posY: 0.0933 },
+      { type: 'fan', posX: 0.9412, posY: 0.4235 },
+      { type: 'light_bulb', posX: 0.7900, posY: 0.3575 },
+    ],
+    'f2-C': [
+      { type: 'workplace', posX: 0.1250, posY: 0.7030 },
+      { type: 'light_bulb', posX: 0.2600, posY: 0.7840 },
+      { type: 'air_conditioner', posX: 0.3900, posY: 0.5995 },
+    ],
+    'f2-D': [
+      { type: 'water_heater', posX: 0.6224, posY: 0.6434 },
+      { type: 'light_bulb', posX: 0.6980, posY: 0.6850 },
+      { type: 'toilet', posX: 0.5936, posY: 0.8965 },
+      { type: 'sink', posX: 0.7952, posY: 0.9010 },
+    ],
+  };
+
+  for (const [roomId, items] of Object.entries(expectedPositions)) {
+    const mockItems = roomItems(MOCK_SIMULATOR_ITEMS, roomId);
+    assert.equal(mockItems.length, items.length, `${roomId} item count mismatch`);
+    for (const expected of items) {
+      const match = mockItems.find((item) => item.type === expected.type);
+      assert.ok(match, `missing ${roomId} ${expected.type}`);
+      assert.ok(Math.abs(match.posX - expected.posX) < 0.001, `${roomId} ${expected.type} posX changed: expected ${expected.posX}, got ${match.posX}`);
+      assert.ok(Math.abs(match.posY - expected.posY) < 0.001, `${roomId} ${expected.type} posY changed: expected ${expected.posY}, got ${match.posY}`);
+    }
+  }
+});
+
 

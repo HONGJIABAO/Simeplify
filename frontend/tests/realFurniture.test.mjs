@@ -46,7 +46,7 @@ test('demo seed contains the exact persisted item counts and custom-name-safe ro
   const seed = read('supabase/seed.sql');
   const applianceSection = seed.slice(seed.indexOf('insert into public.appliances'), seed.indexOf('delete from public.furniture_items'));
   const furnitureSection = seed.slice(seed.indexOf('insert into public.furniture_items'), seed.indexOf('-- 4.8.'));
-  assert.equal((applianceSection.match(/d3b00000-0000-0000-0004-/g) ?? []).length, 23);
+  assert.equal((applianceSection.match(/d3b00000-0000-0000-0004-/g) ?? []).length, 24);
   assert.equal((furnitureSection.match(/d3b00000-0000-0000-0008-/g) ?? []).length, 10);
   assert.match(seed, /on conflict \(id\) do update set type=excluded\.type, is_set_up=excluded\.is_set_up;/);
   assert.doesNotMatch(seed, /on conflict \(id\) do update set type=excluded\.type, name=excluded\.name/);
