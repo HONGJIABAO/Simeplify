@@ -10,11 +10,11 @@
  * 'bills' storage bucket, and 'analyze-bill' Edge Function.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FileText, ChevronRight, Sliders, RotateCcw } from 'lucide-react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 // Shared Design System Components
 import { Header } from '@/components/Header';
@@ -30,12 +30,15 @@ import { UploadCard } from '@/components/scanner/UploadCard';
 import { WaterAlert, type BillAlertDisplayLevel } from '@/components/scanner/WaterAlert';
 import { UsageChart, type ChartFilter } from '@/components/scanner/UsageChart';
 import { AIAnalysisCard, type AIAnalysisStatus } from '@/components/scanner/AIAnalysisCard';
+import { AIRoutineAnalysisCard } from '@/components/scanner/AIRoutineAnalysisCard';
 import { CheckAndCorrectSheet, type CheckAndCorrectInitialValues } from '@/components/scanner/CheckAndCorrectSheet';
 import { BillDetailSheet } from '@/components/scanner/BillDetailSheet';
 
 // Data & Services
 import { useAuthSession, DEMO_HOUSEHOLD_ID } from '@/lib/authSession';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
+import { getSimulatorRoutineProfile } from '@/features/simulator/logic/simulatorBridge';
+import { generateLocalRoutineAnalysis } from '@/lib/services/geminiService';
 import {
   type Bill,
   type BillAnalysis,
@@ -176,6 +179,7 @@ const FIXTURE_ELEC_SPIKE_BILLS: Bill[] = [
 ];
 
 export default function ScannerScreen() {
+  const router = useRouter();
   const { showToast } = useToast();
   const { session } = useAuthSession();
   const householdId = session.profile?.household_id;
@@ -219,6 +223,25 @@ export default function ScannerScreen() {
   const [isDevFixtureActive, setIsDevFixtureActive] = useState(false);
 
   const effectiveHouseholdId = householdId || session.user?.id || DEMO_HOUSEHOLD_ID;
+
+  // Bridges Simulator routine inventory with actual bill consumption
+  const activeRoutineAnalysis = useMemo(() => {
+    if (latestAnalysis?.routine_analysis) {
+      return latestAnalysis.routine_analysis;
+    }
+    if (!latestBill) return null;
+    const routineProfile = getSimulatorRoutineProfile(latestBill.type);
+    return generateLocalRoutineAnalysis(
+      {
+        type: latestBill.type,
+        amount: latestBill.amount,
+        usage: latestBill.usage,
+        billingMonth: latestBill.billing_month,
+        provider: latestBill.provider || undefined,
+      },
+      routineProfile
+    );
+  }, [latestAnalysis?.routine_analysis, latestBill]);
 
   // Immediate cache hydration on mount for instant zero-lag rendering (<5ms)
   useEffect(() => {
@@ -611,6 +634,15 @@ export default function ScannerScreen() {
               message={waterAlert.message}
               promptAction={waterAlert.promptAction}
             />
+
+            {/* 2.5 AI Routine Analysis Card (Bridging Simulator & Bill Scanner) */}
+            {latestBill && activeRoutineAnalysis && (
+              <AIRoutineAnalysisCard
+                routineAnalysis={activeRoutineAnalysis}
+                utilityType={latestBill.type}
+                onNavigateToSimulator={() => router.push('/(tabs)/simulator')}
+              />
+            )}
 
             {/* 3. Latest Bill AI Analysis Card (from server & Gemini analysis) */}
             {latestBill && (
