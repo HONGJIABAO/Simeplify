@@ -129,7 +129,7 @@ export default function SimulatorScreen() {
     date.setMinutes(initialSimulation?.simulatedMinutes ?? 18 * 60 + 30);
     return date;
   });
-  const { session } = useAuthSession();
+  const { session, logout } = useAuthSession();
   const householdId = session.profile?.household_id;
   const { hasUnread: liveHasUnread } = useUnreadNotifications(householdId);
 
@@ -166,12 +166,19 @@ export default function SimulatorScreen() {
         setActiveTariff(data.tariff);
         setUnreadNotificationsCount(data.unreadNotificationsCount);
       })
-      .catch((err) => console.error('Failed to load simulator data:', err));
+      .catch(async (err) => {
+        console.error('Failed to load simulator data:', err);
+        try {
+          await logout();
+        } catch { }
+        showToast('Session expired or invalid. Please log in again.', 'info');
+        router.replace('/(auth)/login');
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [householdId]);
+  }, [householdId, logout, router, showToast]);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
