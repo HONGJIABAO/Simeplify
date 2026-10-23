@@ -259,7 +259,7 @@ export default function ComponentGalleryScreen() {
               { value: 12, label: '1Y' },
             ]}
             onChange={setStopVal}
-            formatValue={(v) => (v === 1 ? '1 Month' : v === 6 ? '6 Months' : '1 Year')}
+            formatValue={(v) => (v === 0.25 ? '1 Week' : v === 1 ? '1 Month' : '1 Year')}
           />
         </View>
 

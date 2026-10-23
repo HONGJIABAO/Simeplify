@@ -56,6 +56,7 @@ const DEFAULT_ITEMS: FixtureItem[] = [
   appliance('f1-fridge-kitchen', 'f1-B', 'refrigerator', 'Hitachi Refrigerator', 150, { brand: 'Hitachi', alwaysOn: true }),
   appliance('f1-bulb-b', 'f1-B', 'light_bulb', 'Kitchen light', 9),
   furniture('f1-sink-kitchen', 'f1-B', 'sink', 'Kitchen Sink'),
+  furniture('f1-table-kitchen', 'f1-B', 'table', 'Kitchen Table', 'kitchen table'),
   appliance('f1-ac-kitchen', 'f1-B', 'air_conditioner', 'Daikin Air Conditioner', 1000, { brand: 'Daikin' }),
 
   appliance('f1-washer-laundry', 'f1-C', 'washing_machine', 'Washing Machine', 500),

@@ -91,7 +91,7 @@ export function loadLayoutState(): LayoutState | null {
       if (parsed.items) {
         parsed.items = parsed.items.map((item) => {
           if ((item.type === 'refrigerator' || item.spriteKey === 'refrigerator') && item.roomId !== 'f1-B') {
-            return { ...item, roomId: 'f1-B', posX: 0.7060, posY: 0.1374 };
+            return { ...item, roomId: 'f1-B', posX: 0.6724, posY: 0.2145 };
           }
           return item;
         });

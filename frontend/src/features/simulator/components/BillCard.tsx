@@ -3,8 +3,10 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { CalendarCheck, CalendarDays, FastForward, Gauge, Square } from 'lucide-react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BellPill } from '@/components/layout/BellPill';
+import { useBillCountUp } from '../hooks/useBillCountUp';
+import { getPeriodBillTotal, PERIOD_BILL_UNITS, type FastForwardPeriod } from '../logic/fastForward';
 
-export type FastForwardPeriod = '1W' | '1M' | '1Y';
+export type { FastForwardPeriod } from '../logic/fastForward';
 
 interface BillCardProps {
   monthlyBillRm: number;
@@ -13,6 +15,7 @@ interface BillCardProps {
   activeFastForward: FastForwardPeriod | null;
   isFastForwardPlaying?: boolean;
   fastForwardSavingsRm?: number | null;
+  fastForwardProgress?: number | null;
   fastForwardDisabled?: boolean;
   isEditMode?: boolean;
   hasUnreadNotifications?: boolean;
@@ -32,6 +35,7 @@ export function BillCard({
   activeFastForward,
   isFastForwardPlaying = false,
   fastForwardSavingsRm,
+  fastForwardProgress = null,
   fastForwardDisabled = false,
   isEditMode = false,
   hasUnreadNotifications = false,
@@ -45,6 +49,9 @@ export function BillCard({
 }: BillCardProps) {
   const [fastForwardOpen, setFastForwardOpen] = useState(false);
   const menuProgress = useSharedValue(0);
+  const realDisplayTotal = activeFastForward ? getPeriodBillTotal(monthlyBillRm, activeFastForward) : monthlyBillRm;
+  const billUnit = activeFastForward ? PERIOD_BILL_UNITS[activeFastForward] : '/ month';
+  const countedBillRm = useBillCountUp(realDisplayTotal, fastForwardProgress);
 
   useEffect(() => {
     menuProgress.value = withTiming(fastForwardOpen ? 1 : 0, {
@@ -66,9 +73,7 @@ export function BillCard({
           style={styles.billCard}
           onPress={onPressBillCard}
           accessibilityRole="button"
-          accessibilityLabel={activeFastForward === '1Y'
-            ? `Estimated annual bill RM ${Math.round(monthlyBillRm * 12)}`
-            : `Estimated monthly bill RM ${monthlyBillRm}`}
+          accessibilityLabel={`Estimated ${billUnit.slice(2)} bill RM ${Math.round(realDisplayTotal)}`}
         >
         {/* Header row */}
         <View style={styles.cardHeaderRow}>
@@ -80,8 +85,8 @@ export function BillCard({
 
         {/* Hero Number (exact 28px Lora font) */}
         <View style={styles.heroRow}>
-          <Text style={styles.heroAmount}>RM {activeFastForward === '1Y' ? Math.round(monthlyBillRm * 12).toLocaleString('en-MY') : monthlyBillRm.toLocaleString('en-MY')}</Text>
-          <Text style={styles.heroUnit}>{activeFastForward === '1Y' ? ' / year' : ' / mo'}</Text>
+          <Text style={styles.heroAmount}>RM {countedBillRm.toLocaleString('en-MY')}</Text>
+          <Text style={styles.heroUnit}>{billUnit}</Text>
         </View>
 
         {/* Subtle Divider */}
@@ -247,6 +252,7 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     color: '#1C1917',
     letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
   heroUnit: {
     fontFamily: 'SourceSans3_400Regular',

@@ -47,7 +47,7 @@ test('demo seed contains the exact persisted item counts and custom-name-safe ro
   const applianceSection = seed.slice(seed.indexOf('insert into public.appliances'), seed.indexOf('delete from public.furniture_items'));
   const furnitureSection = seed.slice(seed.indexOf('insert into public.furniture_items'), seed.indexOf('-- 4.8.'));
   assert.equal((applianceSection.match(/d3b00000-0000-0000-0004-/g) ?? []).length, 23);
-  assert.equal((furnitureSection.match(/d3b00000-0000-0000-0008-/g) ?? []).length, 9);
+  assert.equal((furnitureSection.match(/d3b00000-0000-0000-0008-/g) ?? []).length, 10);
   assert.match(seed, /on conflict \(id\) do update set type=excluded\.type, is_set_up=excluded\.is_set_up;/);
   assert.doesNotMatch(seed, /on conflict \(id\) do update set type=excluded\.type, name=excluded\.name/);
 });
@@ -62,4 +62,31 @@ test('local refurnish script is guarded, dry-runnable, demo-only, and idempotent
   assert.match(script, /appliances\?household_id=eq\.\$\{H\}/);
   assert.match(script, /furniture_items\?household_id=eq\.\$\{H\}/);
   assert.match(script, /skippedHouseholds/);
+});
+
+test('local move script is local-only, position-only, role-matched, and idempotent', () => {
+  const script = read('scripts/move_items_local_demo.mjs');
+  assert.match(script, /getTestCredentials/);
+  assert.match(script, /--dry-run/);
+  assert.match(script, /--apply/);
+  assert.match(script, /DEMO_EMAIL = 'meiling\.tan@example\.com'/);
+  assert.match(script, /DEMO_HOUSEHOLD_ID = 'd3b00000-0000-0000-0000-000000000002'/);
+  assert.match(script, /position_x/);
+  assert.match(script, /position_y/);
+  assert.match(script, /row\.role/);
+  assert.match(script, /PATCH/);
+  assert.doesNotMatch(script, /method:\s*'DELETE'/);
+  assert.doesNotMatch(script, /method:\s*'POST'/);
+  assert.doesNotMatch(script, /from\('rooms'\).*update/i);
+});
+
+test('local kitchen-table script is guarded, dry-runnable, and idempotent', () => {
+  const script = read('scripts/add_kitchen_table_local_demo.mjs');
+  assert.match(script, /getTestCredentials/);
+  assert.match(script, /--dry-run/);
+  assert.match(script, /--apply/);
+  assert.match(script, /DEMO_EMAIL = 'meiling\.tan@example\.com'/);
+  assert.match(script, /furniture_items/);
+  assert.match(script, /type: 'table'/);
+  assert.match(script, /role: 'kitchen table'/);
 });

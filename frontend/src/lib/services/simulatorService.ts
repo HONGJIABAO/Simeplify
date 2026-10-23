@@ -11,6 +11,7 @@ import type { StoredRoom, StoredPlacedItem } from '@/features/simulator/logic/st
 import type { RoutineBlock } from '@/features/simulator/logic/myDayLogic';
 import { STAR_EFFICIENCY_FACTORS, USAGE_THRESHOLDS } from '@/features/simulator/logic/routineConfig';
 import { fetchFurnitureState, type FurnitureTypeRow } from './furnitureService';
+import { SPRITE_MAP } from '@/features/simulator/logic/spriteMap';
 
 export type RoomRow = Database['public']['Tables']['rooms']['Row'];
 export type ApplianceRow = Database['public']['Tables']['appliances']['Row'];
@@ -134,6 +135,7 @@ export async function fetchSimulatorState(householdId: string): Promise<Simulato
       stars: app.star_rating !== null ? app.star_rating : 3,
       facing: app.facing,
       alwaysOn: Boolean(t?.always_on),
+      hoursPerDay: t?.always_on ? 24 : SPRITE_MAP[spriteKey]?.defaultHours,
       isOn: false,
     };
   });

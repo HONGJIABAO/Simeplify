@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Line } from 'react-native-svg';
+import Svg, { Line } from 'react-native-svg';
 import { Plus } from 'lucide-react-native';
 import { StoredRoom } from '../logic/storage';
 import { ROOM_TYPE_SETTINGS } from '../logic/roomData';
@@ -91,8 +91,6 @@ export function Room({
         {room.type === 'living' && Array.from({ length: Math.ceil(height / 18) }, (_, index) => (
           <Line key={index} x1={0} x2={width} y1={index * 18} y2={index * 18} stroke="#5C4033" strokeOpacity={0.08} strokeWidth={1} />
         ))}
-        {room.type === 'kitchen' && <Circle cx={width * 0.55} cy={height * 0.48} r={10} fill="#D6D3CD" fillOpacity={0.55} />}
-        {room.type === 'bathroom' && <Circle cx={width * 0.55} cy={height * 0.58} r={9} fill="#A8A29E" fillOpacity={0.45} />}
         {wallLines}
       </Svg>
 

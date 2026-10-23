@@ -350,9 +350,17 @@ export function getSpriteSource(key: string): ImageSourcePropType | null {
   return null;
 }
 
-/** Missing back art deliberately returns null; callers must not rotate/mirror front art. */
+/** Product-approved fallback when a back-facing asset is not present. */
+export const FACING_BACK_FALLBACK = 'rotate' as const;
+
+/** Get the source and let the renderer decide whether the fallback needs rotation. */
 export function getFacingSpriteSource(key: string, facing: 'front' | 'back' = 'front'): ImageSourcePropType | null {
   const item = SPRITE_MAP[key];
-  if (facing === 'back') return item?.backSource ?? null;
+  if (facing === 'back') return item?.backSource ?? (FACING_BACK_FALLBACK === 'rotate' ? item?.source ?? null : null);
   return getSpriteSource(key);
+}
+
+export function shouldRotateFacingBack(key: string, facing: 'front' | 'back' = 'front'): boolean {
+  const item = SPRITE_MAP[key];
+  return facing === 'back' && Boolean(item?.source) && !item?.backSource && FACING_BACK_FALLBACK === 'rotate';
 }
