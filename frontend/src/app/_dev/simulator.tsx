@@ -71,6 +71,9 @@ type DemoState =
   | 'plan-with-appliances'
   | 'bill-modal-filled'
   | 'bill-modal-empty'
+  | 'bill-modal-1w'
+  | 'bill-modal-1m'
+  | 'bill-modal-1y'
   | 'loading-skeleton'
   // Stage 7 Edit Mode
   | 'edit-mode-tray'
@@ -238,6 +241,9 @@ const STATE_GROUPS = [
       { id: 'plan-with-appliances' as DemoState, label: 'Floor plan — with appliances' },
       { id: 'bill-modal-filled' as DemoState, label: 'Bill modal — filled' },
       { id: 'bill-modal-empty' as DemoState, label: 'Bill modal — empty' },
+      { id: 'bill-modal-1w' as DemoState, label: 'Bill breakdown — 1W' },
+      { id: 'bill-modal-1m' as DemoState, label: 'Bill breakdown — 1M' },
+      { id: 'bill-modal-1y' as DemoState, label: 'Bill breakdown — 1Y' },
       { id: 'loading-skeleton' as DemoState, label: 'Loading skeleton' },
     ],
   },
@@ -723,20 +729,21 @@ export default function SimulatorGallery() {
         )}
 
         {/* ── 2. Bill Modals ── */}
-        {(activeState === 'bill-modal-filled' || activeState === 'bill-modal-empty') && (
+        {(activeState === 'bill-modal-filled' || activeState === 'bill-modal-empty' || activeState === 'bill-modal-1w' || activeState === 'bill-modal-1m' || activeState === 'bill-modal-1y') && (
           <View style={galleryStyles.modalTriggerArea}>
-            <Pressable
+            {!activeState.startsWith('bill-modal-1') && <Pressable
               style={galleryStyles.openModalBtn}
               onPress={() => setBillModalVisible(true)}
             >
               <BillHero kWh={totalKwh} />
               <Text style={galleryStyles.tapHint}>Tap to open bill modal</Text>
-            </Pressable>
+            </Pressable>}
 
             <BillModal
-              visible={billModalVisible}
-              onClose={() => setBillModalVisible(false)}
+              visible={billModalVisible || activeState.startsWith('bill-modal-1')}
+              onClose={() => activeState.startsWith('bill-modal-1') ? setActiveState(null) : setBillModalVisible(false)}
               appliances={appliances}
+              period={activeState === 'bill-modal-1w' ? '1W' : activeState === 'bill-modal-1y' ? '1Y' : '1M'}
               totalKwh={totalKwh}
               onAddAppliances={() => setBillModalVisible(false)}
             />

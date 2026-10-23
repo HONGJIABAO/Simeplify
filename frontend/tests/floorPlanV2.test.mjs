@@ -73,6 +73,16 @@ import {
   getPeriodBillTotal,
 } from '../src/features/simulator/logic/fastForward.ts';
 import {
+  allocateAppliancePercentages,
+  BILL_PERIOD_FACTORS,
+  getBillPeriodTotal,
+  normalizeKwhToTotal,
+} from '../src/features/simulator/logic/billBreakdown.ts';
+import {
+  SIMULATOR_BILL_CARD_BASELINE_RM,
+  getSimulatorBillCardMonthlyTotal,
+} from '../src/features/simulator/logic/billDisplay.ts';
+import {
   appendClientApplianceTrayTypeIds,
   getEditLayoutMetrics,
   getInTrayTypeIds,
@@ -652,6 +662,32 @@ test('fast-forward exposes 1W, 1M, 1Y and bill card uses weekly, monthly, annual
   assert.match(billCard, /PERIOD_BILL_UNITS/);
 });
 
+test('bill breakdown gives non-zero, period-aware appliance data for 1W, 1M and 1Y', () => {
+  const normalized = normalizeKwhToTotal([240, 120, 60], 420);
+  assert.deepEqual(normalized, [240, 120, 60]);
+  assert.deepEqual(allocateAppliancePercentages(normalized), [57, 29, 14]);
+  assert.deepEqual(BILL_PERIOD_FACTORS, { '1W': 0.25, '1M': 1, '1Y': 12 });
+  assert.equal(Math.round(getBillPeriodTotal(245, '1W')), 61);
+  assert.equal(getBillPeriodTotal(245, '1M'), 245);
+  assert.equal(getBillPeriodTotal(245, '1Y'), 2940);
+  const modal = readFileSync(resolve(FRONTEND_ROOT, 'src/features/simulator/components/BillModal.tsx'), 'utf8');
+  assert.match(modal, /getReasonableMonthlyKwh/);
+  assert.match(modal, /allocateAppliancePercentages/);
+  const simulator = readFileSync(resolve(FRONTEND_ROOT, 'src/app/(tabs)/simulator.tsx'), 'utf8');
+  assert.match(simulator, /period=\{selectedFastForward\}/);
+  assert.match(simulator, /monthlyBillRmOverride=\{billCardMonthlyBillRm\}/);
+  assert.match(modal, /monthlyBillRmOverride\?\: number/);
+});
+
+test('Bill Card keeps the demo month above RM500 and solar below it without changing billCalc', () => {
+  assert.equal(getSimulatorBillCardMonthlyTotal(245, false), SIMULATOR_BILL_CARD_BASELINE_RM);
+  assert.ok(getSimulatorBillCardMonthlyTotal(245, false) > 500);
+  assert.equal(getSimulatorBillCardMonthlyTotal(245, true), 437);
+  assert.ok(getSimulatorBillCardMonthlyTotal(245, true) > 400);
+  assert.equal(getSimulatorBillCardMonthlyTotal(700, false), 700);
+  assert.equal(getSimulatorBillCardMonthlyTotal(700, true), 588);
+});
+
 test('a reel segment is route time plus fixed stair fades and at least 2.5 seconds using the appliance', () => {
   const paths = [
     [{ x: 0, y: 0 }, { x: 0.45, y: 0 }],
@@ -752,16 +788,19 @@ test('applying a swap changes only the catalog item fields and lowers the bill c
   assert.ok(after.totalBillRm < before.totalBillRm);
 });
 
-test('post-simulation sequence is report, swap panel, then unchanged solar suggestion', () => {
+test('post-simulation sequence skips the solar suggestion once solar is active', () => {
   const simulator = readFileSync(resolve(FRONTEND_ROOT, 'src/app/(tabs)/simulator.tsx'), 'utf8');
   const reportIndex = simulator.indexOf('{(aiReportVisible || postSwapAiReportVisible)');
   const swapIndex = simulator.indexOf('{swapSuggestionVisible && <SwapSuggestionSheet');
-  const solarIndex = simulator.indexOf('{solarSuggestionVisible && <ApplianceSuggestionSheet');
+  const solarIndex = simulator.indexOf('{solarSuggestionVisible && !solarApplied && <ApplianceSuggestionSheet');
   assert.ok(simulator.includes('postSwapAiReportVisible'));
   assert.ok(reportIndex >= 0 && reportIndex < swapIndex && swapIndex < solarIndex);
   assert.match(simulator, /setAiReportVisible\(false\);\s*setSwapSuggestionVisible\(true\)/);
   assert.match(simulator, /setSwapSuggestionVisible\(false\);\s*setPostSwapAiReportVisible\(true\)/);
-  assert.match(simulator, /setPostSwapAiReportVisible\(false\);\s*setSolarSuggestionVisible\(true\)/);
+  assert.match(simulator, /setPostSwapAiReportVisible\(false\);\s*if \(!solarApplied\) setSolarSuggestionVisible\(true\)/);
+  assert.match(simulator, /setSwapSuggestionVisible\(false\);\s*if \(!solarApplied\) setSolarSuggestionVisible\(true\)/);
+  assert.match(simulator, /\{solarSuggestionVisible && !solarApplied && <ApplianceSuggestionSheet/);
+  assert.match(simulator, /\(solarSuggestionVisible && !solarApplied\)/);
   assert.match(simulator, /paddingBottom: isFloorPlanCompacted \? 256/);
   assert.match(simulator, /Refusing to apply Simulator swap outside local Supabase/);
 });
