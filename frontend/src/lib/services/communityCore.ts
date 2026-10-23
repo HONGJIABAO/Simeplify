@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../types/database';
 
 export const MALAYSIA_TIME_ZONE = 'Asia/Kuala_Lumpur';
-export const DAILY_DEED_CAP = 3;
+export const DAILY_DEED_CAP = 2;
 
 export type CommunityReward = Database['public']['Tables']['rewards']['Row'];
 export type CommunityVote = Database['public']['Tables']['votes']['Row'];

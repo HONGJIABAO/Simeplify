@@ -15,7 +15,7 @@
 
 <br/>
 
-[✨ Features](#-five-core-capabilities) · [😤 The Problem](#-the-problem) · [🧠 AI Strategy](#-ai-strategy-ai-guesses-math-decides) · [🏗 Architecture](#-architecture) · [🗺 Roadmap](#-roadmap) · [👥 Team](#-team)
+[✨ Features](#-five-core-capabilities) · [❓ The Problem](#-the-problem) · [🧠 AI Strategy](#-ai-strategy-ai-guesses-math-decides) · [🏗 Architecture](#-architecture) · [🗺 Roadmap](#-roadmap) · [👥 Team](#-team)
 
 </div>
 
@@ -40,7 +40,7 @@ It combines **AI** (for messy, unstructured inputs) with **deterministic calcula
 
 ---
 
-## 😤 The Problem
+## ❓ The Problem
 
 <div align="center">
 
