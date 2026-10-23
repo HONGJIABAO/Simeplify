@@ -30,7 +30,9 @@ import {
   X,
 } from 'lucide-react-native';
 import { Appliance, MOCK_APPLIANCE_KWH, Room } from '@/lib/mockData';
-import { calcBillFromKwh, applianceShare, formatRM } from '@/features/simulator/logic/billCalc';
+import { calcBillFromKwh, formatRM } from '@/features/simulator/logic/billCalc';
+import { getBillPeriodFactor, getBillPeriodTotal, getReasonableMonthlyKwh, allocateAppliancePercentages, BILL_PERIOD_HEADINGS, BILL_PERIOD_LABELS, normalizeKwhToTotal } from '../logic/billBreakdown';
+import { type FastForwardPeriod } from '../logic/fastForward';
 import { Sprite } from './Sprite';
 import { Button } from '@/components/Button';
 import { colors, shadows } from '@/lib/theme';
@@ -54,6 +56,9 @@ function ApplianceIcon({
 // ---------------------------------------------------------------------------
 interface BillModalProps {
   rooms?: Room[]; usage?: Record<string, number>;
+  period?: FastForwardPeriod | null;
+  /** Optional Simulator display total so the detail modal matches the Bill Card. */
+  monthlyBillRmOverride?: number;
   visible: boolean;
   onClose: () => void;
   appliances: Appliance[];
@@ -69,6 +74,8 @@ interface BillModalProps {
 export function BillModal({
   visible,
   rooms, usage,
+  period = '1M',
+  monthlyBillRmOverride,
   onClose,
   appliances,
   totalKwh,
@@ -77,22 +84,36 @@ export function BillModal({
   const { width } = useWindowDimensions();
   const modalWidth = Math.min(width - 32, 420);
 
-  const totalBillRm = useMemo(() => calcBillFromKwh(totalKwh), [totalKwh]);
+  const totalBillRm = useMemo(
+    () => monthlyBillRmOverride ?? calcBillFromKwh(totalKwh),
+    [monthlyBillRmOverride, totalKwh],
+  );
+  const periodFactor = getBillPeriodFactor(period ?? '1M');
+  const periodHeading = BILL_PERIOD_HEADINGS[period ?? '1M'];
+  const periodLabel = BILL_PERIOD_LABELS[period ?? '1M'];
+  const periodKwh = Math.round(totalKwh * periodFactor);
+  const periodBillRm = getBillPeriodTotal(totalBillRm, period ?? '1M');
   const isEmpty = appliances.length === 0 || totalKwh <= 0;
 
   // Per-appliance computed shares
   const applianceData = useMemo(() => {
-    return appliances.map((app) => {
-      const kWh = usage?.[app.id] ?? MOCK_APPLIANCE_KWH[app.id] ?? 0;
+    const monthlyKwhValues = appliances.map((app) => {
+      const suppliedKwh = usage?.[app.id] ?? MOCK_APPLIANCE_KWH[app.id];
+      return suppliedKwh ?? getReasonableMonthlyKwh(app);
+    });
+    const normalizedKwhValues = normalizeKwhToTotal(monthlyKwhValues, totalKwh);
+    const percentages = allocateAppliancePercentages(normalizedKwhValues);
+    return appliances.map((app, index) => {
+      const kWh = normalizedKwhValues[index] ?? 0;
       const roomEntry = rooms?.find(r => r.id === app.roomId);
       const baseName = roomEntry?.name || 'Unnamed room';
       const duplicates = rooms?.filter((candidate) => candidate.name === baseName).length ?? 0;
       const room = duplicates > 1 && (roomEntry as any)?.floor
         ? `${baseName} (${(roomEntry as any).floor}F)` : baseName;
-      const { rm, pct } = applianceShare(kWh, totalKwh, totalBillRm);
-      return { app, kWh, rm, pct, room };
+      const rm = totalKwh > 0 ? Math.round((kWh / totalKwh) * periodBillRm) : 0;
+      return { app, kWh, periodKwh: kWh * periodFactor, rm, pct: percentages[index] ?? 0, room };
     });
-  }, [appliances, totalKwh, totalBillRm, usage, rooms]);
+  }, [appliances, periodBillRm, periodFactor, rooms, totalKwh, usage]);
 
   return (
     <Modal
@@ -114,7 +135,7 @@ export function BillModal({
         <View style={[styles.card, { width: modalWidth }]}>
           {/* Header row */}
           <View style={styles.headerRow}>
-            <Text style={styles.headerLabel}>Estimated monthly bill</Text>
+            <Text style={styles.headerLabel}>Estimated {periodHeading} bill</Text>
             <Pressable
               onPress={onClose}
               style={styles.closeButton}
@@ -127,10 +148,10 @@ export function BillModal({
 
           {/* Hero number */}
           <Text style={styles.heroNumber}>
-            {isEmpty ? 'RM 0' : formatRM(Math.round(totalBillRm))}
+            {isEmpty ? 'RM 0' : formatRM(Math.round(periodBillRm))}
           </Text>
           <Text style={styles.kwhLine}>
-            {isEmpty ? '0 kWh a month' : `${totalKwh} kWh a month`}
+            {isEmpty ? `0 kWh a ${periodLabel}` : `${periodKwh} kWh a ${periodLabel}`}
           </Text>
 
           {/* Stacked bar */}

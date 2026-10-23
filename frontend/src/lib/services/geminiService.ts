@@ -46,13 +46,13 @@ const CANDIDATE_MODELS = [
 
 const SYSTEM_PROMPT = `You are a smart waste sorting assistant. Analyze the provided image of household waste.
 1. Identify what the item is.
-2. Determine which specific recycling bin it should be thrown into (e.g., Paper, Plastic, Metal, Glass, E-waste, Organic, or General/Residual Waste).
+2. Determine which specific recycling bin it should be thrown into (e.g., Paper, Plastic & Metal, Glass, E-waste, Organic, or General/Residual Waste).
 3. Provide a brief, 1-sentence tip on how to prepare it (e.g., 'Rinse the bottle first').
 
 Return the response in a structured JSON format with these exact fields:
 {
   "identifiedItem": "string - name of the item e.g. 'Plastic Water Bottle'",
-  "targetBin": "string - which bin to use e.g. 'Plastic Recycling Bin'",
+  "targetBin": "string - which bin to use e.g. 'Plastic & Metal Bin'",
   "binType": "string - one of: paper, plastic, glass_metal, general",
   "isRecyclable": "boolean",
   "confidence": "number between 0 and 1",
@@ -63,7 +63,8 @@ Return the response in a structured JSON format with these exact fields:
 IMPORTANT rules for binType mapping:
 - Paper, cardboard, cartons → "paper"
 - Plastic bottles, bags, containers → "plastic"
-- Glass jars/bottles, metal cans/tins, aluminium → "glass_metal"
+- Glass jars/bottles → "glass_metal" (legacy key for the Glass stream)
+- Metal cans/tins, aluminium → "plastic" (the merged Plastic & Metal stream)
 - Food scraps, organic waste, contaminated/soiled items, non-recyclable → "general"
 
 Return ONLY valid JSON.`;
@@ -188,13 +189,17 @@ export async function classifyWasteWithGemini(
             binType = 'paper';
           } else if (target.includes('plastic')) {
             binType = 'plastic';
-          } else if (
-            target.includes('glass') ||
-            target.includes('metal') ||
-            target.includes('alumin')
-          ) {
+          } else if (target.includes('glass')) {
             binType = 'glass_metal';
+          } else if (target.includes('metal') || target.includes('alumin') || target.includes('tin')) {
+            binType = 'plastic';
           }
+        }
+
+        const materialHint = `${parsed.material || ''} ${parsed.identifiedItem || ''}`.toLowerCase();
+        if (binType === 'glass_metal' && !materialHint.includes('glass')
+          && (/\bmetal\b|alumin|\btin\b|\bcan\b|\bsteel\b/.test(materialHint))) {
+          binType = 'plastic';
         }
 
         return {
@@ -217,7 +222,7 @@ export async function classifyWasteWithGemini(
   console.warn('Gemini API cloud fallback triggered:', lastError?.message);
   return {
     identifiedItem: 'Recyclable Container / Item',
-    targetBin: 'Plastic & Mixed Recycling',
+    targetBin: 'Plastic & Metal',
     binType: 'plastic',
     isRecyclable: true,
     confidence: 0.88,

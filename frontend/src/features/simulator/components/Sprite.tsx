@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Platform, ImageStyle, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
-import { getFacingSpriteSource } from '../logic/spriteMap';
+import { getFacingSpriteSource, shouldRotateFacingBack } from '../logic/spriteMap';
 import { ITEM_IMAGE_META } from '../logic/furnishedLayout';
 
 interface SpriteProps {
@@ -42,6 +42,7 @@ export function Sprite({
     ? Asset.fromModule(source as Parameters<typeof Asset.fromModule>[0]).uri
     : undefined;
   const imageSource = resolvedWebUri ? { uri: resolvedWebUri } : source;
+  const rotateBackFallback = shouldRotateFacingBack(type, facing);
   const cropMeta = cropTransparent ? ITEM_IMAGE_META[type] : undefined;
   // Use one scale for both axes. The previous independent width/height scales
   // changed the canvas aspect ratio on web, so expo-image's `contain` pass
@@ -85,6 +86,7 @@ export function Sprite({
             top: cropTop,
           } : undefined,
           style,
+          rotateBackFallback ? { transform: [{ rotate: '180deg' }] } : undefined,
         ]}
       />
     </View>

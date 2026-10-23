@@ -19,6 +19,7 @@ import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
 import { AIAnalysisReportModal } from '@/features/simulator/components/AIAnalysisReportModal';
 import { ApplianceSuggestionSheet } from '@/features/simulator/components/ApplianceSuggestionSheet';
+import { SwapSuggestionSheet } from '@/features/simulator/components/SwapSuggestionSheet';
 import { WeekReelCaption, WeekReelSummary } from '@/features/simulator/components/WeekReelStatus';
 import {
   StoredRoom, StoredPlacedItem, loadLayoutState, saveLayoutState, loadSimulationState,
@@ -38,12 +39,23 @@ import { getFloorSpriteSizes } from '@/features/simulator/logic/spriteSizing';
 import { createDefaultRooms, getSetUpRooms, migrateRoomId, normalizeStoredRooms } from '@/features/simulator/logic/roomData';
 import { containsPoint, FloorNumber, getFloorPlanLayout, getSlotRect, STAIR_CENTER } from '@/features/simulator/logic/roomLayout';
 import { shouldFollowAvatarFloor } from '@/features/simulator/logic/floorFollow';
-import { AVATAR_PLAN_SPEED_PER_SECOND, findHomeWalkRoute } from '@/features/simulator/logic/walkGraph';
+import { findHomeWalkRoute } from '@/features/simulator/logic/walkGraph';
+import {
+  AVATAR_SPEED,
+  AVATAR_USE_HOLD_MS,
+  STAIR_CROSS_FADE_MS,
+  STAIR_FADE_OUT_MS,
+  hasHeldUsePose,
+  reelSegmentDurationMs,
+} from '@/features/simulator/logic/avatarTiming';
 import { buildWeekReel, getReducedMotionSummary, getReelSavings, getReelTargetDate, type WeekReelSegment } from '@/features/simulator/logic/weekReel';
-import { calcTotalSavings } from '@/features/simulator/logic/fastForward';
+import { calcTotalSavings, isFastForwardPeriod } from '@/features/simulator/logic/fastForward';
 import { furnishEmptyRooms } from '@/features/simulator/logic/mockHomeData';
+import { applySwapToItem, buildEnergyReport, buildSwapSuggestionCards, type SwapSuggestionCard } from '@/features/simulator/logic/energyReport';
+import { getSimulatorBillCardMonthlyTotal } from '@/features/simulator/logic/billDisplay';
 import { Appliance, MOCK_SIMULATOR_ITEMS } from '@/lib/mockData';
 import { useAuthSession } from '@/lib/authSession';
+import { SUPABASE_URL } from '@/lib/supabase';
 import { useUnreadNotifications } from '@/lib/services/notificationService';
 import {
   createFurniture,
@@ -78,6 +90,7 @@ interface WeekReelRun {
   index: number;
   segmentStartedAt: number;
   segmentDurationMs: number;
+  segmentDurationsMs: number[];
   completedDurationMs: number;
   totalDurationMs: number;
   totalSavingsRm: number;
@@ -116,7 +129,7 @@ export default function SimulatorScreen() {
     date.setMinutes(initialSimulation?.simulatedMinutes ?? 18 * 60 + 30);
     return date;
   });
-  const { session } = useAuthSession();
+  const { session, logout } = useAuthSession();
   const householdId = session.profile?.household_id;
   const { hasUnread: liveHasUnread } = useUnreadNotifications(householdId);
 
@@ -153,12 +166,19 @@ export default function SimulatorScreen() {
         setActiveTariff(data.tariff);
         setUnreadNotificationsCount(data.unreadNotificationsCount);
       })
-      .catch((err) => console.error('Failed to load simulator data:', err));
+      .catch(async (err) => {
+        console.error('Failed to load simulator data:', err);
+        try {
+          await logout();
+        } catch { }
+        showToast('Session expired or invalid. Please log in again.', 'info');
+        router.replace('/(auth)/login');
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [householdId]);
+  }, [householdId, logout, router, showToast]);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -185,7 +205,9 @@ export default function SimulatorScreen() {
   const [billModalVisible, setBillModalVisible] = useState(false);
   const [tidySheetVisible, setTidySheetVisible] = useState(false);
   const [aiReportVisible, setAiReportVisible] = useState(false);
-  const [suggestionVisible, setSuggestionVisible] = useState(false);
+  const [postSwapAiReportVisible, setPostSwapAiReportVisible] = useState(false);
+  const [swapSuggestionVisible, setSwapSuggestionVisible] = useState(false);
+  const [solarSuggestionVisible, setSolarSuggestionVisible] = useState(false);
   const [solarApplied, setSolarApplied] = useState(false);
   const [tidyUndoItems, setTidyUndoItems] = useState<StoredPlacedItem[] | null>(null);
   const tidyUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -234,6 +256,17 @@ export default function SimulatorScreen() {
   });
   const avatarStateRef = useRef(avatarState);
   useEffect(() => { avatarStateRef.current = avatarState; }, [avatarState]);
+  const avatarFloorRef = useRef(avatarState.currentFloor);
+  useEffect(() => {
+    const floorChanged = avatarFloorRef.current !== avatarState.currentFloor;
+    avatarFloorRef.current = avatarState.currentFloor;
+    // The viewed plan follows a completed stair transfer. Keeping this
+    // separate from the route decision also repairs a stale saved view when
+    // the resident arrives while the plan is still showing the other floor.
+    if (floorChanged && !isEditMode && !avatarState.isFloorTransitioning) {
+      setCurrentFloor(avatarState.currentFloor);
+    }
+  }, [avatarState.currentFloor, avatarState.isFloorTransitioning, isEditMode]);
   const avatarTargetRef = useRef<{
     point: Point;
     floor: FloorNumber;
@@ -253,16 +286,20 @@ export default function SimulatorScreen() {
   } | null>(null);
   const userChangedFloorDuringWalkRef = useRef(false);
   const transitionStartedRef = useRef(false);
+  const activityArrivedAtRef = useRef<number | null>(null);
   const reelRunRef = useRef<WeekReelRun | null>(null);
   const reelCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [selectedFastForward, setSelectedFastForward] = useState<FastForwardPeriod>(initialSimulation?.fastForwardPeriod ?? '1M');
+  const [selectedFastForward, setSelectedFastForward] = useState<FastForwardPeriod>(
+    isFastForwardPeriod(initialSimulation?.fastForwardPeriod) ? initialSimulation.fastForwardPeriod : '1M'
+  );
   useEffect(() => saveSimulationState({ simSpeed, simulatedMinutes, avatarVariant, viewedFloor: currentFloor, fastForwardPeriod: selectedFastForward }),
     [avatarVariant, currentFloor, selectedFastForward, simSpeed, simulatedMinutes]);
   const [isWeekReelPlaying, setIsWeekReelPlaying] = useState(false);
   const [weekReelView, setWeekReelView] = useState<{ segment: WeekReelSegment; savingsRm: number } | null>(null);
   const [reducedWeekSummary, setReducedWeekSummary] = useState<ReturnType<typeof getReducedMotionSummary> | null>(null);
-  const [animatedBillRm, setAnimatedBillRm] = useState<number | null>(null);
-  const monthlyBillRmRef = useRef<number>(0);
+  const [fastForwardBillProgress, setFastForwardBillProgress] = useState<number | null>(null);
+  const [energyReportBaseline, setEnergyReportBaseline] = useState<ReturnType<typeof buildEnergyReport> | null>(null);
+  const aiReportWasVisibleRef = useRef(false);
 
   const installAvatarRoute = useCallback((
     points: Point[],
@@ -286,12 +323,13 @@ export default function SimulatorScreen() {
     setIsWeekReelPlaying(false);
     setWeekReelView(null);
     setReducedWeekSummary(null);
-    setAnimatedBillRm(null);
+    setFastForwardBillProgress(null);
     if (!run) return;
     avatarTargetRef.current = null;
     avatarPathQueueRef.current = [];
     pendingFloorTransferRef.current = null;
     transitionStartedRef.current = false;
+    activityArrivedAtRef.current = Date.now() - AVATAR_USE_HOLD_MS;
     setWalkPath(run.snapshot.walkPath);
     setAvatarState(run.snapshot.avatarState);
     setCurrentFloor(run.snapshot.viewedFloor);
@@ -310,7 +348,10 @@ export default function SimulatorScreen() {
       const now = Date.now();
       const deltaSec = (now - lastTime) / 1000;
       lastTime = now;
-      const simMinutesDelta = reelRunRef.current ? 0 : deltaSec / SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour * 60;
+      const activityReady = hasHeldUsePose(activityArrivedAtRef.current, now);
+      const simMinutesDelta = reelRunRef.current || !activityReady
+        ? 0
+        : deltaSec / SIM_SPEED_MULTIPLIERS[simSpeed].realSecPerHour * 60;
       setSimulatedMinutes((value) => (value + simMinutesDelta) % 1440);
       setSimulatedDateTime((value) => new Date(value.getTime() + simMinutesDelta * 60_000));
       const target = avatarTargetRef.current;
@@ -320,7 +361,7 @@ export default function SimulatorScreen() {
         const dx = nextTarget.x - previous.currentX;
         const dy = nextTarget.y - previous.currentY;
         const distance = Math.hypot(dx, dy);
-        const step = AVATAR_PLAN_SPEED_PER_SECOND * deltaSec;
+        const step = AVATAR_SPEED * deltaSec;
         if (distance <= step) {
           const nextPathPoint = avatarPathQueueRef.current.shift();
           if (nextPathPoint) {
@@ -335,11 +376,11 @@ export default function SimulatorScreen() {
           const transfer = pendingFloorTransferRef.current;
           if (target.isStair && transfer && previous.currentFloor !== transfer.floor && !transitionStartedRef.current) {
             transitionStartedRef.current = true;
-            const fadeOutMs = reduceMotion ? 0 : 200;
+            const fadeOutMs = reduceMotion ? 0 : STAIR_FADE_OUT_MS;
             setTimeout(() => {
               const shouldFollow = transfer.followView && !userChangedFloorDuringWalkRef.current;
               if (shouldFollow) setCurrentFloor(transfer.floor);
-              const floorFadeMs = reduceMotion || !shouldFollow ? 0 : 400;
+              const floorFadeMs = reduceMotion || !shouldFollow ? 0 : STAIR_CROSS_FADE_MS;
               setTimeout(() => {
                 pendingFloorTransferRef.current = null;
                 transitionStartedRef.current = false;
@@ -356,6 +397,7 @@ export default function SimulatorScreen() {
             }, fadeOutMs);
             return { ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false, isFloorTransitioning: true };
           }
+          activityArrivedAtRef.current = Date.now();
           return {
             ...previous, currentX: nextTarget.x, currentY: nextTarget.y, isWalking: false,
             currentRoomId: target.roomId ?? previous.currentRoomId,
@@ -382,12 +424,12 @@ export default function SimulatorScreen() {
       const savingsRm = getReelSavings(run.totalSavingsRm, run.index, segmentProgress);
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
       setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, overallProgress));
-      const baseBill = monthlyBillRmRef.current;
-      setAnimatedBillRm(baseBill);
-      if (segmentProgress < 1) return;
+      setFastForwardBillProgress(overallProgress);
+      const hasArrivedAndUsed = hasHeldUsePose(activityArrivedAtRef.current, Date.now());
+      if (segmentProgress < 1 || !hasArrivedAndUsed) return;
       if (run.index === run.segments.length - 1) {
         run.completing = true;
-        setAnimatedBillRm(null);
+        setFastForwardBillProgress(1);
         setWeekReelView({ segment: run.segments[run.index], savingsRm: run.totalSavingsRm });
         setSimulatedDateTime(getReelTargetDate(run.startDate, run.period, 1));
         reelCompletionTimerRef.current = setTimeout(completeWeekReel, reduceMotion ? 0 : 700);
@@ -396,14 +438,12 @@ export default function SimulatorScreen() {
       run.completedDurationMs += run.segmentDurationMs;
       run.index += 1;
       run.segmentStartedAt = Date.now();
-      const targetRoomId = run.segments[run.index].block?.roomId;
-      const targetRoom = rooms.find((room) => room.id === targetRoomId);
-      const isAway = run.segments[run.index].isAway;
-      run.segmentDurationMs = isAway ? 2500 : (targetRoom && targetRoom.floor !== avatarStateRef.current.currentFloor ? 6000 : 4000);
+      activityArrivedAtRef.current = null;
+      run.segmentDurationMs = run.segmentDurationsMs[run.index];
       setWeekReelView({ segment: run.segments[run.index], savingsRm });
     }, 50);
     return () => clearInterval(interval);
-  }, [completeWeekReel, reduceMotion, rooms]);
+  }, [completeWeekReel, reduceMotion]);
 
   const currentRoutine = useMemo(() => {
     if (weekReelView) {
@@ -450,7 +490,27 @@ export default function SimulatorScreen() {
       avatarWalks: currentRoutine.avatarWalks,
     }, targetRoom, arrangedRoomItems);
     const destination = currentRoutine.isAway ? { x: 0.29, y: 0.50 } : placement.target;
+    activityArrivedAtRef.current = null;
     const previous = avatarStateRef.current;
+    if (!placement.shouldWalk) {
+      avatarTargetRef.current = null;
+      avatarPathQueueRef.current = [];
+      pendingFloorTransferRef.current = null;
+      transitionStartedRef.current = false;
+      activityArrivedAtRef.current = Date.now() - AVATAR_USE_HOLD_MS;
+      const noWalkTimer = setTimeout(() => {
+        setWalkPath([]);
+        setAvatarState((state) => ({
+          ...state,
+          targetRoomId: targetRoom.id,
+          targetFloor: targetRoom.floor,
+          currentActivity: currentRoutine.name,
+          isWalking: false,
+          isFloorTransitioning: false,
+        }));
+      }, 0);
+      return () => clearTimeout(noWalkTimer);
+    }
     const routes = findHomeWalkRoute({
       rooms: setupRooms,
       startFloor: previous.currentFloor,
@@ -460,6 +520,31 @@ export default function SimulatorScreen() {
       end: destination,
       endRoomId: targetRoom.id,
     });
+    if (reduceMotion) {
+      avatarTargetRef.current = null;
+      avatarPathQueueRef.current = [];
+      pendingFloorTransferRef.current = null;
+      transitionStartedRef.current = false;
+      activityArrivedAtRef.current = Date.now() - AVATAR_USE_HOLD_MS;
+      const reducedMotionTimer = setTimeout(() => {
+        setWalkPath([]);
+        setAvatarState((state) => ({
+          ...state,
+          currentX: destination.x,
+          currentY: destination.y,
+          currentFloor: targetRoom.floor,
+          targetFloor: targetRoom.floor,
+          currentRoomId: targetRoom.id,
+          targetRoomId: targetRoom.id,
+          currentActivity: currentRoutine.name,
+          facingLeft: placement.facingLeft,
+          isWalking: false,
+          isFloorTransitioning: false,
+        }));
+        if (!isEditMode) setCurrentFloor(targetRoom.floor);
+      }, 0);
+      return () => clearTimeout(reducedMotionTimer);
+    }
     if (targetRoom.floor !== previous.currentFloor) {
       userChangedFloorDuringWalkRef.current = false;
       pendingFloorTransferRef.current = {
@@ -489,7 +574,7 @@ export default function SimulatorScreen() {
       }));
     }, 0);
     return () => clearTimeout(stateTimer);
-  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.isAway, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType, isEditMode, installAvatarRoute]);
+  }, [routineKey, setupRooms, items, rooms, currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.isAway, currentRoutine.name, currentRoutine.targetRoomId, currentRoutine.targetRoomType, isEditMode, installAvatarRoute, reduceMotion]);
 
   const handleFloorChange = useCallback((floor: FloorNumber) => {
     if (isWeekReelPlaying) stopWeekReel();
@@ -513,19 +598,18 @@ export default function SimulatorScreen() {
       applianceIds: currentRoutine.activeApplianceTypes ?? [],
       avatarWalks: currentRoutine.avatarWalks,
     }, targetRoom, arrangedRoomItems).activeApplianceIds : [];
-    const residentHasArrived = Boolean(targetRoom
-      && avatarState.currentRoomId === targetRoom.id
-      && !avatarState.isWalking
-      && !avatarState.isFloorTransitioning);
     for (const item of items) {
       if (item.category !== 'Appliances') continue;
-      const isRoomCeilingLight = residentHasArrived && item.roomId === targetRoom?.id && item.type === 'light_bulb';
-      if (!(item.alwaysOn || (residentHasArrived && visualActiveIds.includes(item.id)) || isRoomCeilingLight)) continue;
+      const isRoomCeilingLight = item.roomId === targetRoom?.id && item.type === 'light_bulb';
+      // A routine turns its selected appliances on for the whole transition,
+      // so the glow is visible immediately and does not depend on the avatar
+      // reaching the destination room first.
+      if (!(item.alwaysOn || visualActiveIds.includes(item.id) || isRoomCeilingLight)) continue;
       activeIds.push(item.id);
       if (item.type === 'lights' || item.type === 'light_bulb') lightRooms.push(item.roomId);
     }
     return { activeApplianceIds: activeIds, activeRoomLightIds: [...new Set(lightRooms)] };
-  }, [avatarState.currentRoomId, avatarState.isFloorTransitioning, avatarState.isWalking, avatarState.targetRoomId,
+  }, [avatarState.targetRoomId,
     currentRoutine.activeApplianceTypes, currentRoutine.avatarWalks, currentRoutine.iconType, currentRoutine.name, items, setupRooms]);
 
   const { totalKwh, monthlyBillRm, usageBadge } = useMemo(() => {
@@ -540,12 +624,42 @@ export default function SimulatorScreen() {
       tariff: activeTariff,
     });
   }, [items, applianceTypes, schedules, routineBlocks, session.household, activeTariff]);
-
+  const billCardMonthlyBillRm = useMemo(
+    () => getSimulatorBillCardMonthlyTotal(monthlyBillRm, solarApplied),
+    [monthlyBillRm, solarApplied],
+  );
+  const energyReport = useMemo(() => buildEnergyReport(items, monthlyBillRm), [items, monthlyBillRm]);
+  const swapSuggestionCards = useMemo(() => buildSwapSuggestionCards(energyReport.topRows), [energyReport.topRows]);
   useEffect(() => {
-    monthlyBillRmRef.current = monthlyBillRm;
-  }, [monthlyBillRm]);
+    if (aiReportVisible && !aiReportWasVisibleRef.current) {
+      setEnergyReportBaseline(energyReport);
+    }
+    aiReportWasVisibleRef.current = aiReportVisible;
+  }, [aiReportVisible, energyReport]);
 
-  const displayBillRm = animatedBillRm ?? monthlyBillRm;
+  const handleApplyEnergySwap = async (suggestion: SwapSuggestionCard) => {
+    try {
+      const host = new URL(SUPABASE_URL).hostname.toLowerCase();
+      if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+        throw new Error('Refusing to apply Simulator swap outside local Supabase');
+      }
+      await updateAppliance(suggestion.source.item.id, {
+        brand: suggestion.replacement.brand,
+        model: suggestion.replacement.model,
+        wattage: suggestion.replacement.wattage,
+        starRating: suggestion.replacement.stars,
+      });
+      setItems((current) => current.map((item) => item.id === suggestion.source.item.id
+        ? applySwapToItem(item, suggestion.replacement)
+        : item));
+      setSwapSuggestionVisible(false);
+      setPostSwapAiReportVisible(true);
+      showToast(`${suggestion.replacement.brand} swap applied`, 'success');
+    } catch (error) {
+      console.error('Failed to apply energy swap:', error);
+      showToast('Could not apply this swap', 'error');
+    }
+  };
 
   const simulatedDateStr = useMemo(() => simulatedDateTime.toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kuala_Lumpur',
@@ -562,23 +676,48 @@ export default function SimulatorScreen() {
     const totalSavingsRm = calcTotalSavings(CURRENT_MONTHLY_SAVINGS_RM, selectedFastForward);
     if (reduceMotion) {
       setReducedWeekSummary(getReducedMotionSummary(routineBlocks, totalSavingsRm));
-      setAnimatedBillRm(null);
+      setFastForwardBillProgress(null);
       setAiReportVisible(true);
       return;
     }
-    setAnimatedBillRm(monthlyBillRm);
+    setFastForwardBillProgress(0);
     const durations: number[] = [];
     let expectedFloor = avatarState.currentFloor;
+    let expectedRoomId = avatarState.currentRoomId;
+    let expectedPoint = { x: avatarState.currentX, y: avatarState.currentY };
     for (const segment of segments) {
-      if (segment.isAway) {
-        durations.push(2500);
-      } else {
-        const roomId = segment.block?.roomId;
-        const room = rooms.find((candidate) => candidate.id === roomId);
-        const changesFloor = Boolean(room && room.floor !== expectedFloor);
-        durations.push(changesFloor ? 6000 : 4000);
-        if (room) expectedFloor = room.floor;
-      }
+      const directId = segment.block?.roomId && segment.block.roomId !== 'away'
+        ? migrateRoomId(segment.block.roomId)
+        : null;
+      const targetRoom = setupRooms.find((room) => room.id === directId)
+        ?? setupRooms.find((room) => room.type === segment.block?.roomId)
+        ?? setupRooms.find((room) => room.type === 'living')
+        ?? setupRooms[0];
+      if (!targetRoom) continue;
+      const targetItems = items.filter((item) => item.roomId === targetRoom.id);
+      const placement = segment.isAway || !segment.block
+        ? null
+        : resolveAvatarPlacement({
+          name: segment.block.name,
+          iconType: segment.block.iconType,
+          applianceIds: segment.block.applianceIds,
+          avatarWalks: segment.block.avatarWalks,
+        }, targetRoom, targetItems);
+      const destination = segment.isAway ? { x: 0.29, y: 0.50 } : placement?.target ?? getRoomCenter(targetRoom);
+      const routes = findHomeWalkRoute({
+        rooms: setupRooms,
+        startFloor: expectedFloor,
+        endFloor: targetRoom.floor,
+        start: expectedPoint,
+        startRoomId: expectedRoomId,
+        end: destination,
+        endRoomId: targetRoom.id,
+      });
+      const changesFloor = targetRoom.floor !== expectedFloor;
+      durations.push(reelSegmentDurationMs(routes.map((route) => route.points), changesFloor));
+      expectedFloor = targetRoom.floor;
+      expectedRoomId = targetRoom.id;
+      expectedPoint = destination;
     }
     const snapshot: WeekReelSnapshot = {
       simulatedMinutes, simulatedDateTime: new Date(simulatedDateTime.getTime()),
@@ -586,7 +725,7 @@ export default function SimulatorScreen() {
     };
     reelRunRef.current = {
       period: selectedFastForward, segments, index: 0, segmentStartedAt: Date.now(),
-      segmentDurationMs: durations[0], completedDurationMs: 0,
+      segmentDurationMs: durations[0], segmentDurationsMs: durations, completedDurationMs: 0,
       totalDurationMs: durations.reduce((sum, duration) => sum + duration, 0),
       totalSavingsRm, startDate: new Date(simulatedDateTime.getTime()), snapshot,
     };
@@ -958,20 +1097,24 @@ export default function SimulatorScreen() {
       ?? rooms.find((r) => r.id === targetId || r.type === targetId);
     return targetRoom?.name ?? (targetId.charAt(0).toUpperCase() + targetId.slice(1));
   }, [rooms, setupRooms, weekReelView]);
+  const isSuggestionSheetVisible = aiReportVisible || postSwapAiReportVisible || swapSuggestionVisible
+    || (solarSuggestionVisible && !solarApplied);
+  const isFloorPlanCompacted = isEditMode || isSuggestionSheetVisible;
 
   return <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
     <View style={styles.mobileShell}>
       <View style={styles.mainContainer}>
-        <BillCard monthlyBillRm={displayBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
+        <BillCard monthlyBillRm={billCardMonthlyBillRm} usageBadge={usageBadge} simulatedDateStr={simulatedDateStr}
           activeFastForward={selectedFastForward}
           isFastForwardPlaying={isWeekReelPlaying || Boolean(reducedWeekSummary)}
           fastForwardSavingsRm={weekReelView?.savingsRm ?? (reducedWeekSummary ? reducedWeekSummary.finalSavingsRm : null)}
+          fastForwardProgress={fastForwardBillProgress}
           fastForwardDisabled={isEditMode}
           isEditMode={isEditMode}
           hasUnreadNotifications={hasUnreadNotifications}
           onToggleEdit={() => {
             if (isWeekReelPlaying) stopWeekReel();
-            setAnimatedBillRm(null);
+            setFastForwardBillProgress(null);
             if (itemLabelTimerRef.current) clearTimeout(itemLabelTimerRef.current);
             setIsEditMode((value) => !value);
             setSelectedItemId(null);
@@ -992,7 +1135,7 @@ export default function SimulatorScreen() {
             if (isWeekReelPlaying) stopWeekReel();
             setTimelineVisible(true);
           }} />
-        {!(isEditMode && Math.min(screenWidth - 32, screenHeight - 460) < 280) && (
+        {!(isFloorPlanCompacted && Math.min(screenWidth - 32, screenHeight - 460) < 280) && (
           weekReelView ? (
             <WeekReelCaption
               segment={weekReelView.segment}
@@ -1018,7 +1161,7 @@ export default function SimulatorScreen() {
         <View
           style={[
             styles.floorPlanArea,
-            { paddingBottom: isEditMode ? 256 : tabBarClearance },
+            { paddingBottom: isFloorPlanCompacted ? 256 : tabBarClearance },
           ]}
           onTouchStart={() => {
             if (isWeekReelPlaying) stopWeekReel();
@@ -1057,20 +1200,37 @@ export default function SimulatorScreen() {
         onSave={handleSaveAppliance} onCancel={handleCancelApplianceSheet} onDelete={handleDeleteItem} />
       <FurnitureDetailsSheet visible={furnitureSheetVisible} item={editingFurniture} rooms={setupRooms}
         onSave={handleSaveFurniture} onCancel={() => { setFurnitureSheetVisible(false); setEditingFurniture(null); }} onDelete={handleDeleteItem} />
-      {aiReportVisible && <AIAnalysisReportModal visible appliances={items} onClose={() => {
-        setAiReportVisible(false);
-        setSuggestionVisible(true);
-      }} />}
-      {suggestionVisible && <ApplianceSuggestionSheet visible onClose={() => setSuggestionVisible(false)} onApply={() => {
+      {(aiReportVisible || postSwapAiReportVisible) && <AIAnalysisReportModal
+        visible
+        appliances={items}
+        monthlyBillRm={monthlyBillRm}
+        comparisonBaseBillRm={postSwapAiReportVisible ? (energyReportBaseline?.totalBillRm ?? null) : null}
+        suggestionOverride={postSwapAiReportVisible ? (energyReportBaseline?.suggestion ?? null) : undefined}
+        onClose={() => {
+          if (postSwapAiReportVisible) {
+            setPostSwapAiReportVisible(false);
+            if (!solarApplied) setSolarSuggestionVisible(true);
+          } else {
+            setAiReportVisible(false);
+            setSwapSuggestionVisible(true);
+          }
+        }} />}
+      {swapSuggestionVisible && <SwapSuggestionSheet visible suggestions={swapSuggestionCards}
+        onApply={handleApplyEnergySwap} onClose={() => {
+          setSwapSuggestionVisible(false);
+          if (!solarApplied) setSolarSuggestionVisible(true);
+        }} />}
+      {solarSuggestionVisible && !solarApplied && <ApplianceSuggestionSheet visible onClose={() => setSolarSuggestionVisible(false)} onApply={() => {
         setSolarApplied(true);
-        setSuggestionVisible(false);
+        setSolarSuggestionVisible(false);
         showToast('Solar is now active on your floor plan', 'success');
       }} />}
       <RoomNamingModal visible={namingModalVisible} room={namingRoom} onSave={handleSaveRoomName}
         onClose={() => { setNamingModalVisible(false); setNamingRoom(null); setPendingRoomAction(null); }} />
       <TidyUpSheet visible={tidySheetVisible} onConfirm={handleTidyFloor} onClose={() => setTidySheetVisible(false)} />
       <BillModal visible={billModalVisible} onClose={() => setBillModalVisible(false)} appliances={appliancesForBillModal}
-        totalKwh={totalKwh} rooms={setupRooms as any} onAddAppliances={() => { setBillModalVisible(false); setIsEditMode(true); }} />
+        period={selectedFastForward} monthlyBillRmOverride={billCardMonthlyBillRm} totalKwh={totalKwh} rooms={setupRooms as any}
+        onAddAppliances={() => { setBillModalVisible(false); setIsEditMode(true); }} />
       <MyDayTimelineSheet visible={timelineVisible} onClose={() => setTimelineVisible(false)} blocks={routineBlocks}
         rooms={setupRooms} appliances={appliancesForBillModal} onAddBlockPress={() => { setTimelineVisible(false); setAddBlockVisible(true); }}
         onEditBlockPress={(block) => { setTimelineVisible(false); setSelectedBlockForEdit(block); setEditBlockVisible(true); }}
@@ -1144,4 +1304,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF7F2', borderWidth: 1, borderColor: '#C5D0B9' },
   undoTidyText: { fontFamily: 'SourceSans3_600SemiBold', fontSize: 13, color: '#566549' },
   dragGhostRoot: { position: Platform.OS === 'web' ? 'fixed' as any : 'absolute', width: 52, height: 52, opacity: 0.88, zIndex: 10000, elevation: 50 },
+  pressed: {
+    opacity: 0.78,
+  },
 });

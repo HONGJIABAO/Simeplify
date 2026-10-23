@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Tabs, router } from 'expo-router';
+import { Tabs, router, Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { House, Recycle, Sprout, ReceiptText, User } from 'lucide-react-native';
+import { useAuthSession } from '@/lib/authSession';
 
 const TAB_CONFIG: Record<
   string,
@@ -72,6 +73,12 @@ function FloatingTabBar({ state }: any) {
 }
 
 export default function TabLayout() {
+  const { session } = useAuthSession();
+
+  if (!session.isLoggedIn || !session.user) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}

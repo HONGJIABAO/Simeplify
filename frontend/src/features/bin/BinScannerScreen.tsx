@@ -56,7 +56,7 @@ import { useToast } from '@/components/Toast';
 import { useAuthSession } from '@/lib/authSession';
 import { classifyWasteWithGemini, type GeminiWasteResult } from '@/lib/services/geminiService';
 import { uploadAndScanWaste } from '@/lib/services/binService';
-import { type BinType, getBinInfo } from '@/lib/mockData';
+import { getBinVisualInfo } from '@/lib/mockData';
 
 type ScreenState = 'camera' | 'analyzing' | 'result' | 'error';
 
@@ -92,29 +92,6 @@ function LeafSpinner({ size = 32 }: { size?: number }) {
       <Sprout size={size} color="#566549" strokeWidth={1.5} />
     </Animated.View>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Bin color mapping helpers
-// ---------------------------------------------------------------------------
-function getBinColor(binType: BinType): string {
-  const map: Record<BinType, string> = {
-    paper: '#d4a373',
-    plastic: '#a8b896',
-    glass_metal: '#5c4033',
-    general: '#566549',
-  };
-  return map[binType] || '#566549';
-}
-
-function getBinTextColor(binType: BinType): string {
-  const map: Record<BinType, string> = {
-    paper: '#292524',
-    plastic: '#292524',
-    glass_metal: '#fafaf9',
-    general: '#fafaf9',
-  };
-  return map[binType] || '#fafaf9';
 }
 
 // ---------------------------------------------------------------------------
@@ -576,8 +553,7 @@ export default function BinScannerScreen() {
   // RENDER: Result state
   // =========================================================================
   if (screenState === 'result' && result) {
-    const binColor = getBinColor(result.binType);
-    const binTextColor = getBinTextColor(result.binType);
+    const binInfo = getBinVisualInfo(result.binType, result.material, result.identifiedItem);
 
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -629,11 +605,11 @@ export default function BinScannerScreen() {
             {/* Target Bin card */}
             <MiniCard style={styles.binMiniCard}>
               <View style={styles.binCardRow}>
-                <View style={[styles.binIconCircle, { backgroundColor: binColor }]}>
-                  <Recycle size={28} color={binTextColor} strokeWidth={1.5} />
+                <View style={[styles.binIconCircle, { backgroundColor: binInfo.color }]}>
+                  <Recycle size={28} color={binInfo.textColor} strokeWidth={1.5} />
                 </View>
                 <View style={styles.binInfoCol}>
-                  <Text style={styles.binNameTitle}>{result.targetBin}</Text>
+                  <Text style={styles.binNameTitle}>{binInfo.name}</Text>
                   <Text style={styles.binStatusLabel}>
                     {result.isRecyclable
                       ? 'Recyclable item (+10 points)'

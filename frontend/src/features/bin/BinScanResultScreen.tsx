@@ -53,7 +53,7 @@ import {
   type ClassifyWasteResult,
   mockScanResults,
   mockDeedsToday,
-  getBinInfo,
+  getBinVisualInfo,
 } from '@/lib/mockData';
 import { confirmDisposal, fetchBinState } from '@/lib/services/binService';
 import { LEAF_DAILY_DEED_CAP } from '@/lib/flags';
@@ -180,7 +180,7 @@ export default function BinScanResultScreen() {
     };
   }, [householdId]);
 
-  const binInfo = getBinInfo(result.binType);
+  const binInfo = getBinVisualInfo(result.binType, result.material, result.itemName);
 
   const handleBack = () => {
     if (router.canGoBack()) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, PackageOpen } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -41,10 +41,12 @@ export function EditSheetSurface({
   children,
   collapsed = false,
   opacity,
+  height = EDIT_SHEET_HEIGHT,
 }: {
   children: React.ReactNode;
   collapsed?: boolean;
   opacity?: Animated.Value;
+  height?: number;
 }) {
   const [translateY] = useState(() => new Animated.Value(EDIT_SHEET_HEIGHT));
 
@@ -64,11 +66,31 @@ export function EditSheetSurface({
   return (
     <Animated.View style={[
       styles.sheetContainer,
+      { height },
       collapsed && styles.sheetCollapsed,
       { opacity: opacity ?? 1, transform: [{ translateY }] },
     ]}>
       {children}
     </Animated.View>
+  );
+}
+
+/** Shared tray tile surface used by Edit mode and Simulator recommendations. */
+export function EditSheetTileSurface({
+  children,
+  width,
+  selected = false,
+  style,
+}: {
+  children: React.ReactNode;
+  width: number;
+  selected?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.itemCard, { width: width - 6 }, selected && styles.itemCardSelected, style]}>
+      {children}
+    </View>
   );
 }
 
@@ -94,9 +116,7 @@ function TrayTile({ item, width, selected, onStart, onMove, onEnd, onTap }: Tray
         accessibilityRole="button"
         accessibilityLabel={`Add ${item.label}`}
       >
-        <View
-          style={[styles.itemCard, { width: width - 6 }, selected && styles.itemCardSelected]}
-        >
+        <EditSheetTileSurface width={width} selected={selected}>
           {hasPicture ? (
             <Sprite type={item.key} width={44} height={44} size={44} resizeMode="contain" />
           ) : (
@@ -107,7 +127,7 @@ function TrayTile({ item, width, selected, onStart, onMove, onEnd, onTap }: Tray
               </Text>
             </View>
           )}
-        </View>
+        </EditSheetTileSurface>
         <Text style={styles.itemLabel} numberOfLines={1}>
           {item.label}
         </Text>

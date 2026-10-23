@@ -6,7 +6,6 @@ import { getSlotRect, STAIR_CENTER, STAIR_RECT, type FloorNumber, type FractionR
 import { ROOM_DOOR_RATIOS } from './furnishedLayout.ts';
 type Point = { x: number; y: number };
 
-export const AVATAR_PLAN_SPEED_PER_SECOND = 90 / 340;
 export const DOOR_INSET_RATIO = 0.12;
 const DOOR_WALL_DEPTH = 0.012;
 const DEFAULT_PLAN_SIDE = 340;

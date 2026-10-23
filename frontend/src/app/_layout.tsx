@@ -18,6 +18,7 @@ import {
   SourceSans3_700Bold,
 } from '@expo-google-fonts/source-sans-3';
 import { ToastProvider } from '@/components/Toast';
+import { EcoHabitProvider } from '@/lib/ecoHabitContext';
 import '../global.css';
 
 // Silence React 19 / react-native-web responder event warnings on web
@@ -109,18 +110,20 @@ export default function RootLayout() {
 
   const content = (
     <ToastProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#faf6f1' },
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" options={{ headerShown: false }} />
-        <Stack.Screen name="_dev" options={{ headerShown: false }} />
-      </Stack>
+      <EcoHabitProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#faf6f1' },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="_dev" options={{ headerShown: false }} />
+        </Stack>
+      </EcoHabitProvider>
     </ToastProvider>
   );
 

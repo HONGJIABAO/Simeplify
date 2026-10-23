@@ -165,7 +165,7 @@ export default function BinUploadScreen() {
           : finalBinType === 'plastic'
           ? 'PET / Plastic'
           : finalBinType === 'glass_metal'
-          ? 'Glass / Metal'
+          ? 'Glass'
           : 'Organic / Residual Waste');
       const finalConfidence = aiResult?.confidence ?? 0.94;
       const finalTip =

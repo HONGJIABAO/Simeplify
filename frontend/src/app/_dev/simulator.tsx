@@ -56,6 +56,9 @@ import { EditBlockSheet } from '@/features/simulator/components/EditBlockSheet';
 import { TidyUpSheet } from '@/features/simulator/components/TidyUpSheet';
 import { AIAnalysisReportModal } from '@/features/simulator/components/AIAnalysisReportModal';
 import { ApplianceSuggestionSheet } from '@/features/simulator/components/ApplianceSuggestionSheet';
+import { SwapSuggestionSheet } from '@/features/simulator/components/SwapSuggestionSheet';
+import { buildEnergyReport, buildSwapSuggestionCards } from '@/features/simulator/logic/energyReport';
+import { BillCard } from '@/features/simulator/components/BillCard';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { SKIPPED_ITEM_TYPES } from '@/features/simulator/logic/mockHomeData';
@@ -68,6 +71,9 @@ type DemoState =
   | 'plan-with-appliances'
   | 'bill-modal-filled'
   | 'bill-modal-empty'
+  | 'bill-modal-1w'
+  | 'bill-modal-1m'
+  | 'bill-modal-1y'
   | 'loading-skeleton'
   // Stage 7 Edit Mode
   | 'edit-mode-tray'
@@ -81,11 +87,14 @@ type DemoState =
   // Stage 7 Fast-Forward
   | 'fast-forward-closed'
   | 'fast-forward-open-1m'
-  | 'fast-forward-open-6m'
+  | 'fast-forward-open-1w'
   | 'fast-forward-open-1y'
   | 'fast-forward-playing'
   | 'fast-forward-stopped'
   | 'fast-forward-reduced-motion'
+  | 'bill-count-start'
+  | 'bill-count-mid-reel'
+  | 'bill-count-final'
   // Stage 8 My Day & Avatar
   | 'my-day-quick-setup'
   | 'my-day-timeline'
@@ -119,6 +128,7 @@ type DemoState =
   | 'room-tags-default'
   | 'room-tags-hovered'
   | 'room-tags-edit-mode'
+  | 'room-tags-over-items'
   | 'floor-items-2-2x'
   | 'item-label-tapped'
   | 'edit-selected-drag'
@@ -136,6 +146,11 @@ type DemoState =
   | 'avatar-at-sofa'
   | 'avatar-at-shower'
   | 'avatar-at-workplace'
+  | 'block-start-lit'
+  | 'avatar-arrived-using'
+  | 'avatar-at-fridge'
+  | 'avatar-at-washer'
+  | 'avatar-at-bed'
   | 'floor-follow-transition'
   | 'floor-follow-looked-away'
   | 'floor-follow-edit-mode'
@@ -147,6 +162,11 @@ type DemoState =
   | 'week-reel-playing'
   | 'week-reel-reduced-summary'
   | 'post-simulation-ai-report'
+  | 'post-simulation-ai-report-after-swap'
+  | 'energy-report-mock-data'
+  | 'energy-optimization-compact-floor'
+  | 'post-simulation-swap-suggestion'
+  | 'swap-suggestion-cards'
   | 'post-simulation-solar-suggestion'
   | 'solar-applied';
 
@@ -162,6 +182,11 @@ const STATE_GROUPS = [
       { id: 'avatar-at-sofa' as DemoState, label: 'Avatar at sofa, TV lit' },
       { id: 'avatar-at-shower' as DemoState, label: 'Avatar at shower' },
       { id: 'avatar-at-workplace' as DemoState, label: 'Avatar at Workplace' },
+      { id: 'block-start-lit' as DemoState, label: 'Block start — appliance lit before arrival' },
+      { id: 'avatar-arrived-using' as DemoState, label: 'Resident arrived — using lit appliance' },
+      { id: 'avatar-at-fridge' as DemoState, label: 'Resident use spot — refrigerator' },
+      { id: 'avatar-at-washer' as DemoState, label: 'Resident use spot — washing machine' },
+      { id: 'avatar-at-bed' as DemoState, label: 'Resident use spot — bed' },
       { id: 'home-furnished-floor-1' as DemoState, label: 'Home furnished, floor 1' },
       { id: 'home-furnished-floor-2' as DemoState, label: 'Home furnished, floor 2' },
       { id: 'home-furnished-floor-1-debug' as DemoState, label: 'Home furnished, floor 1 — layout overlay' },
@@ -181,6 +206,7 @@ const STATE_GROUPS = [
       { id: 'room-tags-default' as DemoState, label: 'Room tags — hidden by default' },
       { id: 'room-tags-hovered' as DemoState, label: 'Room tags — hovered / long press' },
       { id: 'room-tags-edit-mode' as DemoState, label: 'Room tags — Edit mode visible' },
+      { id: 'room-tags-over-items' as DemoState, label: 'Room tags — above glow, route and resident' },
       { id: 'floor-items-2-2x' as DemoState, label: 'All floor items — uniform 2.2×' },
       { id: 'item-label-tapped' as DemoState, label: 'Normal mode — tapped name + watts' },
       { id: 'edit-selected-drag' as DemoState, label: 'Edit mode — tap once, then drag' },
@@ -215,6 +241,9 @@ const STATE_GROUPS = [
       { id: 'plan-with-appliances' as DemoState, label: 'Floor plan — with appliances' },
       { id: 'bill-modal-filled' as DemoState, label: 'Bill modal — filled' },
       { id: 'bill-modal-empty' as DemoState, label: 'Bill modal — empty' },
+      { id: 'bill-modal-1w' as DemoState, label: 'Bill breakdown — 1W' },
+      { id: 'bill-modal-1m' as DemoState, label: 'Bill breakdown — 1M' },
+      { id: 'bill-modal-1y' as DemoState, label: 'Bill breakdown — 1Y' },
       { id: 'loading-skeleton' as DemoState, label: 'Loading skeleton' },
     ],
   },
@@ -240,11 +269,14 @@ const STATE_GROUPS = [
     items: [
       { id: 'fast-forward-closed' as DemoState, label: 'Fast-forward: closed' },
       { id: 'fast-forward-open-1m' as DemoState, label: 'Fast-forward: open (1M)' },
-      { id: 'fast-forward-open-6m' as DemoState, label: 'Fast-forward: open (1W)' },
+      { id: 'fast-forward-open-1w' as DemoState, label: 'Fast-forward: open (1W)' },
       { id: 'fast-forward-open-1y' as DemoState, label: 'Fast-forward: open (1Y)' },
       { id: 'fast-forward-playing' as DemoState, label: 'Fast-forward: playing animation' },
       { id: 'fast-forward-stopped' as DemoState, label: 'Fast-forward: stopped on tap/drag' },
       { id: 'fast-forward-reduced-motion' as DemoState, label: 'Fast-forward: reduced motion' },
+      { id: 'bill-count-start' as DemoState, label: 'Bill count — starts at RM 0' },
+      { id: 'bill-count-mid-reel' as DemoState, label: 'Bill count — reel at 50%' },
+      { id: 'bill-count-final' as DemoState, label: 'Bill count — exact final value' },
     ],
   },
   {
@@ -275,6 +307,11 @@ const STATE_GROUPS = [
       { id: 'week-reel-playing' as DemoState, label: 'Week reel playing (Floor 1)' },
       { id: 'week-reel-reduced-summary' as DemoState, label: 'Week reel reduced motion summary' },
       { id: 'post-simulation-ai-report' as DemoState, label: 'Post-simulation AI report' },
+      { id: 'post-simulation-ai-report-after-swap' as DemoState, label: 'AI report after swap — savings vs last report' },
+      { id: 'energy-report-mock-data' as DemoState, label: 'Energy report — calculated mock data' },
+      { id: 'energy-optimization-compact-floor' as DemoState, label: 'Energy optimization — compact floor plan' },
+      { id: 'post-simulation-swap-suggestion' as DemoState, label: 'Post-report swap suggestion panel' },
+      { id: 'swap-suggestion-cards' as DemoState, label: 'Swap cards — sprite, stars, brand and watts' },
       { id: 'post-simulation-solar-suggestion' as DemoState, label: 'Post-report solar suggestion' },
       { id: 'solar-applied' as DemoState, label: 'Floor plan with solar active' },
     ],
@@ -301,6 +338,7 @@ function TwoFloorPlanPreview({
   isAvatarAway = false,
   initialSelectedItemId = null,
   solarApplied = false,
+  compactLayout = false,
 }: {
   initialFloor?: FloorNumber;
   residentFloor?: FloorNumber;
@@ -310,12 +348,13 @@ function TwoFloorPlanPreview({
   containerHeight?: number;
   setupAllRooms?: boolean;
   debugLayout?: boolean;
-  avatarScenario?: 'sofa' | 'shower' | 'workplace';
+  avatarScenario?: 'sofa' | 'shower' | 'workplace' | 'fridge' | 'laundry' | 'bed';
   routeScenario?: 'doorway' | 'unreachable';
   messy?: boolean;
   isAvatarAway?: boolean;
   initialSelectedItemId?: string | null;
   solarApplied?: boolean;
+  compactLayout?: boolean;
 }) {
   const [floor, setFloor] = useState<FloorNumber>(initialFloor);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialSelectedItemId);
@@ -331,14 +370,26 @@ function TwoFloorPlanPreview({
     const timer = setTimeout(() => setSelectedItemId(null), 3000);
     return () => clearTimeout(timer);
   }, [isEditMode, selectedItemId]);
-  const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A' : avatarScenario === 'shower' ? 'f1-C' : avatarScenario === 'workplace' ? 'f2-B' : null;
+  const scenarioRoomId = avatarScenario === 'sofa' ? 'f1-A'
+    : avatarScenario === 'shower' ? 'f1-D'
+      : avatarScenario === 'workplace' ? 'f2-C'
+        : avatarScenario === 'fridge' ? 'f1-B'
+          : avatarScenario === 'laundry' ? 'f1-C'
+            : avatarScenario === 'bed' ? 'f2-A'
+              : null;
   const scenarioRoom = rooms.find((room) => room.id === scenarioRoomId);
   const scenarioItems = items.filter((item) => item.roomId === scenarioRoomId);
   const scenarioBlock = avatarScenario === 'sofa'
     ? { name: 'Watching TV', iconType: 'custom' as const, applianceIds: ['f1-tv-living', 'f1-lamp-living', 'f1-ac-living'], avatarWalks: true }
     : avatarScenario === 'shower'
       ? { name: 'Morning Shower', iconType: 'shower' as const, applianceIds: ['f1-shower-bath'], avatarWalks: true }
-      : { name: 'Working', iconType: 'work' as const, applianceIds: ['f2-workplace-study'], avatarWalks: true };
+      : avatarScenario === 'fridge'
+        ? { name: 'Breakfast', iconType: 'meal' as const, applianceIds: ['f1-fridge-kitchen'], avatarWalks: true }
+        : avatarScenario === 'laundry'
+          ? { name: 'Laundry', iconType: 'custom' as const, applianceIds: ['f1-washer-laundry'], avatarWalks: true }
+          : avatarScenario === 'bed'
+            ? { name: 'Sleeping', iconType: 'sleep' as const, applianceIds: [], avatarWalks: true }
+            : { name: 'Working', iconType: 'work' as const, applianceIds: ['f2-workplace'], avatarWalks: true };
   const scenarioPlacement = scenarioRoom ? resolveAvatarPlacement(scenarioBlock, scenarioRoom, scenarioItems) : null;
   const routeStartRoom = rooms.find((room) => room.id === 'f1-A')!;
   const routeEndRoom = rooms.find((room) => room.id === (routeScenario === 'unreachable' ? 'f1-D' : 'f1-C'))!;
@@ -363,7 +414,7 @@ function TwoFloorPlanPreview({
     isFloorTransitioning: false,
   };
   return (
-    <View style={{ flex: 1, minHeight: containerHeight ?? 420, padding: 16 }}>
+    <View style={{ flex: 1, minHeight: containerHeight ?? 420, padding: 16, paddingBottom: compactLayout ? 256 : 16 }}>
       {debugLayout && (
         <View style={galleryStyles.missingPicturesCard}>
           <Text style={galleryStyles.missingPicturesText}>
@@ -406,6 +457,7 @@ function TwoFloorPlanPreview({
 export default function SimulatorGallery() {
   const router = useRouter();
   const { showToast } = useToast();
+  const gallerySwapCards = buildSwapSuggestionCards(buildEnergyReport(MOCK_APPLIANCES, 245).topRows);
 
   const [activeState, setActiveState] = useState<DemoState | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -503,31 +555,39 @@ export default function SimulatorGallery() {
           activeState === 'stair-filled-floor-1' || activeState === 'stair-filled-floor-2' ||
           activeState === 'square-plan-default' || activeState === 'square-plan-shrunk' ||
           activeState === 'glow-on' || activeState === 'glow-off' ||
-          activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode' ||
+          activeState === 'room-tags-default' || activeState === 'room-tags-hovered' || activeState === 'room-tags-edit-mode' || activeState === 'room-tags-over-items' ||
           activeState === 'floor-items-2-2x' || activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ||
           activeState === 'home-furnished-floor-1' || activeState === 'home-furnished-floor-2' ||
           activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' ||
           activeState === 'living-room-layout' || activeState === 'kitchen-layout' || activeState === 'bathroom-layout' ||
           activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' ||
-          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' ||
+          activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' || activeState === 'block-start-lit' || activeState === 'avatar-arrived-using' || activeState === 'avatar-at-fridge' || activeState === 'avatar-at-washer' || activeState === 'avatar-at-bed' ||
           activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ||
-          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route' || activeState === 'solar-applied') && (
+          activeState === 'doorway-route-preview' || activeState === 'unreachable-room-route' || activeState === 'solar-applied' ||
+          activeState === 'energy-optimization-compact-floor') && (
           <TwoFloorPlanPreview
             key={activeState}
-            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' ? 2 : 1}
-            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ? 2 : 1}
-            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'floor-follow-edit-mode' || activeState === 'edit-selected-drag'}
+            initialFloor={activeState === 'floor-two-dark' || activeState === 'stair-filled-floor-2' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'avatar-at-bed' || activeState === 'floor-follow-transition' ? 2 : 1}
+            residentFloor={activeState === 'resident-other-floor' || activeState === 'home-furnished-floor-2' || activeState === 'home-furnished-floor-2-debug' || activeState === 'floor-2-setup-all' || activeState === 'bedroom-layout' || activeState === 'workplace-room-layout' || activeState === 'avatar-at-workplace' || activeState === 'avatar-at-bed' || activeState === 'floor-follow-transition' || activeState === 'floor-follow-looked-away' || activeState === 'floor-follow-edit-mode' ? 2 : 1}
+            isEditMode={activeState === 'square-plan-shrunk' || activeState === 'room-tags-edit-mode' || activeState === 'room-tags-over-items' || activeState === 'floor-follow-edit-mode' || activeState === 'edit-selected-drag'}
             initialSelectedItemId={activeState === 'item-label-tapped' || activeState === 'edit-selected-drag' ? 'f1-ac-living' : null}
-            activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace'
+            activeApplianceIds={activeState === 'avatar-at-sofa' || activeState === 'avatar-at-shower' || activeState === 'avatar-at-workplace' || activeState === 'avatar-arrived-using' || activeState === 'avatar-at-fridge' || activeState === 'avatar-at-washer' || activeState === 'avatar-at-bed'
               ? undefined
+              : activeState === 'block-start-lit' ? ['f1-shower-bath', 'f1-bulb-d']
               : activeState === 'glow-off' ? [] : ['f1-fridge-kitchen', 'f1-ac-living', 'f1-tv-living', 'f2-ac-master', 'fridge1', 'tv1', 'aircon1']}
             hoveredRoomId={activeState === 'room-tags-hovered' ? 'f1-A' : null}
             containerHeight={activeState === 'square-plan-shrunk' ? 260 : undefined}
             setupAllRooms={activeState === 'floor-2-setup-all'}
             debugLayout={activeState === 'home-furnished-floor-1-debug' || activeState === 'home-furnished-floor-2-debug'}
-            avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa' : activeState === 'avatar-at-shower' ? 'shower' : activeState === 'avatar-at-workplace' ? 'workplace' : undefined}
-            routeScenario={activeState === 'doorway-route-preview' ? 'doorway' : activeState === 'unreachable-room-route' ? 'unreachable' : undefined}
+            avatarScenario={activeState === 'avatar-at-sofa' ? 'sofa'
+              : activeState === 'avatar-at-shower' || activeState === 'avatar-arrived-using' ? 'shower'
+                : activeState === 'avatar-at-workplace' ? 'workplace'
+                  : activeState === 'avatar-at-fridge' ? 'fridge'
+                    : activeState === 'avatar-at-washer' ? 'laundry'
+                      : activeState === 'avatar-at-bed' ? 'bed' : undefined}
+            routeScenario={activeState === 'doorway-route-preview' || activeState === 'room-tags-over-items' || activeState === 'block-start-lit' ? 'doorway' : activeState === 'unreachable-room-route' ? 'unreachable' : undefined}
             solarApplied={activeState === 'solar-applied'}
+            compactLayout={activeState === 'energy-optimization-compact-floor'}
           />
         )}
 
@@ -634,8 +694,26 @@ export default function SimulatorGallery() {
           </View>
         )}
 
-        {activeState === 'post-simulation-ai-report' && (
-          <AIAnalysisReportModal visible appliances={MOCK_APPLIANCES} onClose={() => setActiveState('post-simulation-solar-suggestion')} />
+        {(activeState === 'post-simulation-ai-report' || activeState === 'post-simulation-ai-report-after-swap' || activeState === 'energy-report-mock-data') && (
+          <AIAnalysisReportModal
+            visible
+            appliances={MOCK_APPLIANCES}
+            monthlyBillRm={activeState === 'post-simulation-ai-report-after-swap' ? 221 : 245}
+            comparisonBaseBillRm={activeState === 'post-simulation-ai-report-after-swap' ? 245 : null}
+            suggestionOverride={activeState === 'post-simulation-ai-report-after-swap'
+              ? buildEnergyReport(MOCK_APPLIANCES, 245).suggestion
+              : undefined}
+            onClose={() => setActiveState(
+              activeState === 'post-simulation-ai-report' ? 'post-simulation-swap-suggestion'
+                : activeState === 'post-simulation-ai-report-after-swap' ? 'post-simulation-solar-suggestion'
+                  : null
+            )} />
+        )}
+
+        {(activeState === 'post-simulation-swap-suggestion' || activeState === 'swap-suggestion-cards' || activeState === 'energy-optimization-compact-floor') && (
+          <SwapSuggestionSheet visible suggestions={gallerySwapCards}
+            onApply={() => setActiveState(activeState === 'post-simulation-swap-suggestion' || activeState === 'energy-optimization-compact-floor' ? 'post-simulation-solar-suggestion' : null)}
+            onClose={() => setActiveState(activeState === 'post-simulation-swap-suggestion' || activeState === 'energy-optimization-compact-floor' ? 'post-simulation-solar-suggestion' : null)} />
         )}
 
         {activeState === 'post-simulation-solar-suggestion' && (
@@ -651,20 +729,21 @@ export default function SimulatorGallery() {
         )}
 
         {/* ── 2. Bill Modals ── */}
-        {(activeState === 'bill-modal-filled' || activeState === 'bill-modal-empty') && (
+        {(activeState === 'bill-modal-filled' || activeState === 'bill-modal-empty' || activeState === 'bill-modal-1w' || activeState === 'bill-modal-1m' || activeState === 'bill-modal-1y') && (
           <View style={galleryStyles.modalTriggerArea}>
-            <Pressable
+            {!activeState.startsWith('bill-modal-1') && <Pressable
               style={galleryStyles.openModalBtn}
               onPress={() => setBillModalVisible(true)}
             >
               <BillHero kWh={totalKwh} />
               <Text style={galleryStyles.tapHint}>Tap to open bill modal</Text>
-            </Pressable>
+            </Pressable>}
 
             <BillModal
-              visible={billModalVisible}
-              onClose={() => setBillModalVisible(false)}
+              visible={billModalVisible || activeState.startsWith('bill-modal-1')}
+              onClose={() => activeState.startsWith('bill-modal-1') ? setActiveState(null) : setBillModalVisible(false)}
               appliances={appliances}
+              period={activeState === 'bill-modal-1w' ? '1W' : activeState === 'bill-modal-1y' ? '1Y' : '1M'}
               totalKwh={totalKwh}
               onAddAppliances={() => setBillModalVisible(false)}
             />
@@ -764,7 +843,7 @@ export default function SimulatorGallery() {
             <FastForwardPanel
               visible={activeState !== 'fast-forward-closed'}
               period={
-                activeState === 'fast-forward-open-6m'
+                activeState === 'fast-forward-open-1w'
                   ? '1W'
                   : activeState === 'fast-forward-open-1y'
                   ? '1Y'
@@ -801,6 +880,19 @@ export default function SimulatorGallery() {
                 />
               )}
             </View>
+          </View>
+        )}
+
+        {(activeState === 'bill-count-start' || activeState === 'bill-count-mid-reel' || activeState === 'bill-count-final') && (
+          <View style={{ flex: 1, padding: 16 }}>
+            <BillCard
+              monthlyBillRm={245}
+              simulatedDateStr="22 Oct 2026"
+              activeFastForward="1M"
+              fastForwardProgress={activeState === 'bill-count-start' ? 0 : activeState === 'bill-count-mid-reel' ? 0.5 : 1}
+              onSelectFastForward={() => {}}
+              onToggleFastForward={() => {}}
+            />
           </View>
         )}
 
