@@ -6,9 +6,6 @@
  * Each constant has a default value and a TODO comment. Do not invent product behavior.
  */
 
-// TODO(open-item 1 / page_refined §5 item 1): Google sign-in drawn on auth screens but AUTH-01 requires email & password.
-export const ENABLE_GOOGLE_AUTH: boolean = false;
-
 // TODO(open-item 3 / page_refined §5 item 3): Screenshots show flat top-down; SIM-05 specifies 2.5D isometric.
 export const FLOOR_PLAN_STYLE: 'flat' | 'isometric' = 'flat';
 

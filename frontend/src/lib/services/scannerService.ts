@@ -17,12 +17,15 @@ import {
   type Bill,
   type BillAlert,
   type BillAnalysis,
+  type AIRoutineAnalysisResult,
   normalizeBillingMonth,
 } from '../../features/scanner/logic/scannerCore';
 import {
   extractBillDataWithGemini,
   detectBillAnomaly,
+  analyzeBillRoutineWithGemini,
 } from './geminiService';
+import { getSimulatorRoutineProfile } from '../../features/simulator/logic/simulatorBridge';
 
 export * from '../../features/scanner/logic/scannerCore';
 
@@ -400,7 +403,20 @@ export async function saveAndAnalyzeBill(params: {
     }
   }
 
-  // 2. Offline / Local Gemini Anomaly Detection Fallback (Fast & resilient)
+  // 2. Retrieve user's Simulator routine & inventory and perform personalized routine-based AI analysis
+  const routineProfile = getSimulatorRoutineProfile(params.type);
+  const routineAnalysis = await analyzeBillRoutineWithGemini(
+    {
+      type: params.type,
+      amount: params.amount,
+      usage: params.usage,
+      billingMonth: normalizedMonth,
+      provider: params.type === 'electricity' ? 'TNB' : 'Air Selangor',
+    },
+    routineProfile
+  );
+
+  // 3. Offline / Local Gemini Anomaly Detection Fallback (Fast & resilient)
   const existingBills = params.previousBills || (await getLocalBills(hhId));
   const anomaly = detectBillAnomaly(
     {
@@ -424,7 +440,7 @@ export async function saveAndAnalyzeBill(params: {
 
   const analysis: BillAnalysis = {
     summary: anomaly.message,
-    estimate_kwh: params.type === 'electricity' ? 380 : undefined,
+    estimate_kwh: params.type === 'electricity' ? routineProfile.estimatedUsage : undefined,
     comparison: {
       mom_change_pct: anomaly.momChangePct,
       streak: anomaly.momChangePct > 0 ? `+${anomaly.momChangePct}%` : `${anomaly.momChangePct}%`,
@@ -442,6 +458,7 @@ export async function saveAndAnalyzeBill(params: {
             'Please check your household and verify the anomaly.',
           ],
     footer_disclaimer: 'Calculated using Gemini AI analysis based on your bills.',
+    routine_analysis: routineAnalysis,
   };
 
   const newBill: Bill = {
@@ -533,7 +550,24 @@ export async function saveBillToLocalStorage(householdId: string, bill: Bill): P
  * Invokes analyze-bill in 'reanalyze' mode for an existing bill.
  * Never changes points, deeds, or alerts.
  */
-export async function reanalyzeBill(billId: string): Promise<ReanalyzeBillResult> {
+export async function reanalyzeBill(billId: string, householdId?: string): Promise<ReanalyzeBillResult> {
+  const hhId = householdId || 'local-household';
+  const localBills = await getLocalBills(hhId);
+  const targetBill = localBills.find((b) => b.id === billId);
+
+  const utilityType = targetBill?.type || 'electricity';
+  const routineProfile = getSimulatorRoutineProfile(utilityType);
+  const routineAnalysis = await analyzeBillRoutineWithGemini(
+    {
+      type: utilityType,
+      amount: targetBill?.amount || 150,
+      usage: targetBill?.usage || 350,
+      billingMonth: targetBill?.billing_month,
+      provider: targetBill?.provider || (utilityType === 'electricity' ? 'TNB' : 'Air Selangor'),
+    },
+    routineProfile
+  );
+
   const reachable = await isSupabaseReachable();
   if (reachable) {
     try {
@@ -551,9 +585,13 @@ export async function reanalyzeBill(billId: string): Promise<ReanalyzeBillResult
       );
 
       if (!error && data?.analysis) {
+        const enrichedAnalysis: BillAnalysis = {
+          ...data.analysis,
+          routine_analysis: data.analysis.routine_analysis || routineAnalysis,
+        };
         return {
           bill_id: data.bill_id,
-          analysis: data.analysis,
+          analysis: enrichedAnalysis,
         };
       }
     } catch (err: any) {
@@ -564,12 +602,13 @@ export async function reanalyzeBill(billId: string): Promise<ReanalyzeBillResult
   return {
     bill_id: billId,
     analysis: {
-      summary: 'Updated AI insights: Your usage is verified against seasonal patterns.',
+      summary: 'Updated AI insights: Your usage is verified against seasonal patterns and Simulator routines.',
       tips: [
         'Run washing machine on full load with cold water cycle.',
         'Ensure outdoor faucets and hoses are turned off securely.',
       ],
-      footer_disclaimer: 'Based on your latest statements.',
+      footer_disclaimer: 'Based on your latest statements and Simulator routine.',
+      routine_analysis: routineAnalysis,
     },
   };
 }

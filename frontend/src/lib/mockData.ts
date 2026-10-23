@@ -14,6 +14,11 @@
 import { HOUSEHOLD_MILESTONE_PTS, LEAF_DAILY_DEED_CAP, SHOW_CO2_CARD } from './flags';
 import { MOCK_SIMULATOR_ITEMS } from '@/features/simulator/logic/mockHomeData';
 import { createDefaultRooms } from '@/features/simulator/logic/roomData';
+import {
+  BIN_CATEGORY_COLORS,
+  BIN_ICON_TEXT_COLOR,
+  resolveBinVisualCategory,
+} from '@/features/bin/logic/binColors';
 import type { StoredRoom } from '@/features/simulator/logic/storage';
 
 export const WORKPLACE_DEFAULT_WATTS = 80;
@@ -188,6 +193,8 @@ export const MOCK_BILLS: Bill[] = [
 // ---------------------------------------------------------------------------
 export type BinType = 'paper' | 'plastic' | 'glass_metal' | 'general';
 
+export { BIN_CATEGORY_COLORS } from '@/features/bin/logic/binColors';
+
 export interface BinInfo {
   type: BinType;
   name: string;
@@ -202,43 +209,61 @@ export const BIN_GUIDE: BinInfo[] = [
   {
     type: 'paper',
     name: 'Paper',
-    color: '#d4a373', // tan-400
-    textColor: '#292524', // stone-800
+    color: BIN_CATEGORY_COLORS.paper,
+    textColor: BIN_ICON_TEXT_COLOR,
     points: 10,
     recyclable: true,
     examples: 'Clean cardboard, envelopes, egg cartons, unlined paper',
   },
   {
     type: 'plastic',
-    name: 'Plastic',
-    color: '#a8b896', // sage-300
-    textColor: '#292524', // stone-800
+    name: 'Plastic & Metal',
+    color: BIN_CATEGORY_COLORS.plasticMetal,
+    textColor: BIN_ICON_TEXT_COLOR,
     points: 10,
     recyclable: true,
-    examples: 'Bottles, clean jugs, rinsed shampoo containers, rigid tubs',
+    examples: 'Bottles, cans, clean jugs, metal lids, rigid tubs',
   },
   {
     type: 'glass_metal',
-    name: 'Glass & Metal',
-    color: '#5c4033', // brown
-    textColor: '#fafaf9', // stone-50
+    name: 'Glass',
+    color: BIN_CATEGORY_COLORS.glass,
+    textColor: BIN_ICON_TEXT_COLOR,
     points: 10,
     recyclable: true,
-    examples: 'Clean tins, glass jars, metal lids, beverage cans',
+    examples: 'Glass jars, glass bottles, clean glass containers',
   },
   {
     type: 'general',
     name: 'General waste',
-    color: '#566549', // sage-600
-    textColor: '#fafaf9', // stone-50
+    color: BIN_CATEGORY_COLORS.general,
+    textColor: BIN_ICON_TEXT_COLOR,
     points: 0,
     recyclable: false,
     examples: 'Food scraps, soiled wrapping, non-recyclable items',
   },
 ];
 
-export function getBinInfo(type: BinType): BinInfo {
+export function getBinInfo(type: BinType | string): BinInfo {
   return BIN_GUIDE.find((b) => b.type === type) ?? BIN_GUIDE[3];
+}
+
+/**
+ * Resolve the visual category without changing the legacy persisted bin type.
+ * Metal belongs to the orange Plastic & Metal stream; glass remains brown.
+ */
+export function getBinVisualInfo(
+  type: BinType | string,
+  material = '',
+  itemName = '',
+): BinInfo {
+  const visualCategory = resolveBinVisualCategory(type, material, itemName);
+  const legacyType = visualCategory === 'plastic'
+    ? 'plastic'
+    : visualCategory === 'glass'
+      ? 'glass_metal'
+      : visualCategory;
+  return getBinInfo(legacyType);
 }
 
 // ---------------------------------------------------------------------------

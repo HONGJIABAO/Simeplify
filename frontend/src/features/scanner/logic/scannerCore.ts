@@ -14,6 +14,20 @@ export interface BillAnalysisComparison {
   streak?: string | null;
 }
 
+export interface AIRoutineAnalysisResult {
+  discrepancyRm: number;
+  discrepancyPct: number;
+  discrepancyType: 'under_estimate' | 'matches_estimate' | 'minor_over_estimate' | 'major_over_estimate';
+  conclusion: string;
+  culpritAppliances: string[];
+  culpritHabits: string[];
+  actionRecommendation: string;
+  severity: 'normal' | 'minor' | 'major';
+  estimatedCostRm: number;
+  actualCostRm: number;
+  utilityType: 'electricity' | 'water';
+}
+
 export interface BillAnalysis {
   summary?: string;
   estimate_kwh?: number;
@@ -21,6 +35,7 @@ export interface BillAnalysis {
   reasons?: string[];
   tips?: string[];
   footer_disclaimer?: string;
+  routine_analysis?: AIRoutineAnalysisResult | null;
 }
 
 export interface Bill {

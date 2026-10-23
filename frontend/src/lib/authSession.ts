@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { Platform } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 import { supabase, authStorage } from './supabase';
 
@@ -57,7 +58,7 @@ export interface AuthSession {
 
 export const INITIAL_AUTH_SESSION: AuthSession = {
   isLoggedIn: false,
-  isLoading: true,
+  isLoading: false,
   user: null,
   profile: null,
   household: null,
@@ -253,29 +254,9 @@ export async function refreshSession(): Promise<AuthSession> {
         onboardingStep,
       };
 
-      try {
-        await authStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession));
-      } catch { }
-
       notifyListeners();
       return { ...currentSession };
     }
-
-    // No active Supabase session - check local saved session
-    try {
-      const stored = await authStorage.getItem(LOCAL_SESSION_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as AuthSession;
-        if (parsed && parsed.isLoggedIn && parsed.user) {
-          currentSession = {
-            ...parsed,
-            isLoading: false,
-          };
-          notifyListeners();
-          return { ...currentSession };
-        }
-      }
-    } catch { }
 
     currentSession = {
       ...INITIAL_AUTH_SESSION,
@@ -295,25 +276,34 @@ export async function refreshSession(): Promise<AuthSession> {
   }
 }
 
-// Initialize Supabase auth listener
+// Always sign out any saved session and purge storage on app start
 if (typeof window !== 'undefined' || typeof globalThis !== 'undefined') {
-  // Initial session read
-  refreshSession();
+  try {
+    supabase.auth.signOut();
+  } catch { }
+  try {
+    authStorage.removeItem(LOCAL_SESSION_KEY);
+  } catch { }
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('auth-token') || key.startsWith('@simeplify_auth_session')) {
+          window.localStorage.removeItem(key);
+        }
+      });
+    } catch { }
+  }
 
   // Listen to Supabase auth events
   try {
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) {
-        // Only clear if we aren't maintaining a local demo/offline session
-        const stored = await authStorage.getItem(LOCAL_SESSION_KEY);
-        if (!stored) {
-          currentSession = {
-            ...INITIAL_AUTH_SESSION,
-            isLoading: false,
-            isLoggedIn: false,
-          };
-          notifyListeners();
-        }
+        currentSession = {
+          ...INITIAL_AUTH_SESSION,
+          isLoading: false,
+          isLoggedIn: false,
+        };
+        notifyListeners();
       } else {
         await refreshSession();
       }
@@ -345,10 +335,6 @@ export function updateAuthSession(updates: Partial<AuthSession>): void {
     ...(addressDisplay !== undefined ? { addressDisplay } : {}),
   };
   notifyListeners();
-
-  if (currentSession.isLoggedIn) {
-    void authStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession));
-  }
 }
 
 /** Sign in with email and password via Supabase with offline demo support */
@@ -375,10 +361,7 @@ export async function signIn(
     // If it's the demo account, fallback to local demo session
     if (isDemo) {
       if (cleanPassword === DEMO_PASSWORD) {
-        currentSession = { ...DEMO_AUTH_SESSION };
-        try {
-          await authStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession));
-        } catch { }
+        currentSession = { ...DEMO_AUTH_SESSION, isLoading: false };
         notifyListeners();
         return { user: DEMO_USER, error: null };
       } else {
@@ -549,6 +532,15 @@ export async function logoutAuthSession(): Promise<void> {
   try {
     await authStorage.removeItem(LOCAL_SESSION_KEY);
   } catch { }
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('auth-token') || key.startsWith('@simeplify_auth_session')) {
+          window.localStorage.removeItem(key);
+        }
+      });
+    } catch { }
+  }
   currentSession = {
     ...INITIAL_AUTH_SESSION,
     isLoading: false,
