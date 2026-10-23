@@ -835,3 +835,27 @@ export async function checkBillExists(
 
   return { exists: false };
 }
+
+/**
+ * Analyzes a bill image or PDF directly via Netlify Function endpoint.
+ * URL: /.netlify/functions/analyze-bill
+ */
+export async function analyzeBillViaNetlify(
+  fileBase64: string,
+  mimeType: string = 'application/pdf',
+  previousBills: any[] = []
+) {
+  const response = await fetch('/.netlify/functions/analyze-bill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileBase64, mimeType, previousBills }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Netlify function failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
